@@ -1,3 +1,4 @@
+import { getDesktopApplicationBrand } from "./desktopElectronApp.js";
 import { installRequestSecurityDiagnostics } from "./request-security-edition/index.js";
 import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
@@ -303,8 +304,9 @@ process.on("unhandledRejection", (reason) => {
   logger.error("unhandledRejection:", reason);
 });
 
-const iconPath =
-  process.platform === "win32"
+const iconPath = process.env.ZCODE_APPLICATION_ICON_DIR && !app.isPackaged
+  ? join(process.env.ZCODE_APPLICATION_ICON_DIR, process.platform === "win32" ? "icon_windows.png" : "icon.png")
+  : process.platform === "win32"
     ? app.isPackaged
       ? join(process.resourcesPath, "icon_windows.png")
       : join(import.meta.dirname, "../../build/icon_windows.png")
@@ -315,7 +317,7 @@ const linuxDesktopIntegrationIconPath =
   process.platform === "linux"
     ? app.isPackaged
       ? join(process.resourcesPath, "icon_512x512.png")
-      : join(import.meta.dirname, "../../build/icons/512x512.png")
+      : join(process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "../../build"), "icons/512x512.png")
     : iconPath;
 let currentApplicationLocale: Locale = DEFAULT_LOCALE;
 let closeToTrayOnWindows = true;
@@ -662,6 +664,7 @@ const cuaPipFocusRouter = createCuaPipFocusRouter({
 });
 const hostRunningTaskCountMap = new Map<ElectronUtilityProcess, number>();
 const windowsCuaOperationIndicator = createWindowsCuaOperationIndicator({
+  getApplicationName: () => app.getName(),
   platform: process.platform,
   getLocale: () => currentApplicationLocale,
   logger,
@@ -2182,6 +2185,7 @@ app.whenReady().then(async () => {
     // 打包态必须与 NSIS 快捷方式使用同一 AUMID，否则 Shell 把它们当成不同应用。
     // 使用构建期产品身份，不依赖用户机器环境；开发态继续保持独立身份。
     app.setAppUserModelId(
+      (await getDesktopApplicationBrand())?.id ??
       resolveWindowsAppUserModelIdForFlavor(ZCODE_PRODUCT_FLAVOR, { isPackaged: app.isPackaged }),
     );
   }
@@ -2191,12 +2195,14 @@ app.whenReady().then(async () => {
     currentApplicationLocale = resolveSystemApplicationLocale();
   }
   installFinderOpenFolderWorkflow({
+    applicationName: app.getName(),
     platform: process.platform,
     locale: currentApplicationLocale,
     homeDir: app.getPath("home"),
     logger,
   });
   await installWindowsOpenFolderContextMenu({
+    applicationName: app.getName(),
     platform: process.platform,
     executablePath: process.execPath,
     argv: process.argv,
@@ -2353,6 +2359,7 @@ app.whenReady().then(async () => {
         }
       }
       installFinderOpenFolderWorkflow({
+    applicationName: app.getName(),
         platform: process.platform,
         locale: currentApplicationLocale,
         homeDir: app.getPath("home"),
@@ -2361,6 +2368,7 @@ app.whenReady().then(async () => {
       // Windows Explorer 右键菜单是注册表持久项，renderer 切换语言不会自动刷新。
       // 这里跟 macOS Finder Service 一样在 locale 变化时重写菜单文案，避免继续显示旧语言。
       await installWindowsOpenFolderContextMenu({
+    applicationName: app.getName(),
         platform: process.platform,
         executablePath: process.execPath,
         argv: process.argv,

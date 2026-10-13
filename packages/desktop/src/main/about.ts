@@ -1,8 +1,6 @@
-import type {
-  AboutPanelOptionsOptions,
-  BrowserWindow,
-  MessageBoxReturnValue,
-} from "electron";
+import { readFile } from "node:fs/promises";
+import { getDesktopApplicationBrand } from "./desktopElectronApp.js";
+import type { AboutPanelOptionsOptions, BrowserWindow, MessageBoxReturnValue } from "electron";
 import { existsSync, readFileSync } from "node:fs";
 import { arch, hostname, platform, release, type, version as osVersion } from "node:os";
 import { join } from "node:path";
@@ -232,7 +230,10 @@ export function createSystemAboutPanelOptions(
 function resolveAboutIconPath(isPackaged: boolean): string {
   return isPackaged
     ? join(process.resourcesPath, "icon.png")
-    : join(import.meta.dirname, "../../build/icon.png");
+    : join(
+        process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "../../build"),
+        "icon.png",
+      );
 }
 
 export async function showAboutDialog(
@@ -245,6 +246,7 @@ export async function showAboutDialog(
     buildMetadata: readBuildMetadata(),
   });
   const aboutMessages = getAboutMessages(locale);
+  const applicationBrand = await getDesktopApplicationBrand();
   // 之前只有 macOS 使用自绘 About，Windows/Linux 仍走原生 message box。
   // 问题原因：各平台原生消息框的排版、图标和按钮样式差异很大，无法复用 macOS 参考样式。
   // 这里统一使用自绘 modal，保证 About 的品牌展示和多语言文案在三端一致。
@@ -261,7 +263,9 @@ export async function showAboutDialog(
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: aboutMessages.aboutTitle,
+    title: applicationBrand
+      ? aboutMessages.aboutTitle.replace("ZCode", applicationBrand.name)
+      : aboutMessages.aboutTitle,
     icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       contextIsolation: true,
@@ -276,7 +280,13 @@ export async function showAboutDialog(
   void aboutWindow.loadURL(
     `data:text/html;charset=utf-8,${encodeURIComponent(
       createCustomAboutDialogHtml({
-        applicationName: ABOUT_APPLICATION_NAME,
+        applicationName: applicationBrand?.name ?? ABOUT_APPLICATION_NAME,
+        ...(applicationBrand
+          ? {
+              iconDataUrl: "data:image/png;base64," + (await readFile(iconPath)).toString("base64"),
+              attribution: applicationBrand.attribution,
+            }
+          : {}),
         appVersion: snapshot.appVersion,
         copyright: formatAboutCopyright(undefined, locale),
         optimizationLine: formatAboutOptimizationLine(snapshot, locale),

@@ -1,6 +1,9 @@
+import { useApplicationBrand } from "@/application-brand.js";
 import { cn } from "@/components/lib/utils.js";
 
 export function ZCodeAboutLogo({ className }: { className?: string }) {
+  const brand = useApplicationBrand();
+  if (brand) return <brand.Mark className={className} />;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -26,6 +29,8 @@ export function ZCodeAboutLogo({ className }: { className?: string }) {
 }
 
 export function ZCodeWordmarkLogo({ className }: { className?: string }) {
+  const brand = useApplicationBrand();
+  if (brand) return <brand.Wordmark className={className} />;
   return (
     <svg
       width="244"

@@ -54,6 +54,7 @@ export function buildPluginReferenceCatalog(
   const entries: PluginReferenceCatalogEntry[] = plugins.map((plugin) => {
     const sameNameEnabledIds = plugin.enabled ? (enabledIdsByName.get(plugin.name) ?? []) : [];
     return {
+      ...(plugin.entrySkill ? { entrySkill: plugin.entrySkill } : {}),
       pluginId: plugin.id,
       name: plugin.name,
       marketplace: plugin.marketplace,

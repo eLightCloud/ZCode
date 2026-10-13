@@ -18,6 +18,7 @@ interface CuaPermissionPanelState {
   locale: Locale;
   /** 真实 ZCode 图标（data URL）；读不到时为 null，页面保留占位图形。 */
   iconDataUrl: string | null;
+  applicationName?: string;
 }
 
 contextBridge.exposeInMainWorld("cuaPermissionPanel", {

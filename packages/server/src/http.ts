@@ -1,3 +1,4 @@
+import { matchesServerToken } from "@zcode/shared/node";
 /* eslint-disable max-lines -- HTTP、WebSocket 与静态资源路由集中注册，保持同一鉴权顺序。 */
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
@@ -238,14 +239,14 @@ function parseCookieHeader(header: string | undefined): Map<string, string> {
 
 function hasValidLiteToken(c: Context, token: string): boolean {
   const url = new URL(c.req.url);
-  if (url.searchParams.get("token") === token) {
+  if (matchesServerToken(url.searchParams.get("token"), token)) {
     c.header(
       "Set-Cookie",
       `${zcodeLiteTokenCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax`,
     );
     return true;
   }
-  return parseCookieHeader(c.req.header("cookie")).get(zcodeLiteTokenCookieName) === token;
+  return matchesServerToken(parseCookieHeader(c.req.header("cookie")).get(zcodeLiteTokenCookieName), token);
 }
 
 function isTokenProtectedPath(pathname: string): boolean {

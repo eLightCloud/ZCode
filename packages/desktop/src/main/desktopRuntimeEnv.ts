@@ -36,7 +36,7 @@ import {
   resolveRemoteCdnBaseUrls as resolveOrderedRemoteCdnBaseUrls,
   type ResolveRemoteCdnOptions,
 } from "./remoteCdn.js";
-import { getElectronAppPath, isElectronAppPackaged } from "./desktopElectronApp.js";
+import { getElectronAppPath, getPackagedElectronAppName, isElectronAppPackaged } from "./desktopElectronApp.js";
 
 declare const __ZCODE_PACKAGED_AGENT_TELEMETRY_ENV__: Readonly<Record<string, string>> | undefined;
 
@@ -63,6 +63,7 @@ function isTruthyRuntimeEnvOverride(name: string): boolean {
 // 这里允许测试显式隔离运行时身份，正常桌面/远控路径保持原来的默认值。
 export const runtimeApplicationName =
   readRuntimeEnvOverride("ZCODE_DESKTOP_APPLICATION_NAME") ??
+  getPackagedElectronAppName() ??
   (isLocalDevelopmentRuntime ? "ZCode Dev" : isPreviewPackagedRuntime ? "ZCode Preview" : "ZCode");
 // Electron 的 app.getPath("home") 不一定跟随测试进程里的 HOME 覆盖。
 // e2e 默认工作区依赖 home 路径，因此提供显式覆盖，避免测试写到开发者真实 ~/ZCodeProject。

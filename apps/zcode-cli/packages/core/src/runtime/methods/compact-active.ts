@@ -1,3 +1,4 @@
+import { requiredPluginCompactReminder } from "./required-plugin.js";
 import { collectRuntimeAgentListing } from "../helpers/agent-listing.js";
 import {
   CompactPhase,
@@ -500,6 +501,7 @@ async function compactActiveConversationImpl(
         options.agentListingTools ?? this.getTools(options.model ?? compactModel),
       );
       const postCompactReminderEntries = [
+        ...requiredPluginCompactReminder(this.messageHistory.borrowReadOnlyRuntimeEntries()),
         ...(agentListingEntry ? [agentListingEntry] : []),
         ...(planFileReferenceEntry ? [planFileReferenceEntry] : []),
         ...buildPostCompactReadStateReminderEntries({

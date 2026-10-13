@@ -50,6 +50,7 @@ interface IndicatorLogger {
 interface WindowsCuaOperationIndicatorOptions {
   platform?: NodeJS.Platform;
   getLocale: () => Locale;
+  getApplicationName?: () => string;
   logger: IndicatorLogger;
   createWindow?: (options: BrowserWindowConstructorOptions) => WindowsCuaOperationIndicatorWindow;
   getCursorScreenPoint?: () => Point;
@@ -169,7 +170,7 @@ export function createWindowsCuaOperationIndicator(
   }
 
   function positionWindow(target: WindowsCuaOperationIndicatorWindow): void {
-    const { width, height } = indicatorWindowSize(options.getLocale());
+    const { width, height } = indicatorWindowSize(options.getLocale(), options.getApplicationName?.());
     const point = getCursorScreenPoint();
     const { workArea } = getDisplayNearestPoint(point);
     target.setBounds({
@@ -199,7 +200,7 @@ export function createWindowsCuaOperationIndicator(
     try {
       positionWindow(target);
       void target
-        .loadURL(indicatorDataUrl(options.getLocale()))
+        .loadURL(indicatorDataUrl(options.getLocale(), options.getApplicationName?.()))
         .then(() => {
           if (disposed || target !== window || target.isDestroyed()) return;
           windowReady = true;
@@ -238,7 +239,7 @@ export function createWindowsCuaOperationIndicator(
 
     let created: WindowsCuaOperationIndicatorWindow | null = null;
     try {
-      const { width, height } = indicatorWindowSize(options.getLocale());
+      const { width, height } = indicatorWindowSize(options.getLocale(), options.getApplicationName?.());
       created = createWindow({
         width,
         height,

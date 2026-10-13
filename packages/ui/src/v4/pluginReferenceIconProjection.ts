@@ -13,7 +13,11 @@ export function isSessionPluginCatalogReady(
 export function hasPluginReferenceUserRows(
   rows: readonly { kind: string; text?: string }[],
 ): boolean {
-  return rows.some((row) => row.kind === "userInput" && row.text?.includes("(plugin://"));
+  return rows.some(
+    (row) =>
+      row.kind === "userInput" &&
+      (row.text?.includes("(plugin://") || row.text?.includes("(required-plugin://")),
+  );
 }
 
 /**

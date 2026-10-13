@@ -335,6 +335,9 @@ function createPluginMetadata(
     ...(uiSurfaces.length > 0 ? { uiSurfaces } : {}),
     userConfig: loaded.manifest.userConfig,
     version: loaded.manifest.version,
+    ...(typeof loaded.manifest.entrySkill === "string"
+      ? { entrySkill: loaded.manifest.entrySkill }
+      : {}),
   };
 }
 

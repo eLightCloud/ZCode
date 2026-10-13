@@ -113,3 +113,5 @@ export { generateMobileDeviceFingerprint, setStreamClientId } from "./lib/stream
 export { GlobalDatabaseStartupLoading } from "./root/GlobalDatabaseStartupLoading.js";
 
 export { LocalTtftObserver, setLocalTtftObserver } from "@/v4/telemetry/localTtftObserver.js";
+
+export { ApplicationBrandProvider, ApplicationBrandImage, useApplicationBrand, type ApplicationBrand } from "./application-brand.js";

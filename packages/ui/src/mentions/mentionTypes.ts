@@ -17,6 +17,8 @@ export interface MentionItemData {
   model?: string;
   /** Plugin 引用的稳定身份（`name@marketplace`），canonical 链接目标；label 不参与身份。 */
   pluginId?: string;
+  /** Preserve the explicit required entry through editor serialization. */
+  requiredEntry?: boolean;
   /** Plugin 商店 listing 原始图标；仅用于 UI，必须经 HTTPS 校验后加载。 */
   icon?: string;
 }

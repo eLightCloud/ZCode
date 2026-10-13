@@ -3010,6 +3010,7 @@ export type ZCodePluginsListUiSurfacesResult = z.infer<
 // 仅供 UI 展示与 Picker 搜索，不参与身份、权限或 runtime reminder。
 export const zcodePluginReferenceCatalogEntrySchema = z
   .object({
+    entrySkill: nonEmptyString.optional(),
     // 仅 referenceCatalogWithCategory 返回；旧入口保持原结构。
     category: nonEmptyString.optional(),
     pluginId: nonEmptyString,

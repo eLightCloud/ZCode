@@ -1,3 +1,4 @@
+import { setApplicationDocumentTitle } from "../../web/src/applicationBrandTitle.js";
 import { createRoot } from "react-dom/client";
 import "../../share-ui/src/styles.css";
 import { applyTheme, type Theme } from "../../ui/src/useTheme.js";
@@ -58,7 +59,7 @@ function renderCallback(): void {
 async function renderShare(): Promise<void> {
   const locale = resolveConversationShareRouteLocale(window.location.pathname);
   document.documentElement.lang = locale;
-  document.title = locale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share";
+  setApplicationDocumentTitle(locale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share");
 
   const shareCode = resolveConversationShareCodeFromPath(window.location.pathname);
   if (!shareCode) {

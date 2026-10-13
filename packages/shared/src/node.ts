@@ -27,3 +27,5 @@ export {
   type NodeSelfResourceSampler,
   type NodeSelfResourceSamplerOptions,
 } from "./node/nodeSelfResourceTelemetry.js";
+
+export { matchesServerToken, matchesServerTokenHash } from "./node/serverToken.js";

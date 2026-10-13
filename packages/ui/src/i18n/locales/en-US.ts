@@ -1,6 +1,7 @@
 import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /** English translations */
 const enUS: Record<string, string> = {
+  "application.name": "ZCode",
   "startPlan.recommendation.subagentDescription":
     "Your Start Plan has quota available for {model}. Switch this subagent’s model to the Start Plan?",
   "startPlan.recommendation.preferenceSaveFailed":
@@ -6211,6 +6212,8 @@ const enUS: Record<string, string> = {
   "chat.mention.plugins.title": "Plugins",
   "chat.mention.plugins.empty": "No plugins available to reference",
   "chat.mention.plugins.conflict": "Name conflicts with another enabled plugin",
+  "chat.mention.plugins.ordinaryWork": "Return to ordinary work",
+  "chat.mention.plugins.ordinaryWorkDescription": "Clear the required entry skill while retaining existing permissions.",
   "chat.mention.sessions.title": "Sessions",
   "chat.mention.sessions.empty": "No recent sessions match",
   "chat.mention.sessions.searchHint": "Type to search recent sessions",

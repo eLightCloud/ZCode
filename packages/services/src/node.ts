@@ -265,6 +265,21 @@ export {
   prepareRuntimeProcessEnvPatch,
 } from "./runtime-tools/runtimeCommandEnv.js";
 
+export { startManualClaimHeartbeat, recordCronRunOutcomeBestEffort, releaseManualClaimBestEffort, settleManualDispatchFailureBestEffort, settleCronRunTerminalOutcome, type CronRunLifecycleRepo, type CronRunLifecycleIdentity } from "./session/automationRunLifecycle.js";
+export { resolveAutomationSubmissionModelSelection } from "./session/automationModelSelection.js";
+export { watchCronRunBotDelivery } from "./session/automationBotDelivery.js";
+export { createAutomationDispatcher, type AutomationDispatchRequest, type AutomationDispatcher } from "./session/automationDispatcher.js";
+
+export { startAutomationScheduler, type AutomationSchedulerOptions,
+  type AutomationSchedulerHandle } from "./session/automationScheduler.js";
+export type { MainToSchedulerMessage, SchedulerToMainMessage } from "./session/automationSchedulerProtocol.js";
+export { releaseManualClaimForSettledRun, settleManualClaimForDispatchResult,
+  type ManualClaimReleaseRepo, type ManualClaimReleaseParams } from "./session/automationManualClaimRelease.js";
+export { settleOffPeakDispatchResult, OFF_PEAK_DISPATCH_RETRY_BASE_MS, OFF_PEAK_DISPATCH_RETRY_CAP_MS,
+  type OffPeakDispatchSettlementDeps } from "./session/automationOffPeakDispatchSettlement.js";
+export { startSchedulerResourceTelemetry, type SchedulerResourceTelemetry,
+  type StartSchedulerResourceTelemetryOptions } from "./session/automationSchedulerResourceTelemetry.js";
+
 // 定时任务管理与 scheduler 共用同一套 node-only 存储和 cron 语义。
 export {
   AutomationRepo,

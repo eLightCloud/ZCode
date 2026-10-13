@@ -1,3 +1,5 @@
+import { applicationBrandPlugin } from "../../scripts/application-brand-plugin.mjs";
+import { applicationRootPlugin, applicationAccountProxy } from "../../scripts/application-root-plugin.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
@@ -175,6 +177,7 @@ export default defineConfig(({ mode }) => {
   const codingPlanWebviewOrigin =
     env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? process.env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? "";
   const plugins = [
+    applicationRootPlugin(env), applicationBrandPlugin(env),
     ...(e2eCoverageEnabled ? [createE2EUIRendererCoveragePlugin(repoRoot)] : []),
     pdfJsCMapsPlugin(),
     react(),
@@ -197,9 +200,9 @@ export default defineConfig(({ mode }) => {
         // 这里把 d3-path 固定到根部 3.x 入口，确保桌面端依赖优化和运行时解析一致。
         "d3-path": resolve(__dirname, "../../node_modules/d3-path/src/index.js"),
       },
-      dedupe: ["react", "react-dom", "lucide-react"],
+      dedupe: ["@zcode/ui", "@zcode/shared", "react", "react-dom", "lucide-react"],
     },
-    server: { port: 5174, strictPort: true },
+    server: { port: 5174, strictPort: true, proxy: applicationAccountProxy(env) },
     define: {
       __ZCODE_VERSION__: JSON.stringify(buildMetadata.appVersion),
       __ZCODE_COMMIT__: JSON.stringify(buildMetadata.buildCommitId),

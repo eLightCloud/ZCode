@@ -1,6 +1,7 @@
 import { requestSecurityMessagesZhCN } from "@/request-security-edition/messages.js";
 /** 中文翻译 */
 const zhCN: Record<string, string> = {
+  "application.name": "ZCode",
   "startPlan.recommendation.subagentDescription":
     "你的体验套餐中，{model} 仍有可用额度，是否将此子智能体的模型切换到体验套餐？",
   "startPlan.recommendation.preferenceSaveFailed": "未能保存“不再提示”，本次仍按你的选择继续。",
@@ -5933,6 +5934,8 @@ const zhCN: Record<string, string> = {
   "chat.mention.plugins.title": "插件",
   "chat.mention.plugins.empty": "没有可引用的插件",
   "chat.mention.plugins.conflict": "同名插件冲突，暂不可引用",
+  "chat.mention.plugins.ordinaryWork": "返回普通工作",
+  "chat.mention.plugins.ordinaryWorkDescription": "取消指定入口技能的约束，继续遵守原有权限。",
   "chat.mention.sessions.title": "会话",
   "chat.mention.sessions.empty": "没有匹配的近期会话",
   "chat.mention.sessions.searchHint": "输入内容以搜索近期会话",

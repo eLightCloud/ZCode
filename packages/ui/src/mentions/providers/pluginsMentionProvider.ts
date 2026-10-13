@@ -17,6 +17,8 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export interface PluginMentionLabels {
   conflictReason: string;
+  ordinaryWork?: string;
+  ordinaryWorkDescription?: string;
 }
 
 // - 只展示 catalog 中 enabled 的 Plugin；disabled 条目不可被引用，不进入候选。
@@ -58,7 +60,7 @@ export function mapPluginCatalogToMentionItemsForTest(
           ...entries.filter((entry) => !isPublicStoreMarketplaceId(entry.marketplace)),
         ]
       : entries;
-  return sorted
+  const items: MentionItem[] = sorted
     .filter((entry) => entry.enabled)
     .map((entry) => {
       const conflicted = entry.conflictingPluginIds.length > 0;
@@ -78,7 +80,7 @@ export function mapPluginCatalogToMentionItemsForTest(
         ),
         description: resolveLocalizedText(locale, entry.description, entry.descriptionI18n) ?? "",
         value: entry.pluginId,
-        markdown: buildPluginMentionMarkdown(entry.name, entry.pluginId),
+        markdown: buildPluginMentionMarkdown(entry.name, entry.pluginId, Boolean(entry.entrySkill)),
         keywords: [
           entry.name,
           entry.pluginId,
@@ -88,6 +90,7 @@ export function mapPluginCatalogToMentionItemsForTest(
         ],
         data: {
           pluginId: entry.pluginId,
+          ...(entry.entrySkill ? { requiredEntry: true } : {}),
           ...(entry.icon ? { icon: entry.icon } : {}),
         },
         ...(conflicted
@@ -98,6 +101,18 @@ export function mapPluginCatalogToMentionItemsForTest(
           : {}),
       };
     });
+  if (labels.ordinaryWork && entries.some((entry) => entry.entrySkill)) {
+    items.push({
+      id: "required-entry:none",
+      category: "plugins",
+      label: labels.ordinaryWork,
+      description: labels.ordinaryWorkDescription ?? "",
+      value: "none",
+      markdown: buildPluginMentionMarkdown(labels.ordinaryWork, "none", true),
+      data: { pluginId: "none", requiredEntry: true },
+    });
+  }
+  return items;
 }
 
 export function usePluginsMentionProvider(
@@ -121,6 +136,10 @@ export function usePluginsMentionProvider(
         catalog.entries,
         {
           conflictReason: intl.formatMessage({ id: "chat.mention.plugins.conflict" }),
+          ordinaryWork: intl.formatMessage({ id: "chat.mention.plugins.ordinaryWork" }),
+          ordinaryWorkDescription: intl.formatMessage({
+            id: "chat.mention.plugins.ordinaryWorkDescription",
+          }),
         },
         locale,
         modeOrder,

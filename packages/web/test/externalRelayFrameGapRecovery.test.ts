@@ -32,6 +32,17 @@ const testState = vi.hoisted(() => ({
 }));
 
 const renderMock = vi.fn();
+// 应用装配壳可增加包装层；回归检查业务 props，不绑定 React 树的固定深度。
+function renderedProp(element: any, name: string): any {
+  if (!element?.props) return undefined;
+  if (element.props[name] !== undefined) return element.props[name];
+  const children = [element.props.children].flat();
+  for (const child of children) {
+    const value = renderedProp(child, name);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
 const navigateMock = vi.fn();
 const noticeMock = vi.fn();
 
@@ -229,6 +240,7 @@ function setupExternalRelayGlobals(pathname = "/remote") {
     visibilityState: "visible",
     documentElement: { classList: { toggle: vi.fn() } },
     getElementById: vi.fn(() => ({ nodeType: 1 })),
+    querySelector: vi.fn(() => null),
     addEventListener: vi.fn((type: string, listener: unknown) =>
       addListener(documentListeners, type, listener),
     ),
@@ -343,7 +355,7 @@ describe("external relay frame gap recovery", () => {
       await vi.waitFor(() =>
         expect(
           renderMock.mock.calls.some(([element]) =>
-            Boolean(element?.props?.children?.props?.children?.props?.services),
+            Boolean(renderedProp(element, "services")),
           ),
         ).toBe(true),
       );
@@ -414,7 +426,7 @@ describe("external relay frame gap recovery", () => {
 
       expect(
         renderMock.mock.calls.some(
-          ([element]) => element?.props?.failure?.reason === "desktop-bootstrap-timeout",
+          ([element]) => renderedProp(element, "failure")?.reason === "desktop-bootstrap-timeout",
         ),
       ).toBe(true);
       expect(

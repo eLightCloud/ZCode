@@ -1,13 +1,11 @@
+import { useApplicationBrand } from "@/application-brand.js";
+import { GlmMonochromeIcon } from "@/components/ui/GlmMonochromeIcon.js";
 import type { PostUpdateReleaseNotesPayload } from "@zcode/shared";
 import { MessageResponse } from "@/components/ai-elements/message.js";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
-import { GlmMonochromeIcon } from "@/components/ui/GlmMonochromeIcon.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
+import { ZCodeAboutLogo } from "@/components/ui/ZCodeAboutLogo.js";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
@@ -24,6 +22,7 @@ export function PostUpdateReleaseNotesDialog({
   onOpenExternalUrl,
 }: PostUpdateReleaseNotesDialogProps) {
   const { intl } = useZCodeIntl();
+  const applicationBrand = useApplicationBrand();
   // M5②.5 store 耦合剥离：MessageResponse 不再自取 store，主题/代码预览设置由调用方传入。
   const theme = useZCodeStoreWithDefault((state) => state.theme, "system");
   const codePreviewSettings = useZCodeStoreWithDefault(
@@ -49,7 +48,11 @@ export function PostUpdateReleaseNotesDialog({
       >
         <div className="flex flex-col px-8 py-6">
           <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-            <GlmMonochromeIcon className="size-5 shrink-0" alt="ZCode" />
+            {applicationBrand ? (
+              <ZCodeAboutLogo className="size-5 shrink-0" />
+            ) : (
+              <GlmMonochromeIcon className="size-5 shrink-0" alt="ZCode" />
+            )}
             <div className="min-w-0 flex-1">
               <DialogTitle className="text-lg leading-snug tracking-tight text-foreground">
                 {dialogHeading}

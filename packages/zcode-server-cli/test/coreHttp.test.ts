@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { WebSocket } from "ws";
 import { ServiceCollection, IZCodeAgentService } from "@zcode/services";
 import { createHostCapabilityStore } from "../src/server-core/hostCapability.js";
@@ -270,6 +271,74 @@ describe("standalone Server Core ingress", () => {
       headers: { "x-zcode-rpc-host-capability": capability },
     });
     expect(rejected.status).toBe(401);
+  });
+
+  it.each(["raw", "digest"])(
+    "requires the %s credential for HTTP, capabilities and WebSocket ingress",
+    async (mode) => {
+      const token = "synthetic-instance-token";
+      const digest = createHash("sha256").update(token).digest("hex");
+      const server = await createCoreHttpServer(new ServiceCollection(), {
+        host: "0.0.0.0",
+        ...(mode === "digest" ? { authTokenHash: digest } : { authToken: token }),
+      });
+      servers.push(server);
+      const base = `http://127.0.0.1:${server.port}`;
+      expect((await fetch(`${base}/api/server-info`)).status).toBe(401);
+      expect((await fetch(`${base}/api/rpc-host-capability`, { method: "POST" })).status).toBe(401);
+      const headers = { Authorization: `Bearer ${token}` };
+      const info = await fetch(`${base}/api/server-info`, { headers });
+      expect(info.status).toBe(200);
+      expect(await info.json()).toMatchObject({ authRequired: true });
+      expect(
+        (
+          await fetch(`${base}/api/server-info`, {
+            headers: { Authorization: "Bearer wrong-instance-token" },
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await fetch(`${base}/api/server-info`, {
+            headers: { Authorization: `Bearer ${digest}` },
+          })
+        ).status,
+      ).toBe(401);
+      const denied = new WebSocket(`${base.replace("http:", "ws:")}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        denied.once("unexpected-response", (_request, response) => {
+          try {
+            expect(response.statusCode).toBe(401);
+            denied.terminate();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+        denied.once("error", () => {});
+        denied.once("open", () => reject(new Error("unauthenticated WebSocket opened")));
+      });
+      const admitted = new WebSocket(`${base.replace("http:", "ws:")}/ws`, { headers });
+      await new Promise<void>((resolve, reject) => {
+        admitted.once("open", () => {
+          admitted.close();
+          resolve();
+        });
+        admitted.once("error", reject);
+      });
+    },
+  );
+
+  it("rejects malformed and ambiguous credential configuration", async () => {
+    await expect(
+      createCoreHttpServer(new ServiceCollection(), { authTokenHash: "invalid" }),
+    ).rejects.toThrow("Invalid or ambiguous");
+    await expect(
+      createCoreHttpServer(new ServiceCollection(), {
+        authToken: "synthetic-token",
+        authTokenHash: "a".repeat(64),
+      }),
+    ).rejects.toThrow("Invalid or ambiguous");
   });
 
   it("rejects non-loopback listeners until authenticated ingress is implemented", async () => {

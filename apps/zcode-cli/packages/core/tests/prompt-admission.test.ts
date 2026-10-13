@@ -276,3 +276,41 @@ it("renders a human guide through real admission and keeps the ongoing turn", as
       "<system-reminder>\nThe user sent a new message while you were working:\nshort B\n\nThis is how ZCode surfaces messages the user sends mid-turn — within the running turn, often alongside the next tool result, rather than as a separate conversation turn. Address the message above as you continue this turn.\n</system-reminder>",
   });
 });
+
+it.each(["[report](required-plugin://report@company)", "[ordinary](required-plugin://none)"])(
+  "keeps entry changes out of an active guide turn: %s",
+  async (input) => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const requests: unknown[] = [];
+    const runtime = createRuntime("required-entry-busy", async (request) => {
+      requests.push(request);
+      entered.resolve();
+      await release.promise;
+      return {
+        finishReason: "stop",
+        text: "done",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+        },
+      };
+    });
+    const first = await runtime.admitPrompt("current work");
+    await entered.promise;
+    const direct = await runtime.steerTurn({ input, delivery: "guide" });
+    expect(direct).toMatchObject({ kind: "rejected", reason: "turn_not_steerable" });
+    const next = await runtime.admitPrompt(input, undefined, { queueDelivery: "guide" });
+    expect(next.kind).toBe("queued");
+    // The persisted admission intent owns delivery; UI projection may omit queue defaults.
+    const queued = await runtime.getProjection();
+    expect(
+      queued.pendingSteerInputs.find((item) => item.pendingInputId === next.pendingInputId),
+    ).toMatchObject({ input });
+    release.resolve();
+    if (first.kind !== "started") throw new Error("first did not start");
+    await first.completion;
+    expect(requests).toHaveLength(1);
+  },
+);

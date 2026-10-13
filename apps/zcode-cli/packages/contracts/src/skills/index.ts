@@ -106,6 +106,15 @@ export interface SkillOperationOptions {
 }
 
 export interface SkillPort {
+  loadRequiredPluginSkill?(
+    request: {
+      pluginId: string;
+      workingDirectory: string;
+      maxBytes?: number;
+      trace?: TraceContext;
+    },
+    options?: SkillOperationOptions,
+  ): Promise<SkillContent>;
   discoverSkills(
     request: SkillDiscoverRequest,
     options?: SkillOperationOptions,

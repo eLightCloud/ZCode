@@ -19,8 +19,8 @@ export interface WindowsOpenFolderRegistryOperation {
   args: string[];
 }
 
-export function getWindowsOpenFolderMenuName(locale: Locale): string {
-  return MENU_LABELS[locale] ?? MENU_LABELS["en-US"];
+export function getWindowsOpenFolderMenuName(locale: Locale, applicationName = "ZCode"): string {
+  return (MENU_LABELS[locale] ?? MENU_LABELS["en-US"]).replaceAll("ZCode", applicationName);
 }
 
 function quoteWindowsCommandArg(value: string): string {
@@ -43,9 +43,10 @@ export function buildWindowsOpenFolderRegistryOperations(options: {
   executablePath: string;
   appArgs?: readonly string[];
   locale: Locale;
+  applicationName?: string;
 }): WindowsOpenFolderRegistryOperation[] {
   const command = buildWindowsOpenFolderCommand(options.executablePath, options.appArgs ?? []);
-  const menuName = getWindowsOpenFolderMenuName(options.locale);
+  const menuName = getWindowsOpenFolderMenuName(options.locale, options.applicationName);
   const menuKeys = [DIRECTORY_MENU_KEY, DRIVE_MENU_KEY];
 
   return menuKeys.flatMap((menuKey) => [
@@ -81,6 +82,7 @@ export async function installWindowsOpenFolderContextMenu(options: {
   argv: readonly string[];
   isDefaultApp: boolean;
   locale: Locale;
+  applicationName?: string;
   logger: Logger;
 }): Promise<void> {
   if (options.platform !== "win32") {
@@ -95,6 +97,7 @@ export async function installWindowsOpenFolderContextMenu(options: {
     executablePath: options.executablePath,
     appArgs,
     locale: options.locale,
+    applicationName: options.applicationName,
   });
 
   try {

@@ -11,6 +11,7 @@ import {
   createCoreError,
   DYNAMIC_WORKFLOW_SKILL_NAME,
   type SkillRuntimeInput,
+  type SkillContent,
 } from "@zcode/contracts";
 import type { ToolEntry, ToolHandler } from "../types.js";
 
@@ -74,6 +75,10 @@ export const skillHandler: ToolHandler = async (input, context) => {
     source: loaded.metadata.source,
   });
 
+  return renderSkillContent(loaded);
+};
+
+export function renderSkillContent(loaded: SkillContent): string {
   return [
     `<skill_content name="${loaded.metadata.name}">`,
     `# Skill: ${loaded.metadata.name}`,
@@ -87,7 +92,7 @@ export const skillHandler: ToolHandler = async (input, context) => {
   ]
     .filter((line) => line.length > 0)
     .join("\n");
-};
+}
 
 function expandSkillContextVariables(content: string, baseDirectory: string): string {
   // 只有 Skill 工具加载后才有明确的当前 skill 目录，因此变量替换限定在这里完成。

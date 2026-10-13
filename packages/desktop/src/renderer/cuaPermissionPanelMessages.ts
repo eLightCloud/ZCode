@@ -36,10 +36,11 @@ const MESSAGES: Record<
 export function resolveCuaPermissionPanelMessages(
   locale: Locale,
   permission: CuaPermissionKind,
+  applicationName = "ZCode",
 ): CuaPermissionPanelMessages {
   const messages = MESSAGES[locale];
   return {
-    documentTitle: messages.documentTitle,
+    documentTitle: messages.documentTitle.replaceAll("ZCode", applicationName),
     dragTitle: messages.dragTitle,
     hintPrefix: messages.hintPrefix,
     permissionLabel: messages[permission],

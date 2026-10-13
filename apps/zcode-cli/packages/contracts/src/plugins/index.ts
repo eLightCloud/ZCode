@@ -140,6 +140,8 @@ export interface PluginStoreListing {
 }
 
 export interface PluginManifest {
+  /** Explicit application entry skill; required references never fall back to chat. */
+  entrySkill?: string;
   agents?: unknown;
   author?: unknown;
   channels?: unknown;
@@ -190,6 +192,7 @@ export interface PluginConfig {
 }
 
 export interface PluginMetadata {
+  entrySkill?: string;
   /** manifest（plugin.json）里的作者名，规范化为字符串；商店信息缺失时作为详情页回退。 */
   author?: string;
   authorUrl?: string;
@@ -237,6 +240,8 @@ export interface PluginDiagnostic {
 // ============================================================
 
 export interface PluginReferenceCatalogEntry {
+  /** Optional required entry declaration; runtime revalidates live plugin state. */
+  entrySkill?: string;
   /** 稳定 Plugin ID：`${manifest.name}@${marketplace}`，canonical plugin:// 链接的唯一身份。 */
   pluginId: string;
   /** manifest name（Skill/MCP/Subagent runtime 名字空间的基），仅用于展示与 provenance 匹配，不具权威性。 */

@@ -1,3 +1,4 @@
+import { isElectronAppPackaged, getDesktopApplicationBrand } from "./desktopElectronApp.js";
 /* eslint-disable max-lines -- 强制升级提示窗口包含内联 HTML/CSS 和状态脚本，启动前不能依赖 renderer 包 */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -30,7 +31,12 @@ function escapeHtml(value: string): string {
 
 function readForceUpdatePromptIcon(): string | null {
   try {
-    const iconPath = resolve(process.cwd(), "build/icon.png");
+    const iconPath = resolve(
+      isElectronAppPackaged()
+        ? process.resourcesPath
+        : process.env.ZCODE_APPLICATION_ICON_DIR || resolve(process.cwd(), "build"),
+      "icon.png",
+    );
     const icon = readFileSync(iconPath).toString("base64");
     return `data:image/png;base64,${icon}`;
   } catch {
@@ -55,7 +61,8 @@ function buildForceUpdatePromptMessages(locale: Locale) {
       devSkippedTitle: "调试环境无法自动升级",
       devSkippedMessage: "自动升级仅在打包后的应用中可用，请使用手动升级或打包应用验证。",
       confirmCloseTitle: "自动升级正在进行",
-      confirmCloseMessage: "关闭窗口会中断当前自动升级流程，旧版本仍然无法进入主界面。你可以继续等待，或确认关闭并退出。",
+      confirmCloseMessage:
+        "关闭窗口会中断当前自动升级流程，旧版本仍然无法进入主界面。你可以继续等待，或确认关闭并退出。",
       confirmCloseButton: "确认关闭",
       continueUpdateButton: "继续更新",
       retryButton: "重试自动升级",
@@ -78,9 +85,11 @@ function buildForceUpdatePromptMessages(locale: Locale) {
     errorTitle: "Auto update failed",
     errorMessage: "You can retry auto update or use manual update.",
     devSkippedTitle: "Auto update unavailable in development",
-    devSkippedMessage: "Auto update is only available in packaged apps. Use manual update or test a packaged build.",
+    devSkippedMessage:
+      "Auto update is only available in packaged apps. Use manual update or test a packaged build.",
     confirmCloseTitle: "Auto update in progress",
-    confirmCloseMessage: "Closing this window will stop the current auto update flow, and this old version still cannot open the main app. You can keep waiting or close and quit.",
+    confirmCloseMessage:
+      "Closing this window will stop the current auto update flow, and this old version still cannot open the main app. You can keep waiting or close and quit.",
     confirmCloseButton: "Close anyway",
     continueUpdateButton: "Continue update",
     retryButton: "Retry auto update",
@@ -90,9 +99,23 @@ function buildForceUpdatePromptMessages(locale: Locale) {
   };
 }
 
-function renderForceUpdatePromptHtml(text: ForceUpdateDialogText, locale: Locale): string {
+function renderForceUpdatePromptHtml(
+  text: ForceUpdateDialogText,
+  locale: Locale,
+  applicationName = "ZCode",
+): string {
+  text = {
+    ...text,
+    title: text.title.replaceAll("ZCode", applicationName),
+    message: text.message.replaceAll("ZCode", applicationName),
+  };
   const icon = readForceUpdatePromptIcon();
-  const messages = buildForceUpdatePromptMessages(locale);
+  const messages = Object.fromEntries(
+    Object.entries(buildForceUpdatePromptMessages(locale)).map(([key, value]) => [
+      key,
+      value.replaceAll("ZCode", applicationName),
+    ]),
+  );
   const detailLines = text.detail
     .split("\n")
     .map((line) => `<div class="version-row">${escapeHtml(line)}</div>`)
@@ -304,7 +327,7 @@ function renderForceUpdatePromptHtml(text: ForceUpdateDialogText, locale: Locale
       <header class="titlebar">
         <div class="brand">
           <div class="brand-icon">${icon ? `<img src="${icon}" alt="" />` : "Z"}</div>
-          <div class="brand-title">ZCode</div>
+          <div class="brand-title">${escapeHtml(applicationName)}</div>
         </div>
         <button class="close" type="button" data-action="quit" aria-label="${escapeHtml(text.quitButton)}">×</button>
       </header>
@@ -489,7 +512,9 @@ export async function showForceUpdatePrompt(
   options: ShowForceUpdatePromptOptions = {},
 ): Promise<ForceUpdatePromptAction> {
   const { BrowserWindow, nativeTheme } = await import("electron");
-  const parentWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? undefined;
+  const parentWindow =
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? undefined;
+  const applicationBrand = await getDesktopApplicationBrand();
   return new Promise<ForceUpdatePromptAction>((resolvePrompt) => {
     let resolved = false;
     let shown = false;
@@ -566,7 +591,8 @@ export async function showForceUpdatePrompt(
       }
       logger.info("[force-update] 用户选择自动升级");
       updatePromptState({ kind: "checking" });
-      autoUpdateDispose = options.startAutoUpdate?.((state) => updatePromptState(state)) ?? undefined;
+      autoUpdateDispose =
+        options.startAutoUpdate?.((state) => updatePromptState(state)) ?? undefined;
     };
 
     const showPromptWindow = (source: string) => {
@@ -629,6 +655,8 @@ export async function showForceUpdatePrompt(
       showPromptWindow("did-fail-load");
     });
     fallbackTimer = setTimeout(() => showPromptWindow("timeout"), 1000);
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(renderForceUpdatePromptHtml(text, locale))}`);
+    win.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(renderForceUpdatePromptHtml(text, locale, applicationBrand?.name))}`,
+    );
   });
 }

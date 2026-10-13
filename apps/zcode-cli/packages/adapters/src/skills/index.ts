@@ -35,12 +35,83 @@ const PLUGIN_MANIFEST_RELATIVE_PATHS = [
 ] as const;
 
 export interface NodeSkillAdapterOptions extends SkillRootResolutionOptions {
+  resolveRequiredPlugins?: (workingDirectory: string) =>
+    | {
+        outcome: import("@zcode/contracts").PluginLoadOutcome;
+        disabledPaths?: Iterable<string>;
+      }
+    | Promise<{
+        outcome: import("@zcode/contracts").PluginLoadOutcome;
+        disabledPaths?: Iterable<string>;
+      }>;
   // 被禁用的 SKILL.md 绝对路径集合（来自 config.json 的 skill.<path>.enable=false）。
   // 命中的 skill 在发现阶段直接剔除，使 discover/load/inspect 全链路保持一致。
   disabledPaths?: Iterable<string>;
 }
 
 export class NodeSkillAdapter implements SkillPort {
+  async loadRequiredPluginSkill(
+    request: {
+      pluginId: string;
+      workingDirectory: string;
+      maxBytes?: number;
+      trace?: import("@zcode/contracts").TraceContext;
+    },
+    operation?: SkillOperationOptions,
+  ): Promise<import("@zcode/contracts").SkillContent> {
+    if (!this.options.resolveRequiredPlugins)
+      throw new Error("required_skill.resolver_unavailable");
+    const { outcome, disabledPaths } = await this.options.resolveRequiredPlugins(
+      request.workingDirectory,
+    );
+    const plugin = outcome.plugins.find((value) => value.id === request.pluginId);
+    if (!plugin || !plugin.enabled) throw new Error("required_skill.plugin_unavailable");
+    if (
+      outcome.plugins.filter((value) => value.enabled && value.name === plugin.name).length !== 1
+    ) {
+      throw new Error("required_skill.plugin_conflict");
+    }
+    const entry = plugin.entrySkill;
+    if (typeof entry !== "string" || !entry.trim()) throw new Error("required_skill.entry_missing");
+    const roots = outcome.skillRoots.filter((root) => root.pluginId === request.pluginId);
+    if (!roots.length) throw new Error("required_skill.entry_missing");
+    const reader = new NodeSkillAdapter({
+      ...this.options,
+      disabledPaths: disabledPaths ?? this.options.disabledPaths,
+    });
+    const loaded = await reader.loadSkill(
+      { ...request, name: `${plugin.name}:${entry.trim()}`, roots },
+      operation,
+    );
+    if (
+      loaded.metadata.pluginId !== request.pluginId ||
+      loaded.metadata.source !== "plugin" ||
+      loaded.metadata.qualifiedName !== `${plugin.name}:${entry.trim()}` ||
+      loaded.truncated
+    ) {
+      throw new Error("required_skill.entry_invalid");
+    }
+    // A disable/update during file IO must not admit a stale required entry.
+    const current = await this.options.resolveRequiredPlugins(request.workingDirectory);
+    const latest = current.outcome.plugins.find((value) => value.id === request.pluginId);
+    const currentReader = new NodeSkillAdapter({
+      ...this.options,
+      disabledPaths: current.disabledPaths ?? this.options.disabledPaths,
+    });
+    if (
+      !latest?.enabled ||
+      latest.name !== plugin.name ||
+      latest.entrySkill !== plugin.entrySkill ||
+      latest.rootPath !== plugin.rootPath ||
+      latest.version !== plugin.version ||
+      current.outcome.plugins.filter((value) => value.enabled && value.name === plugin.name)
+        .length !== 1 ||
+      currentReader.disabledPaths.has(resolve(loaded.metadata.path))
+    ) {
+      throw new Error("required_skill.configuration_changed");
+    }
+    return loaded;
+  }
   private readonly disabledPaths: ReadonlySet<string>;
   private readonly pluginNameBySkillRoot = new Map<string, Promise<string | undefined>>();
 
@@ -370,10 +441,7 @@ function readBlockScalar(
     line.trim().length === 0 ? "" : line.slice(indent ?? 0),
   );
   return {
-    value:
-      style === "folded"
-        ? foldBlockScalarLines(contentLines)
-        : contentLines.join("\n").trim(),
+    value: style === "folded" ? foldBlockScalarLines(contentLines) : contentLines.join("\n").trim(),
     nextIndex: index,
   };
 }

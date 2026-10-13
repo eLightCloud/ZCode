@@ -1,3 +1,4 @@
+import { ApplicationShell } from "virtual:zcode-application-root";
 import { createRoot } from "react-dom/client";
 import type {
   NetworkCaptureBridge,
@@ -61,7 +62,7 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     // 语言沿用主窗口写入 localStorage 的偏好；不接 settingService，避免独立窗口再起一份 RPC。
-    <ZCodeIntlProvider>
+    <ApplicationShell><ZCodeIntlProvider>
       <ResourceManagerApp
         setSamplingActive={window.resourceManager?.setSamplingActive}
         getSnapshot={
@@ -70,6 +71,6 @@ if (root) {
         storage={window.resourceManager?.storage}
         network={window.resourceManager?.network}
       />
-    </ZCodeIntlProvider>,
+    </ZCodeIntlProvider></ApplicationShell>,
   );
 }

@@ -1,3 +1,4 @@
+import { getApplicationName, getApplicationMarkUrl } from "../applicationBrandTitle.js";
 /* eslint-disable max-lines -- share 公开页的状态文案、Row allow-list 和登录态需保持同一安全边界。 */
 import {
   useCallback,
@@ -88,6 +89,20 @@ interface Copy {
 }
 
 // 站点首页本身就是下载入口，没有 /download 这个 path（单独的下载链接会 404）。
+function applicationShareCopy(copy: typeof COPY["en-US"]): typeof COPY["en-US"] {
+  const name = getApplicationName();
+  if (!name) return copy;
+  return {
+    ...copy,
+    brand: copy.brand.replaceAll("ZCode", name),
+    outdatedTitle: copy.outdatedTitle.replaceAll("ZCode", name),
+    outdatedDescription: copy.outdatedDescription.replaceAll("ZCode", name),
+    continueInZCode: copy.continueInZCode.replaceAll("ZCode", name),
+    continueHelp: copy.continueHelp.replaceAll("ZCode", name),
+    downloadZCode: copy.downloadZCode.replaceAll("ZCode", name),
+  };
+}
+
 const ZCODE_DOWNLOAD_URL = "https://zcode.z.ai";
 
 const COPY: Record<ConversationShareLandingLocale, Copy> = {
@@ -271,7 +286,7 @@ export function ConversationShareLandingPage({
   onThemeChange?: (theme: Theme) => void;
 }) {
   const resolvedLocale = localeOf(locale);
-  const copy = COPY[resolvedLocale];
+  const copy = applicationShareCopy(COPY[resolvedLocale]);
   const activeTheme = theme ?? "zai-light";
   // preview 到手后把会话标题写进浏览器标签；main.tsx 只能先给一个语言正确的兜底标题。
   const shareTitle = preview.share.title;
@@ -408,9 +423,9 @@ export function ConversationShareLandingPage({
                   ref={brandRef}
                   data-share-brand="true"
                   className="shrink-0 text-ui-lg font-semibold text-foreground"
-                  aria-label="ZCode"
+                  aria-label={getApplicationName() ?? "ZCode"}
                 >
-                  ZCode
+                  {getApplicationName() ? <img src={getApplicationMarkUrl(resolveTheme(activeTheme) === "dark")} className="size-5" alt={getApplicationName()} /> : "ZCode"}
                 </div>
                 <h1
                   ref={titleRef}
@@ -542,9 +557,9 @@ export function ConversationShareLandingPage({
               >
                 {copy.retryOpen}
               </a>
-              <a className="text-brand underline underline-offset-2" href={ZCODE_DOWNLOAD_URL}>
+              {!getApplicationName() ? <a className="text-brand underline underline-offset-2" href={ZCODE_DOWNLOAD_URL}>
                 {copy.downloadZCode}
-              </a>
+              </a> : null}
             </div>
           </ShareContentInset>
         ) : null}
@@ -590,7 +605,7 @@ export function ConversationShareLandingStatus({
   onLogin?: (provider: WebOAuthProviderId) => void;
   onRetry?: () => void;
 }) {
-  const copy = COPY[localeOf(locale)];
+  const copy = applicationShareCopy(COPY[localeOf(locale)]);
   const content =
     state.kind === "loading"
       ? { title: copy.loading, description: copy.loadingDescription }
@@ -675,7 +690,7 @@ export function ConversationShareLandingStatus({
             {isNotFound ? (
               <a
                 className="rounded-md bg-primary px-4 py-2 text-ui-base text-primary-foreground"
-                href={ZCODE_DOWNLOAD_URL}
+                href={getApplicationName() ? "/" : ZCODE_DOWNLOAD_URL}
               >
                 {copy.backToHome}
               </a>

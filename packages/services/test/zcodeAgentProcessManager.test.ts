@@ -781,6 +781,8 @@ setInterval(() => {}, 1000);
     createdDirs.push(workspacePath);
     const nodeEnvPath = join(workspacePath, "node-env.txt");
     process.env.NODE_ENV = "development";
+    vi.stubEnv("ZCODE_SERVER_AUTH_TOKEN", "synthetic-instance-token");
+    vi.stubEnv("ZCODE_SERVER_AUTH_TOKEN_SHA256", "a".repeat(64));
     delete process.env[ZCODE_RUNTIME_ENV_KEY];
     const manager = new ZCodeAgentProcessManager({
       commandResolver: () => ({
@@ -791,6 +793,7 @@ setInterval(() => {}, 1000);
 require("node:fs").writeFileSync(${JSON.stringify(nodeEnvPath)}, JSON.stringify({
   nodeEnv: process.env.NODE_ENV || "<empty>",
   runtimeEnv: process.env.ZCODE_RUNTIME_ENV || "<empty>",
+  hasServerCredential: Boolean(process.env.ZCODE_SERVER_AUTH_TOKEN || process.env.ZCODE_SERVER_AUTH_TOKEN_SHA256),
 }));
 setInterval(() => {}, 1000);
 `,
@@ -809,9 +812,11 @@ setInterval(() => {}, 1000);
       expect(JSON.parse(readFileSync(nodeEnvPath, "utf-8"))).toEqual({
         nodeEnv: "<empty>",
         runtimeEnv: "production",
+        hasServerCredential: false,
       });
     } finally {
       manager.disposeAll();
+      vi.unstubAllEnvs();
     }
   });
 

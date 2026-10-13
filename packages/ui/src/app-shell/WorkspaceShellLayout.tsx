@@ -2064,7 +2064,7 @@ export const WorkspaceShellLayout = memo(
     ) {
       return (
         <DesktopWindowFrame
-          title={`ZCode / ${getPathLeaf(workspaceAbsPath)}`}
+          title={`${intl.formatMessage({ id: "application.name" })} / ${getPathLeaf(workspaceAbsPath)}`}
           showHeader
           isDesktop={isDesktop}
           isMacDesktop={isMacDesktop}
@@ -2329,7 +2329,7 @@ export const WorkspaceShellLayout = memo(
         navigateToRun={handleNavigateToLaunchedRun}
       >
       <DesktopWindowFrame
-        title={`ZCode / ${getPathLeaf(workspaceAbsPath)}`}
+        title={`${intl.formatMessage({ id: "application.name" })} / ${getPathLeaf(workspaceAbsPath)}`}
         showHeader
         isDesktop={isDesktop}
         isMacDesktop={isMacDesktop}

@@ -1,3 +1,4 @@
+import { applicationBrandPlugin } from "../../scripts/application-brand-plugin.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(HERE, "../..");
 const { version } = JSON.parse(readFileSync(resolve(REPO_ROOT, "package.json"), "utf8"));
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const env = { ...loadEnv(mode, REPO_ROOT, ""), ...process.env };
   const zcodeEnv = env.ZCODE_ENV?.trim().toLowerCase() === "production" ? "production" : "test";
   const endpointEnv = { ...env, ZCODE_ENV: zcodeEnv };
@@ -31,11 +32,13 @@ export default defineConfig(({ mode }) => {
     // Share 复用 Web 的 material-icons 素材，但不复制完整 Web 源码/依赖。
     // 这样 dev:web-share 与 Docker 生产构建都从同一份 public 资源读取图标。
     publicDir: resolve(REPO_ROOT, "packages/web/public"),
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), await applicationBrandPlugin(env)],
     resolve: {
-      alias: {
+      // 根包别名以前也吞掉公开子路径，导致 branded share 构建无法解析协议模块。
+      alias: [
+        { find: /^@zcode\/shared$/, replacement: resolve(REPO_ROOT, "packages/shared/src/index.ts") },
+        ...Object.entries({
         "@": resolve(REPO_ROOT, "packages/ui/src"),
-        "@zcode/shared": resolve(REPO_ROOT, "packages/shared/src/index.ts"),
         // Share 镜像不安装 @zcode/ui（它会带入 services/rpc 闭包），子路径导入必须显式指向源码。
         "@zcode/ui/useTheme": resolve(REPO_ROOT, "packages/ui/src/useTheme.ts"),
         "@zcode/ui/conversation-share-readonly": resolve(
@@ -48,7 +51,8 @@ export default defineConfig(({ mode }) => {
           REPO_ROOT,
           "packages/ui/src/lib/oauthProviderIcon.tsx",
         ),
-      },
+        }).map(([find, replacement]) => ({ find, replacement })),
+      ],
     },
     define: {
       __ZCODE_VERSION__: JSON.stringify(version),

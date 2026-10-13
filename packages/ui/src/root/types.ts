@@ -41,6 +41,8 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
 }
 
 export interface RootProps {
+  /** Optional application-owned account display; credentials stay with the provider. */
+  applicationAccount?: { profile: UserInfo; onLogout: () => void };
   services: IServiceAccessor;
   platform: IPlatformService;
   /** 如果从 main 进程传入则跳过项目选择页 */

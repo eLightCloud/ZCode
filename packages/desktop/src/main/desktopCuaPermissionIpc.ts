@@ -38,7 +38,7 @@ function resolveZCodeIcon(): Electron.NativeImage {
   if (cachedZCodeIcon && !cachedZCodeIcon.isEmpty()) return cachedZCodeIcon;
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, "icon.png")
-    : join(import.meta.dirname, "..", "..", "build", "icon.png");
+    : join(process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "..", "..", "build"), "icon.png");
   const image = nativeImage.createFromPath(iconPath);
   cachedZCodeIcon = image.isEmpty()
     ? nativeImage.createFromDataURL(CUA_HELPER_DRAG_ICON_DATA_URL)
@@ -272,6 +272,7 @@ function createDragPanelForSession(
     getSettingsBounds: () => watcher.latest(),
     stopSettingsBounds: () => watcher.stop(),
     getLocale,
+    getApplicationName: () => app.getName(),
     // tile 用真实 ZCode 图标，与系统设置权限列表里那一行的图标对得上，用户才能把
     // 「要拖的东西」和「要出现在列表里的条目」对应起来。
     getIconDataUrl: () =>

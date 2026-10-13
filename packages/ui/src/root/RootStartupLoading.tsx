@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useApplicationBrand } from "@/application-brand.js";
 import { cn } from "@/components/lib/utils.js";
 
 interface RootStartupLoadingProps {
@@ -40,13 +41,16 @@ export function ZCodeStartupLogo({
   className?: string;
   animated?: boolean;
 }) {
+  // HTML 首屏已替换品牌，但 React 初始化仍绘制原生 Z，导致加载交接时旧标识再次出现。
+  // 消费已有静态品牌配置；外层 SVG 仅承接尺寸与呼吸动画，图形由装配 Mark 唯一拥有。
+  const brand = useApplicationBrand();
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="118"
-      height="100"
+      height={brand ? "118" : "100"}
       fill="none"
-      viewBox="0 0 256 218"
+      viewBox={brand ? "0 0 256 256" : "0 0 256 218"}
       className={cn("shrink-0 text-current", className)}
       aria-hidden="true"
       focusable="false"
@@ -60,15 +64,21 @@ export function ZCodeStartupLogo({
           values="1;0.4;1"
         />
       ) : null}
-      <path
-        fill="currentColor"
-        d="M134.4 0.130152L116.48 25.6022C113.665 29.5699 109.054 32.0019 104.064 32.0019H6.3999V0C6.3999 0.130149 134.4 0.130152 134.4 0.130152Z"
-      />
-      <path fill="currentColor" d="M256 0.130127L102.401 217.732H0L153.599 0.130127H256Z" />
-      <path
-        fill="currentColor"
-        d="M121.601 217.732L139.65 192.134C142.465 188.166 147.076 185.734 152.067 185.734H249.604V217.736H121.601V217.732Z"
-      />
+      {brand ? (
+        <brand.Mark className="size-full" />
+      ) : (
+        <>
+          <path
+            fill="currentColor"
+            d="M134.4 0.130152L116.48 25.6022C113.665 29.5699 109.054 32.0019 104.064 32.0019H6.3999V0C6.3999 0.130149 134.4 0.130152 134.4 0.130152Z"
+          />
+          <path fill="currentColor" d="M256 0.130127L102.401 217.732H0L153.599 0.130127H256Z" />
+          <path
+            fill="currentColor"
+            d="M121.601 217.732L139.65 192.134C142.465 188.166 147.076 185.734 152.067 185.734H249.604V217.736H121.601V217.732Z"
+          />
+        </>
+      )}
     </svg>
   );
 }

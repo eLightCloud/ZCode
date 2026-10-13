@@ -1,3 +1,4 @@
+import { ApplicationBrandImage } from "@/application-brand.js";
 import type { IPlatformService, UpdateStatePayload } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import {
@@ -139,7 +140,7 @@ export function DesktopTopOverlay({
               buttonClassName="group relative overflow-hidden rounded-lg"
               onClick={onToggleSidebar}
             >
-              <img
+              <ApplicationBrandImage
                 src={appLogoUrl}
                 alt="ZCode"
                 className="size-5 transition-opacity duration-150 group-hover:opacity-0"

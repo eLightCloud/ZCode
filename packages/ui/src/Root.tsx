@@ -248,7 +248,7 @@ export function Root(props: RootProps) {
           <PlatformProvider platform={props.platform}>
             <StoreProvider
               broadcastService={props.services.broadcastService}
-              initialIsRestoringOAuthSession
+              initialIsRestoringOAuthSession={!props.applicationAccount}
             >
               <TabStoreProvider>
                 <DiffsWorkerPoolProvider>
@@ -298,6 +298,7 @@ function RootInner({
   initialWebRemoteControlWorkspaceList,
   webRemoteControlTerminalTransportState,
   initialWorkspaceLoadingFallback,
+  applicationAccount,
 }: RootProps) {
   useEffect(() => {
     setRequestSecurityReporter(platform);
@@ -339,7 +340,8 @@ function RootInner({
 
   const { intl, locale } = useZCodeIntl();
   const theme = useZCodeStore((state) => state.theme);
-  const user = useZCodeStore((state) => state.user);
+  const nativeUser = useZCodeStore((state) => state.user);
+  const user = applicationAccount?.profile ?? nativeUser;
   const isRestoringOAuthSession = useZCodeStore((state) => state.isRestoringOAuthSession);
   const setUser = useZCodeStore((state) => state.setUser);
   const setIsRestoringOAuthSession = useZCodeStore((state) => state.setIsRestoringOAuthSession);
@@ -362,7 +364,7 @@ function RootInner({
   });
   const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =
     useState<WelcomeScreenOpenReason | null>(() =>
-      consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
+      !applicationAccount && consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
     );
   const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
     useState(false);
@@ -593,7 +595,7 @@ function RootInner({
 
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
-  const isResolvingStartupAuthState = isRestoringOAuthSession;
+  const isResolvingStartupAuthState = !applicationAccount && isRestoringOAuthSession;
   const rootProviderAvailability = resolveProviderAvailabilityState({
     modelSelectionView: rootModelSelectionView,
   });
@@ -609,7 +611,7 @@ function RootInner({
     });
   const { startupCheckCompleted: providerAvailabilityStartupCheckCompleted } =
     useProviderAvailabilityLoginEntryGuard({
-      enabled: providerAvailabilityLoginEntryGuardEnabled,
+      enabled: providerAvailabilityLoginEntryGuardEnabled && !applicationAccount,
       user,
       isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
       providerFamilyDomain: appSettings?.providerFamilyDomain,
@@ -632,7 +634,7 @@ function RootInner({
         });
       },
     });
-  const isResolvingProviderStartupState = shouldResolveProviderStartupState({
+  const isResolvingProviderStartupState = !applicationAccount && shouldResolveProviderStartupState({
     isWebRemoteControlRoot,
     providerStartupSyncPending,
     providerAvailabilityStartupCheckCompleted,
@@ -668,7 +670,7 @@ function RootInner({
     setWorkspaceActionError,
     startDraftInWorkspace,
     startNewTaskFromActiveWorkspace,
-    handleLogout,
+    handleLogout: handleNativeLogout,
     handleSelectProject,
     handleSelectConversationWorkspace,
     handleResolveConversationWorkspace,
@@ -704,6 +706,7 @@ function RootInner({
       ? "web-remote-replayable"
       : "desktop-continuous",
   });
+  const handleLogout = applicationAccount?.onLogout ?? handleNativeLogout;
   const handleRemoteWorkspaceActivated = useCallback(
     ({
       workspacePath,
@@ -924,6 +927,7 @@ function RootInner({
   }, [platform]);
 
   useRootOAuthEffects({
+    enabled: !applicationAccount,
     accountIntentKey: JSON.stringify([
       user?.id,
       appSettings?.providerFamilyDomain,
@@ -1088,13 +1092,13 @@ function RootInner({
   }, [isSettingsTabActive, workspaceShellPath]);
 
   useEffect(() => {
-    if (!loginEntryRequest) {
+    if (!loginEntryRequest || applicationAccount) {
       return;
     }
     // 登录入口已从模态弹窗收敛为 WelcomeScreen。
     // provider 连接请求仍要先退出首次启动引导语义，避免连接完成后误创建默认 workspace。
     setWelcomeScreenOpenReason("provider-request");
-  }, [loginEntryRequest]);
+  }, [loginEntryRequest, applicationAccount]);
 
   const handleOpenLoginEntry = () => {
     setWelcomeScreenOpenReason("manual-login");

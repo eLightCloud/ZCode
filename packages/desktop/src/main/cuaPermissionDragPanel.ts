@@ -39,6 +39,7 @@ export interface CreateCuaPermissionDragPanelOptions {
   stopSettingsBounds?: () => void;
   /** 浮窗 tile 显示的应用图标（data URL）。缺省时页面回退到内置占位图形。 */
   getIconDataUrl?: () => string | null;
+  getApplicationName?: () => string;
   /** ZCode 当前界面语言。每次 show 都重新读取，禁止浮窗自行猜测系统语言。 */
   getLocale: () => Locale;
   logger: {
@@ -145,6 +146,7 @@ export function createCuaPermissionDragPanel(
             permission,
             locale: options.getLocale(),
             iconDataUrl: options.getIconDataUrl?.() ?? null,
+            applicationName: options.getApplicationName?.(),
           });
           window.showInactive();
           startTracking();
@@ -157,6 +159,7 @@ export function createCuaPermissionDragPanel(
         permission,
         locale: options.getLocale(),
         iconDataUrl: options.getIconDataUrl?.() ?? null,
+            applicationName: options.getApplicationName?.(),
       });
       window.showInactive();
       startTracking();

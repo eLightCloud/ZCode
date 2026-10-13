@@ -59,7 +59,7 @@ import {
 const DESKTOP_ZOOM_MIN_LEVEL = -3;
 const DESKTOP_ZOOM_MAX_LEVEL = 5;
 
-function getSidebarProfileName(user?: UserInfo | null): string {
+function getSidebarProfileName(user?: UserInfo | null, applicationName = "ZCode"): string {
   const displayName = user?.displayName?.trim();
   if (displayName) {
     return displayName;
@@ -70,7 +70,7 @@ function getSidebarProfileName(user?: UserInfo | null): string {
     return username;
   }
 
-  return "ZCode";
+  return applicationName;
 }
 
 function getSidebarProfileBadge(
@@ -78,7 +78,7 @@ function getSidebarProfileBadge(
   formatMessage: ReturnType<typeof useZCodeIntl>["intl"]["formatMessage"],
 ): string {
   if (user) {
-    return getSidebarProfileName(user);
+    return getSidebarProfileName(user, formatMessage({ id: "application.name" }));
   }
 
   return formatMessage({ id: "sidebar.profile.notLoggedIn" });

@@ -1040,6 +1040,9 @@ export class ZCodeAgentProcessManager {
         // 身份/隔离语义使用 workspaceIdentity；cwd 继续使用 workspacePath。
         ...buildAgentWorkspaceIdentityEnv(params.workspaceIdentity),
         ...buildE2EAgentCoverageEnv(),
+        // The listener credential belongs to the Host, never the Agent or its tools.
+        ZCODE_SERVER_AUTH_TOKEN: undefined,
+        ZCODE_SERVER_AUTH_TOKEN_SHA256: undefined,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

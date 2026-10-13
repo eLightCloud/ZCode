@@ -1,3 +1,4 @@
+import { requiredPluginSelection } from "./required-plugin.js";
 import { parseRuntimeInputPresentation } from "@zcode/contracts";
 import {
   unpublishedPermissionGrants,
@@ -91,6 +92,16 @@ export async function steerTurn(
 
   if (!activeTurn) {
     return await this.rejectTurnSteer("no_active_turn", {
+      expectedTurnId: request.expectedTurnId,
+      inputPreview,
+      inputSize,
+      traceContext: request.traceContext,
+    });
+  }
+
+  if (requiredPluginSelection(request.input) !== undefined) {
+    return await this.rejectTurnSteer("turn_not_steerable", {
+      activeTurn,
       expectedTurnId: request.expectedTurnId,
       inputPreview,
       inputSize,
@@ -236,7 +247,8 @@ export async function enqueueDeferredInput(
   const queryId = request.queryId ?? (request.inputId as QueryId | undefined) ?? createQueryId();
   const commandKind = request.commandKind;
   const source: TurnSteerSource | undefined = request.source;
-  const delivery = request.delivery ?? "queue";
+  const delivery =
+    requiredPluginSelection(request.input) !== undefined ? "queue" : (request.delivery ?? "queue");
   const toolDisallowlist = request.toolDisallowlist;
   const pendingInputId =
     request.pendingInputId ??

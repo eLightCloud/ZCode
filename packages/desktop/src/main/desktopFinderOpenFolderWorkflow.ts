@@ -35,12 +35,12 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function getServicesMenuLabel(locale: Locale): string {
-  return SERVICES_MENU_LABELS[locale] ?? SERVICES_MENU_LABELS["en-US"];
+function getServicesMenuLabel(locale: Locale, applicationName = "ZCode"): string {
+  return (SERVICES_MENU_LABELS[locale] ?? SERVICES_MENU_LABELS["en-US"]).replaceAll("ZCode", applicationName);
 }
 
-function buildInfoPlist(locale: Locale): string {
-  const servicesMenuName = escapeXml(getServicesMenuLabel(locale));
+function buildInfoPlist(locale: Locale, applicationName?: string): string {
+  const servicesMenuName = escapeXml(getServicesMenuLabel(locale, applicationName));
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -249,6 +249,7 @@ export function installFinderOpenFolderWorkflow(options: {
   platform: NodeJS.Platform;
   locale: Locale;
   homeDir?: string;
+  applicationName?: string;
   logger: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void };
   refreshServicesIndex?: () => void;
 }): void {
@@ -267,7 +268,7 @@ export function installFinderOpenFolderWorkflow(options: {
   try {
     mkdirSync(resourcesDir, { recursive: true });
 
-    const infoChanged = writeFileIfChanged(infoPlistPath, buildInfoPlist(options.locale));
+    const infoChanged = writeFileIfChanged(infoPlistPath, buildInfoPlist(options.locale, options.applicationName));
     const workflowContent = buildDocumentWorkflow();
     const workflowChanged = writeFileIfChanged(documentWorkflowPath, workflowContent);
     // 用户 Automator workflow 通常读取 Contents/document.wflow；

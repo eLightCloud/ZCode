@@ -1,3 +1,5 @@
+import { applicationBrandPlugin } from "../../scripts/application-brand-plugin.mjs";
+import { applicationRootPlugin, applicationAccountProxy, applicationNativeProxy } from "../../scripts/application-root-plugin.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,8 +41,9 @@ export default defineConfig(({ mode }) => {
   const zaiOAuthClientId = resolveZaiOAuthClientId(endpointEnv);
 
   return {
-    plugins: [pdfJsCMapsPlugin(), react(), tailwindcss(), thirdPartyNoticesVitePlugin()],
+    plugins: [applicationRootPlugin(env), applicationBrandPlugin(env), pdfJsCMapsPlugin(), react(), tailwindcss(), thirdPartyNoticesVitePlugin()],
     resolve: {
+      dedupe: ["@zcode/ui", "@zcode/shared", "react", "react-dom"],
       alias: {
         // 修复 UI 组件库中的 @ 别名解析失败。
         // 问题原因：packages/ui 的源码直接被 web 应用交给 Vite 打包，但 web 自己没声明 @ -> packages/ui/src，
@@ -56,6 +59,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
+        ...applicationAccountProxy(env),
         // Web 登录本地调试时，OAuth token 交换必须先命中线上同源接口。
         // 该专用代理放在 `/api` 通配代理之前，避免被转发到本地 server 导致 404。
         "/api/v1/oauth/token": {
@@ -65,6 +69,7 @@ export default defineConfig(({ mode }) => {
         },
         // 将 /ws 和 /api 请求代理到 server（默认 3030 端口）
         "/ws": { target: "ws://localhost:3030", ws: true },
+        ...applicationNativeProxy(env),
         "/api": { target: "http://localhost:3030" },
       },
     },

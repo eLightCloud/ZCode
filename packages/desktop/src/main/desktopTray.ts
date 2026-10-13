@@ -18,11 +18,11 @@ export function resolveDesktopTrayIconPath(platform: NodeJS.Platform = process.p
   if (platform === "linux") {
     return app.isPackaged
       ? join(process.resourcesPath, "icon.png")
-      : join(import.meta.dirname, "../../build/icon.png");
+      : join(process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "../../build"), "icon.png");
   }
   return app.isPackaged
     ? join(process.resourcesPath, "tray_icon.ico")
-    : join(import.meta.dirname, "../../build/icon.ico");
+    : join(process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "../../build"), "icon.ico");
 }
 
 export function createDesktopTray(options: {
@@ -52,7 +52,7 @@ export function createDesktopTray(options: {
   }
 
   const getLabel = (id: (typeof desktopMenuMessageIds)[keyof typeof desktopMenuMessageIds]) =>
-    getDesktopMenuMessage(options.getLocale(), id);
+    getDesktopMenuMessage(options.getLocale(), id).replaceAll("ZCode", app.getName?.() || "ZCode");
   const showTrayWindow = () => {
     void Promise.resolve(options.showCurrentWindow()).catch((error) => {
       options.logger.warn("[desktop-tray] failed to show current window", error);

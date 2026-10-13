@@ -11,14 +11,14 @@ const INDICATOR_CARD_HEIGHT = 38;
 export const INDICATOR_CARD_TOP_OFFSET = 12;
 export const INDICATOR_SHADOW_INSET = { top: 6, right: 8, bottom: 12, left: 8 } as const;
 
-export function indicatorCopy(locale: Locale): { text: string; width: number } {
+export function indicatorCopy(locale: Locale, applicationName = "ZCode"): { text: string; width: number } {
   return locale === "zh-CN"
-    ? { text: "ZCode 正在操作电脑", width: 234 }
-    : { text: "ZCode is controlling your computer", width: 308 };
+    ? { text: `${applicationName} 正在操作电脑`, width: 234 + Math.max(0, applicationName.length - 5) * 13 }
+    : { text: `${applicationName} is controlling your computer`, width: 308 + Math.max(0, applicationName.length - 5) * 8 };
 }
 
-export function indicatorWindowSize(locale: Locale): { width: number; height: number } {
-  const { width } = indicatorCopy(locale);
+export function indicatorWindowSize(locale: Locale, applicationName = "ZCode"): { width: number; height: number } {
+  const { width } = indicatorCopy(locale, applicationName);
   return {
     width: width + INDICATOR_SHADOW_INSET.left + INDICATOR_SHADOW_INSET.right,
     height: INDICATOR_SHADOW_INSET.top + INDICATOR_CARD_HEIGHT + INDICATOR_SHADOW_INSET.bottom,
@@ -33,8 +33,8 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-export function indicatorHtml(locale: Locale): string {
-  const copy = indicatorCopy(locale);
+export function indicatorHtml(locale: Locale, applicationName = "ZCode"): string {
+  const copy = indicatorCopy(locale, applicationName);
   return `<!doctype html>
 <html lang="${locale}" data-state="active">
 <head>
@@ -77,6 +77,6 @@ export function indicatorHtml(locale: Locale): string {
 </html>`;
 }
 
-export function indicatorDataUrl(locale: Locale): string {
-  return `data:text/html;base64,${Buffer.from(indicatorHtml(locale), "utf8").toString("base64")}`;
+export function indicatorDataUrl(locale: Locale, applicationName = "ZCode"): string {
+  return `data:text/html;base64,${Buffer.from(indicatorHtml(locale, applicationName), "utf8").toString("base64")}`;
 }

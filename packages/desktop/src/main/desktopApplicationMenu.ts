@@ -28,7 +28,9 @@ export function getDesktopMenuLabel(
   locale: Locale,
   id: (typeof desktopMenuMessageIds)[keyof typeof desktopMenuMessageIds],
 ) {
-  return getDesktopMenuMessage(locale, id);
+  const label = getDesktopMenuMessage(locale, id);
+  return id === desktopMenuMessageIds.helpAbout
+    ? label.replaceAll("ZCode", app.getName?.() || "ZCode") : label;
 }
 
 export function resolveSystemApplicationLocale(): Locale {

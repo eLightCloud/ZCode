@@ -1,3 +1,4 @@
+import { matchesServerToken, matchesServerTokenHash } from "@zcode/shared/node";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { serve } from "@hono/node-server";
@@ -125,6 +126,8 @@ function exposeWebSocket(
 export async function createCoreHttpServer(
   services: ServiceCollection,
   options: {
+    authToken?: string;
+    authTokenHash?: string;
     host?: string;
     port?: number;
     serverId?: string;
@@ -135,17 +138,39 @@ export async function createCoreHttpServer(
   const app = new Hono();
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
   const host = options.host ?? "127.0.0.1";
-  if (!isLoopbackHost(host)) {
-    // R2 当前只有本机/SSH 隧道入口，Core 尚未接入 token middleware；对外监听必须 fail-closed。
+  const authToken = options.authToken?.trim();
+  const authTokenHash = options.authTokenHash?.trim();
+  if ((authToken && authTokenHash) || (authTokenHash && !/^[a-f0-9]{64}$/i.test(authTokenHash))) {
+    throw new Error("Invalid or ambiguous server instance credential configuration");
+  }
+  if (!isLoopbackHost(host) && !authToken && !authTokenHash) {
+    // Public listeners must have an explicitly configured instance credential.
     throw new Error(
       `Non-loopback host ${host} requires authentication before the server can listen`,
     );
+  }
+  if (authToken || authTokenHash) {
+    app.use("*", async (context, next) => {
+      const authorization = context.req.header("authorization");
+      const supplied = /^Bearer ([^\s]+)$/i.exec(authorization ?? "")?.[1];
+      const authenticated = authTokenHash
+        ? matchesServerTokenHash(supplied, authTokenHash)
+        : matchesServerToken(supplied, authToken!);
+      if (!authenticated) {
+        log.warn(undefined, "Server instance authentication rejected", {
+          event: "server.auth.rejected",
+          correlationId: randomUUID(),
+        });
+        return context.json({ error: "Unauthorized" }, 401);
+      }
+      return await next();
+    });
   }
   const info: ServerRemoteInfo = {
     serverId: options.serverId ?? hostname() ?? "zcode-server",
     version: ZCODE_VERSION,
     protocolVersion: SERVER_REMOTE_PROTOCOL_VERSION,
-    authRequired: false,
+    authRequired: Boolean(authToken || authTokenHash),
     workspaces: [],
     capabilities: {
       desktopContinuous: true,

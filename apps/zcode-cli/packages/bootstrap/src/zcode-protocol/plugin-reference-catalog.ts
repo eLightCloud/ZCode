@@ -277,6 +277,7 @@ function toReferenceCatalogEntry(
   const display = displayByPluginId.get(entry.pluginId);
   return {
     ...(includeCategory ? { category: display?.category ?? "other" } : {}),
+    ...(entry.entrySkill ? { entrySkill: entry.entrySkill } : {}),
     pluginId: entry.pluginId,
     name: entry.name,
     marketplace: entry.marketplace,

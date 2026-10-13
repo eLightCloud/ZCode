@@ -1,3 +1,4 @@
+import { applicationRootPlugin } from "./scripts/application-root-plugin.mjs";
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
@@ -44,6 +45,8 @@ const forkIsolatedTests = [
 ];
 
 export default defineConfig({
+  // Use the native default application root in upstream regression tests.
+  plugins: [applicationRootPlugin({})],
   // 测试固定注入事件上报端点，使遥测上报链路在单测中可验证；真实构建由 scripts/build-time-config.mjs 决定。
   define: {
     __ZCODE_TELEMETRY_REPORT_ENDPOINT__: JSON.stringify("https://zcode.z.ai/api/v1/event/report"),

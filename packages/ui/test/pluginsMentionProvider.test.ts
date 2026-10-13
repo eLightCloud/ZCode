@@ -42,6 +42,30 @@ function entry(
 }
 
 describe("plugins mention provider mapping", () => {
+  it("offers an explicit clear action even for a disabled required plugin", () => {
+    const items = mapPluginCatalogToMentionItemsForTest(
+      [entry({ entrySkill: "daily", enabled: false })],
+      { ...LABELS, ordinaryWork: "Return to ordinary work" },
+      "en-US",
+    );
+    expect(items).toHaveLength(1);
+    expect(buildMentionMarkdown(items[0]!)).toBe(
+      "[@Return to ordinary work](required-plugin://none)",
+    );
+  });
+  it("preserves a declared required entry through picker and canonical serialization", () => {
+    const [item] = mapPluginCatalogToMentionItemsForTest(
+      [entry({ entrySkill: "daily" })],
+      LABELS,
+      "zh-CN",
+    );
+    expect(item?.markdown).toBe("[@demo](required-plugin://demo@mkt-a)");
+    expect(buildMentionMarkdown(item!)).toBe(item?.markdown);
+    expect(parseMentionMarkdown(item!.markdown)).toEqual([
+      { type: "plugin", label: "demo", pluginId: "demo@mkt-a" },
+    ]);
+    expect(parseMentionMarkdown("[ordinary](required-plugin://none)")[0]?.type).toBe("plugin");
+  });
   it("按界面语言显示描述，缺翻译回退默认描述，旧 Host 留空", () => {
     const plugin = entry({
       description: "Default description",

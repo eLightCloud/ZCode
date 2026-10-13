@@ -1,3 +1,5 @@
+import { getApplicationName } from "../applicationBrandTitle.js";
+
 type WebAuthLocale = "zh-CN" | "en-US";
 
 interface WebAuthPageCopy {
@@ -62,5 +64,5 @@ function resolveWebAuthLocale(language?: string): WebAuthLocale {
 }
 
 export function getWebAuthCopy(locale: WebAuthLocale = resolveWebAuthLocale()): WebAuthPageCopy {
-  return WEB_AUTH_COPY[locale];
+  return { ...WEB_AUTH_COPY[locale], brand: getApplicationName() ?? WEB_AUTH_COPY[locale].brand };
 }

@@ -846,6 +846,37 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         configResult.config.features.skill && configResult.config.skills.enabled
           ? (options.skillPort ??
             createNodeSkillAdapter({
+              resolveRequiredPlugins: () => {
+                const current = resolveEffectiveConfigResult(
+                  createConfig({
+                    env: options.env,
+                    projectConfigPath: options.projectConfigPath,
+                    workingDirectory,
+                    workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
+                    skipUserConfig: options.skipUserConfig,
+                    userConfigPath: options.userConfigPath,
+                    cliOverrides: createConfigCliOverrides(options),
+                  }),
+                  options,
+                );
+                const outcome = resolveStartupPlugins({
+                  cliStorageRoot,
+                  configResult: current,
+                  env: options.env,
+                  logger,
+                  options,
+                  startupTimer,
+                  workingDirectory,
+                });
+                if (!current.config.features.skill || !current.config.skills.enabled) {
+                  outcome.plugins = [];
+                  outcome.skillRoots = [];
+                }
+                return {
+                  outcome,
+                  disabledPaths: collectDisabledPaths(current.config.skillOverrides),
+                };
+              },
               extraRoots: configResult.config.skills.roots,
               extraResolvedRoots: [...pluginOutcome.skillRoots, ...bundledSkillRoots],
               disabledPaths: [

@@ -12,6 +12,7 @@ import { createCoreHttpServer } from "./http.js";
 import { installParentDisconnectHandler } from "./parentDisconnect.js";
 import { resolveCoreServerId } from "./serverIdentity.js";
 import { createTaskActivityTracker } from "./taskActivityTracker.js";
+import { startServerAutomationRuntime } from "./automationRuntime.js";
 
 declare const __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: string | undefined;
 
@@ -39,16 +40,38 @@ export async function runServerCore(generation: number): Promise<void> {
       `当前构建未嵌入 ZCode Built-in Provider Config，且未设置 ${ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV}`,
     );
   }
+  const automationEnabled = process.env.ZCODE_SERVER_AUTOMATION_ENABLED === "1";
+  let automation: ReturnType<typeof startServerAutomationRuntime> | undefined;
   const services = createLocalServices({
     zcodeBuiltinProviderConfigFilePath,
     serviceAuthorityMode: "standalone-server",
     topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
+    ...(automationEnabled ? { onAutomationManualRunRequested: async (params) => {
+      if (!automation) throw new Error("Native automation runtime is unavailable");
+      await automation.runManual(params);
+    } } : {}),
   });
   const taskActivityTracker = createTaskActivityTracker(services.getOptional(IZCodeAgentService));
+  const configuredPort = process.env.ZCODE_SERVER_PORT?.trim();
+  const bindPort = configuredPort ? Number(configuredPort) : undefined;
+  if (bindPort !== undefined && (!Number.isInteger(bindPort) || bindPort < 1 || bindPort > 65535)) {
+    throw new Error("Invalid configured server port");
+  }
+  const bindHost = process.env.ZCODE_SERVER_HOST?.trim();
+  const authToken = process.env.ZCODE_SERVER_AUTH_TOKEN?.trim();
+  const authTokenHash = process.env.ZCODE_SERVER_AUTH_TOKEN_SHA256?.trim();
   const http = await createCoreHttpServer(services, {
+    ...(bindHost ? { host: bindHost } : {}),
+    ...(bindPort === undefined ? {} : { port: bindPort }),
+    ...(authToken ? { authToken } : {}),
+    ...(authTokenHash ? { authTokenHash } : {}),
     serverId: await resolveCoreServerId(),
     topicResourcePeers,
   });
+  if (automationEnabled) {
+    automation = startServerAutomationRuntime(services);
+    await automation.ready;
+  }
   const send = (message: unknown): Promise<void> => {
     if (typeof process.send !== "function" || process.connected === false) return Promise.resolve();
     return new Promise((resolve) => {
@@ -103,6 +126,7 @@ export async function runServerCore(generation: number): Promise<void> {
     activitySubscription.dispose();
     taskActivityTracker.dispose();
     await http.close().catch(() => undefined);
+    await automation?.dispose();
     await disposeServiceResourcesAndWait(services).catch(() => undefined);
     await send({ type: "shutdown-ack" });
     await send({ type: "exit", reason });

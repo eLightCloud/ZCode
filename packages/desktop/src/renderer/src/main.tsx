@@ -1,3 +1,4 @@
+import { ApplicationRoot, ApplicationShell } from "virtual:zcode-application-root";
 import { DatabaseStartupAdmission } from "./databaseStartupAdmission.js";
 import { initializeDesktopLocalTtft } from "./localTtftBootstrap.js";
 import { createRoot } from "react-dom/client";
@@ -170,7 +171,7 @@ const sendStartupControl = (control: DatabaseStartupControl) =>
   window.postMessage({ type: InternalChannels.DatabaseStartupControl, control }, "*");
 function renderDatabaseStartup(): void {
   appRoot?.render(
-    <AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
+    <ApplicationShell><AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
       <ZCodeIntlProvider
         initialLocale={initialLocaleFlag ? initialLocale : undefined}
         resolveSystemLocale={desktopPlatform.getSystemLocale}
@@ -189,7 +190,7 @@ function renderDatabaseStartup(): void {
           onExit={() => sendStartupControl({ action: "exit" })}
         />
       </ZCodeIntlProvider>
-    </AppErrorBoundary>,
+    </AppErrorBoundary></ApplicationShell>,
   );
 }
 function enterAppIfPrepared(): void {
@@ -330,14 +331,14 @@ function initializeBusinessRoot(port: MessagePort): void {
   setReactErrorArmsReporter(desktopPlatform);
 
   appRoot?.render(
-    <AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
+    <ApplicationShell><AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
       <ZCodeIntlProvider
         settingService={settingService}
         broadcastService={services.broadcastService}
         resolveSystemLocale={desktopPlatform.getSystemLocale}
       >
         <StartupReadyNotifier />
-        <Root
+        <ApplicationRoot
           services={services}
           platform={desktopPlatform}
           isDesktop
@@ -353,7 +354,7 @@ function initializeBusinessRoot(port: MessagePort): void {
           unavailableWorkspacePath={unavailableWorkspacePath}
         />
       </ZCodeIntlProvider>
-    </AppErrorBoundary>,
+    </AppErrorBoundary></ApplicationShell>,
   );
 }
 
@@ -365,13 +366,13 @@ if (windowKind !== "update-status") {
 
 if (windowKind === "update-status") {
   createRoot(document.getElementById("root")!).render(
-    <AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
+    <ApplicationShell><AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
       <StartupReadyNotifier />
       <UpdateStatusWindowRoot
         platform={desktopPlatform}
         initialLocale={initialLocale}
         onRequestClose={() => window.close()}
       />
-    </AppErrorBoundary>,
+    </AppErrorBoundary></ApplicationShell>,
   );
 }

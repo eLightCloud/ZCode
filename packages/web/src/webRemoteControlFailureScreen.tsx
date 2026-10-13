@@ -1,3 +1,4 @@
+import { getApplicationName } from "./applicationBrandTitle.js";
 import type { WebRemoteControlFailure, WebRemoteControlFailureReason } from "@zcode/shared";
 
 type WebRemoteControlScreenLocale = "zh-CN" | "en-US";
@@ -296,7 +297,9 @@ export function WebRemoteControlFailureScreen({
   locale,
   onReload,
 }: WebRemoteControlFailureScreenProps) {
-  const copy = resolveWebRemoteControlScreenCopy(failure, locale);
+  const nativeCopy = resolveWebRemoteControlScreenCopy(failure, locale);
+  const name = getApplicationName();
+  const copy = { ...nativeCopy, nextSteps: nativeCopy.nextSteps.map(step => name ? step.replaceAll("ZCode", name) : step) };
   const toneClassName = resolveToneClassName(copy.tone);
 
   return (

@@ -34,6 +34,10 @@ export default defineConfig({
     "ssh2",
     "yaml",
     "node-forge",
+    // Keep CommonJS ZIP libraries external, as in the native HTTP server build.
+    // Inlining their dynamic require("fs") into ESM prevents the staged CLI from starting.
+    "yazl",
+    "yauzl",
     "undici",
     "axios",
     "form-data",

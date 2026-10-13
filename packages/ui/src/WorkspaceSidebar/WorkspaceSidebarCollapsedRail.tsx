@@ -1,3 +1,4 @@
+import { ApplicationBrandImage } from "@/application-brand.js";
 import { PanelLeftOpen } from "lucide-react";
 import appLogoUrl from "@/assets/provider-icons/logo-zai.svg";
 import { Button } from "@/components/ui/button.js";
@@ -32,7 +33,7 @@ export function WorkspaceSidebarCollapsedRail({
                 id: "workspaceSidebar.toggleSidebar",
               })}
             >
-              <img
+              <ApplicationBrandImage
                 src={appLogoUrl}
                 alt="ZCode"
                 className="size-5 transition-opacity group-hover:opacity-0"

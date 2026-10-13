@@ -1,3 +1,5 @@
+import { setApplicationDocumentTitle } from "./applicationBrandTitle.js";
+import { ApplicationRoot, ApplicationShell, prepareApplication } from "virtual:zcode-application-root";
 import { sessionCreateTelemetrySchema, type RendererTelemetryEventPayload } from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
 import { createRoot } from "react-dom/client";
@@ -222,6 +224,9 @@ async function resolveFeedbackUrl(): Promise<string | undefined> {
 // 浏览器标签页 / 手机切后台时禁用 CSS 动画，避免 DocumentTimeline 持有已卸载的 DOM 子树。
 installDocumentHiddenMotionPause();
 const root = createRoot(document.getElementById("root")!);
+function renderApplication(content: import("react").ReactNode): void {
+  root.render(<ApplicationShell>{content}</ApplicationShell>);
+}
 const webAuthService = createWebAuthService();
 let isPageUnloading = false;
 let isSwitchingWebRemoteControlWorkspace = false;
@@ -264,7 +269,7 @@ type WebRemoteControlWorkspaceListUpdateListener = (
 ) => void;
 
 function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
-  root.render(
+  renderApplication(
     <WebRemoteControlFailureScreen
       failure={failure}
       locale={resolveWebRemoteControlScreenLocale(navigator.language)}
@@ -305,12 +310,12 @@ function resolveWebRemoteAppReturnTo(params: URLSearchParams): string {
 }
 
 function renderWebAuthCallbackPage(): void {
-  document.title = "ZCode - Web Remote Control Sign In";
+  setApplicationDocumentTitle("ZCode - Web Remote Control Sign In");
   const callbackState = parseOAuthState(
     new URLSearchParams(window.location.search).get("state") ?? "",
   );
   const safeRetryTarget = resolveSafeAppReturnTo(callbackState?.app_return_to);
-  root.render(
+  renderApplication(
     <WebCallbackPage
       authService={webAuthService}
       onSuccess={({ appReturnTo }) => {
@@ -330,10 +335,10 @@ async function renderConversationSharePage(): Promise<void> {
   document.documentElement.lang = routeLocale;
   // 分享页必须设置 title：否则浏览器标签只显示 index.html 的通用标题。
   // 会话标题要等 preview 加载完，先给一个语言正确的兜底。
-  document.title = routeLocale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share";
+  setApplicationDocumentTitle(routeLocale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share");
   const shareCode = resolveConversationShareCodeFromPath(window.location.pathname);
   if (!shareCode) {
-    root.render(
+    renderApplication(
       <ConversationShareLandingStatus
         state={{ kind: "error", error: "invalid_contract" }}
         locale={routeLocale}
@@ -371,7 +376,7 @@ async function renderConversationSharePage(): Promise<void> {
     }
     void webAuthService.logout();
   };
-  root.render(
+  renderApplication(
     <ConversationShareLandingLoader
       shareCode={shareCode}
       client={client}
@@ -397,8 +402,8 @@ async function renderConversationSharePage(): Promise<void> {
 }
 
 function renderWebLoginPage(): void {
-  document.title = "ZCode - Web Remote Control Sign In";
-  root.render(
+  setApplicationDocumentTitle("ZCode - Web Remote Control Sign In");
+  renderApplication(
     <WebLoginPage
       onLogin={() => {
         const params = new URLSearchParams(window.location.search);
@@ -412,8 +417,8 @@ function renderWebLoginPage(): void {
 }
 
 function renderWebLoggedInWaitingPage(user: UserInfo): void {
-  document.title = "ZCode - Web Remote Control";
-  root.render(
+  setApplicationDocumentTitle("ZCode - Web Remote Control");
+  renderApplication(
     <WebLoggedInWaitingPage
       user={user}
       onLogout={async () => {
@@ -1456,8 +1461,8 @@ function WebRemoteControlLoadingScreen({
 }
 
 function renderWebRemoteControlLoading(state: WebRemoteControlTerminalTransportState): void {
-  document.title = "ZCode - Web Remote Control";
-  root.render(<WebRemoteControlLoadingScreen state={state} />);
+  setApplicationDocumentTitle("ZCode - Web Remote Control");
+  renderApplication(<WebRemoteControlLoadingScreen state={state} />);
 }
 
 async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): Promise<void> {
@@ -2041,15 +2046,15 @@ async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): 
   ) => {
     if (terminated || versionGuard.isBlocked()) return;
     ready = true;
-    document.title = "ZCode - Web Remote Control";
-    root.render(
+    setApplicationDocumentTitle("ZCode - Web Remote Control");
+    renderApplication(
       <AppErrorBoundary key={bridge.bridgeSessionId}>
         <ZCodeIntlProvider
           settingService={services.settingService}
           broadcastService={services.broadcastService}
           preferSettingServiceLocale
         >
-          <Root
+          <ApplicationRoot
             services={services}
             platform={createWebPlatform({
               externalWebRemoteControlProxy: {
@@ -2115,14 +2120,14 @@ async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): 
     currentWorkspaceKey = workspaceKey;
     currentTaskId = taskId;
     await updateMobileViewState(workspaceKey, taskId);
-    document.title = "ZCode - Web Remote Control";
+    setApplicationDocumentTitle("ZCode - Web Remote Control");
     const initialResult = await listWorkspaces();
     if (terminated || versionGuard.isBlocked()) return;
     ready = true;
-    root.render(
+    renderApplication(
       <AppErrorBoundary key={`home-only-${workspaceKey}`}>
         <ZCodeIntlProvider>
-          <Root
+          <ApplicationRoot
             services={createHomeOnlyWebRemoteControlServices()}
             platform={createWebPlatform({
               externalWebRemoteControlProxy: {
@@ -2286,15 +2291,15 @@ async function bootstrapWebRemoteControlByToken(params: URLSearchParams): Promis
   ) => {
     const initialWorkspaceIdentity =
       bridge.kind === "remote" ? bridge.workspaceIdentity : undefined;
-    document.title = "ZCode - Web Remote Control";
-    root.render(
+    setApplicationDocumentTitle("ZCode - Web Remote Control");
+    renderApplication(
       <AppErrorBoundary key={bridge.bridgeSessionId}>
         <ZCodeIntlProvider
           settingService={services.settingService}
           broadcastService={services.broadcastService}
           preferSettingServiceLocale
         >
-          <Root
+          <ApplicationRoot
             services={services}
             platform={createWebPlatform({ webRemoteControlProxy: proxy })}
             // 与 external relay 保持相同的 Renderer 投影；普通 Web Server Root 继续使用默认关闭。
@@ -2461,6 +2466,8 @@ async function bootstrapWebApp() {
     return;
   }
 
+  await prepareApplication({ render: renderApplication });
+
   let bootstrap: WebBootstrapResult;
   try {
     bootstrap = await resolveWebBootstrap();
@@ -2481,15 +2488,15 @@ async function bootstrapWebApp() {
       onClose: () => {},
     });
     const platform = createWebPlatform();
-    document.title = "ZCode - Web + Server";
+    setApplicationDocumentTitle("ZCode - Web + Server");
 
-    root.render(
+    renderApplication(
       <AppErrorBoundary>
         <ZCodeIntlProvider
           settingService={services.settingService}
           broadcastService={services.broadcastService}
         >
-          <Root
+          <ApplicationRoot
             services={services}
             platform={platform}
             initialWorkspaceAbsPath={bootstrap.initialWorkspaceAbsPath}

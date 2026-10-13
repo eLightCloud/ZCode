@@ -1,3 +1,4 @@
+import { ApplicationBrandImage } from "@/application-brand.js";
 import { cn } from "@/components/lib/utils.js";
 import zaiLogoUrl from "@/assets/provider-icons/logo-zai.svg";
 
@@ -19,7 +20,7 @@ export function WindowsTopLeftLogo({
         className,
       )}
     >
-      <img
+      <ApplicationBrandImage
         src={zaiLogoUrl}
         alt="ZCode"
         className={cn("pointer-events-none size-5 select-none", imageClassName)}

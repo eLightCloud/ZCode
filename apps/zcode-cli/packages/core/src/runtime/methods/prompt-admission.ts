@@ -4,6 +4,7 @@ import type { PromptRuntimeCommand } from "../command-queue.js";
 import { createRuntimeCommandId } from "../command-queue.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { enqueueCancellableRuntimeCommand } from "./runtime-command-submit.js";
+import { requiredPluginSelection } from "./required-plugin.js";
 import type {
   ActiveTurnStartReservation,
   ExecuteTurnOptions,
@@ -63,6 +64,7 @@ export async function admitPrompt(
       (options?.queueDelivery === "guide" ||
         options?.delivery === "auto" ||
         options?.delivery === "steer_active_turn") &&
+      requiredPluginSelection(input) === undefined &&
       options?.queueDelivery !== "queue";
     if (canSteer) {
       const delivery = options?.queueDelivery === "guide" ? "guide" : undefined;

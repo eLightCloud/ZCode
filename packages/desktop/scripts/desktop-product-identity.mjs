@@ -64,7 +64,23 @@ export function resolveDesktopProductFlavor(env = process.env) {
 }
 
 export function resolveDesktopProductIdentity(env = process.env) {
-  return desktopProductIdentities[resolveDesktopProductFlavor(env)];
+  const native = desktopProductIdentities[resolveDesktopProductFlavor(env)];
+  if (!env.ZCODE_APPLICATION_NAME) return native;
+  if (
+    !env.ZCODE_APPLICATION_ID ||
+    !env.ZCODE_APPLICATION_EXECUTABLE ||
+    !env.ZCODE_APPLICATION_PACKAGE
+  ) {
+    throw new Error("application-brand.incomplete-desktop-identity");
+  }
+  const preview = native.flavor === "preview";
+  return Object.freeze({
+    ...native,
+    productName: env.ZCODE_APPLICATION_NAME + (preview ? " Preview" : ""),
+    appId: env.ZCODE_APPLICATION_ID + (preview ? ".preview" : ""),
+    linuxExecutableName: env.ZCODE_APPLICATION_EXECUTABLE + (preview ? "-preview" : ""),
+    linuxPackageName: env.ZCODE_APPLICATION_PACKAGE + (preview ? "-preview" : ""),
+  });
 }
 
 /**
@@ -82,7 +98,19 @@ export function resolveDesktopArtifactSuffix(env = process.env) {
  * 和运行中的 Electron 进程会被 Windows 视为三个不同的应用。开发态继续保留旧身份，
  * 避免本地调试快捷方式和正式/Preview 安装包互相污染。
  */
-export function resolveWindowsAppUserModelIdForFlavor(flavor, runtime = { isPackaged: true }) {
+export function resolveWindowsAppUserModelIdForFlavor(
+  flavor,
+  runtime = { isPackaged: true },
+  env = process.env,
+) {
+  if (env.ZCODE_APPLICATION_NAME) {
+    const identity = resolveDesktopProductIdentity({
+      ...env,
+      ZCODE_ENV: "production",
+      ZCODE_PREVIEW_IDENTITY: flavor === "preview" ? "1" : "0",
+    });
+    return identity.appId + (runtime.isPackaged === false ? ".dev" : "");
+  }
   if (runtime.isPackaged === false) {
     return "cn.aminer.zcode";
   }

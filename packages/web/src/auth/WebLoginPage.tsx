@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@zcode/ui";
+import { useApplicationBrand, Button } from "@zcode/ui";
 import { getWebAuthCopy } from "./webAuthLocale.js";
 
 interface WebLoginPageProps {
@@ -8,6 +8,7 @@ interface WebLoginPageProps {
 
 export function WebLoginPage({ onLogin }: WebLoginPageProps) {
   const copy = getWebAuthCopy();
+  const brand = useApplicationBrand();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
@@ -15,7 +16,7 @@ export function WebLoginPage({ onLogin }: WebLoginPageProps) {
       <section className="w-full max-w-sm rounded-lg border border-card-border bg-card p-5 shadow-sm">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-ui-xs font-semibold text-foreground">
-            Z
+            {brand ? <brand.Mark className="size-6" /> : "Z"}
           </div>
           <div className="min-w-0">
             <div className="text-ui-xs font-medium text-foreground">{copy.brand}</div>

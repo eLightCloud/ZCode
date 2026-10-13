@@ -23,6 +23,8 @@ export interface ZCodeAgentListMcpServerStatusesParams extends ZCodeAgentWorkspa
 }
 
 export interface ZCodeAgentAddPluginMarketplaceParams extends ZCodeAgentWorkspaceTarget {
+  /** 来源清单身份不匹配时，在原生持久化前拒绝。 */
+  expectedId?: string;
   dryRun?: boolean;
   operationId?: string;
   source: string;

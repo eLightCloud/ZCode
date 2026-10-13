@@ -2917,6 +2917,7 @@ export type ZCodePluginComponentGroup = z.infer<typeof zcodePluginComponentGroup
 
 export const zcodePluginInfoSchema = z
   .object({
+    entrySkill: nonEmptyString.optional(),
     id: nonEmptyString,
     name: nonEmptyString,
     description: z.string().optional(),
@@ -3644,6 +3645,7 @@ export const zcodePluginsMarketplaceAddParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
     source: nonEmptyString,
+    expectedId: nonEmptyString.optional(),
     dryRun: z.boolean().optional(),
     operationId: nonEmptyString.optional(),
   })
@@ -3815,6 +3817,7 @@ export const zcodePluginsDescribeResultSchema = z
     // 插件包内 plugin.json 的展示性回退字段；未安装候选详情页信息区在商店 listing 缺失时兜底。
     metadata: z
       .object({
+        entrySkill: nonEmptyString.optional(),
         author: z.string().optional(),
         authorUrl: z.string().optional(),
         homepage: z.string().optional(),

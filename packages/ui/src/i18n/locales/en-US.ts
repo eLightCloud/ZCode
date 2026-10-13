@@ -1,6 +1,9 @@
 import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /** English translations */
 const enUS: Record<string, string> = {
+  "applicationPages.navigation": "Application pages",
+  "applicationPages.refresh": "Refresh page",
+  "applicationPages.close": "Back to workspace",
   "application.name": "ZCode",
   "application.account.cloudUnavailableTitle": "This feature is unavailable",
   "application.account.cloudUnavailableDescription":

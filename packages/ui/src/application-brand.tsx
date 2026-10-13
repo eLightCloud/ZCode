@@ -13,11 +13,16 @@ export interface ApplicationBrand {
   name: string;
   localizedNames?: Partial<Record<"zh-CN" | "en-US", string>>;
   attribution?: string;
+  localizedMessages?: Partial<
+    Record<"zh-CN" | "en-US", Record<string, string>>
+  >;
   Mark: ComponentType<{ className?: string }>;
   Wordmark: ComponentType<{ className?: string }>;
 }
 
-const ApplicationBrandContext = createContext<ApplicationBrand | undefined>(undefined);
+const ApplicationBrandContext = createContext<ApplicationBrand | undefined>(
+  undefined,
+);
 
 /** Static product metadata; owns no account, tenant, theme or execution state. */
 export function ApplicationBrandProvider({
@@ -38,7 +43,9 @@ export function ApplicationBrandProvider({
       has_attribution: Boolean(brand.attribution),
     });
   }, [brand, correlationId]);
-  return <ApplicationBrandContext value={brand}>{children}</ApplicationBrandContext>;
+  return (
+    <ApplicationBrandContext value={brand}>{children}</ApplicationBrandContext>
+  );
 }
 
 export function useApplicationBrand() {
@@ -55,11 +62,15 @@ export function formatApplicationBrandMessage(
   if (id === "application.name") return name;
   // 产品配置以前只覆盖少数标题，输入框和设置说明因而泄漏原生产品名。
   // 原生 Provider / Agent / MCP / CDN 身份与权益活动仍按其真实来源显示。
-  const sourceOwned = id.startsWith("rewards.") ||
+  const sourceOwned =
+    id.startsWith("rewards.") ||
     id.startsWith("globalNotice.highspeed.") ||
     id.startsWith("settings.modelProvider.startPlan.");
   if (sourceOwned) return message;
-  return message.replace(/ZCode(?!\s+(?:Agent|MCP|CDN)|\s*官方插件)/g, () => name);
+  return message.replace(
+    /ZCode(?!\s+(?:Agent|MCP|CDN)|\s*官方插件)/g,
+    () => name,
+  );
 }
 
 export function ApplicationBrandImage({
@@ -69,9 +80,17 @@ export function ApplicationBrandImage({
   ...imageProps
 }: ImgHTMLAttributes<HTMLImageElement>) {
   const brand = useApplicationBrand();
-  if (!brand) return <img {...imageProps} alt={alt} className={className} style={style} />;
+  if (!brand)
+    return (
+      <img {...imageProps} alt={alt} className={className} style={style} />
+    );
   return (
-    <span className={className} style={style} role="img" aria-label={brand.name}>
+    <span
+      className={className}
+      style={style}
+      role="img"
+      aria-label={brand.name}
+    >
       <brand.Mark className="size-full" />
     </span>
   );

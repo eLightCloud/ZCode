@@ -35,6 +35,12 @@
 
 ## 参数与行为说明
 
+公开 `addPluginMarketplace` / `addZCodePluginMarketplace` 接口支持可选 `expectedId`。
+来源 manifest 的 name 必须匹配该值，校验由现有原生 Marketplace owner 在持久化前完成；
+不匹配时不更新已有来源、缓存或安装。未传入时保留原有行为。
+`dryRun` 仅解析来源字符串，返回占位身份 `dry-run`，不提供 manifest 身份预览。
+真实名称和插件清单以成功注册及 describe 的结果为准。
+
 | 项 | zcode 行为 | 原因 |
 |---|---|---|
 | scope 取值 | `user` / `project`（project 映射内部 `workspace`）；`local` 直接报错 | zcode 没有 local settings 层 |

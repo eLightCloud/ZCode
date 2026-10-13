@@ -189,6 +189,7 @@ export interface DescribeMarketplacePluginResult {
 }
 
 export interface PluginManifestDisplayMetadata {
+  entrySkill?: string;
   author?: string;
   authorUrl?: string;
   homepage?: string;
@@ -1077,6 +1078,10 @@ function toManifestDisplayMetadata(
       ? manifest.homepage
       : undefined;
   const metadata: PluginManifestDisplayMetadata = {
+    // 核验必须来自 manifest，不能用组件中同名 Skill 推断业务入口。
+    ...(typeof manifest.entrySkill === "string" && manifest.entrySkill.trim()
+      ? { entrySkill: manifest.entrySkill.trim() }
+      : {}),
     ...(author?.name ? { author: author.name } : {}),
     ...(author?.url ? { authorUrl: author.url } : {}),
     ...(homepage ? { homepage } : {}),

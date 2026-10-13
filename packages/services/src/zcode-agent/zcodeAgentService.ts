@@ -4787,6 +4787,7 @@ export function createZCodeAgentService(
         {
           workspace: buildWorkspaceRef(params),
           source: params.source,
+          ...(params.expectedId ? { expectedId: params.expectedId } : {}),
           ...(params.dryRun !== undefined ? { dryRun: params.dryRun } : {}),
           ...(params.operationId ? { operationId: params.operationId } : {}),
         },

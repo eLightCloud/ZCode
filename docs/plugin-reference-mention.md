@@ -1,5 +1,12 @@
 # Plugin 对话引用（@ Plugin capability hint）
 
+## 必需入口的公开核验投影
+
+`plugins/list` 的可选 `entrySkill` 与 `plugins/describe` 的可选 `metadata.entrySkill`
+只投影当前包 manifest 的同一入口声明；不从组件名称或商店 listing 推断。
+未声明时省略，停用包仍可核对声明。该投影不授予资源权限，也不取代运行前的实时加载。
+消费者在安装前核对候选入口，安装后或已安装路径重新核对当前入口及版本；普通未声明入口的插件保持原有行为。
+
 > 状态：Agent/runtime 链路、Composer 主入口与 Plugin 商店详情页「Try now / 示例提示词」入口均已实现（2026-08-05 更新）。Plugin catalog、Skill/MCP/Subagent live 交集、独立 system reminder、model-only 持久化、冷恢复、缓存前缀一致性，以及 `@` / `/` 主入口和旧候选面板兼容均已落地；输入框分组与兼容入口见 [ui/mention-panel-layout.md](./ui/mention-panel-layout.md)。
 > 关联文档：[conversation-session-case-catalog.md](./conversation-session-case-catalog.md)（S/PLG 组）、[testing/conversation-session-e2e-coverage-matrix.md](./testing/conversation-session-e2e-coverage-matrix.md)、[plugin-reference-impact-brief.md](./plugin-reference-impact-brief.md)、[ui/mention-panel-layout.md](./ui/mention-panel-layout.md)、feature graph `capability.plugin-reference`。
 > 硬约束：前缀缓存命中率优先，任何场景不得退化，见 §6.5。

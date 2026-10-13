@@ -49,6 +49,7 @@ import { TabStoreProvider, useTabStore, useTabStoreApi } from "@/store/TabStoreP
 import { isSettingsTab, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { logger } from "@/logger.js";
 import { RootShell } from "@/root/RootShell.js";
+import { ApplicationPages } from "@/root/ApplicationPages.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
 import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
@@ -261,7 +262,9 @@ export function Root(props: RootProps) {
                         <RewardsProvider desktop={props.isDesktop === true}>
                           <RequestSecurityHost />
                           <MarketingTouchProvider desktop={props.isDesktop === true}>
-                            <RootInner {...props} />
+                            <ApplicationPages pages={props.applicationPages ?? []}>
+                              <RootInner {...props} />
+                            </ApplicationPages>
                           </MarketingTouchProvider>
                         </RewardsProvider>
                       </CodingPlanUpgradeDialogProvider>

@@ -1,6 +1,9 @@
 import { requestSecurityMessagesZhCN } from "@/request-security-edition/messages.js";
 /** 中文翻译 */
 const zhCN: Record<string, string> = {
+  "applicationPages.navigation": "应用页面",
+  "applicationPages.refresh": "刷新页面",
+  "applicationPages.close": "返回工作台",
   "application.name": "ZCode",
   "application.account.cloudUnavailableTitle": "此功能暂不可用",
   "application.account.cloudUnavailableDescription":

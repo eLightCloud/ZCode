@@ -36,11 +36,15 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
   reconnectWorkspace?(workspaceKey: string): Promise<void>;
   startDraft?(
     workspaceKey: string,
-    options?: { mobileNavigationIntent?: WebRemoteControlMobileNavigationIntent },
+    options?: {
+      mobileNavigationIntent?: WebRemoteControlMobileNavigationIntent;
+    },
   ): Promise<void>;
 }
 
 export interface RootProps {
+  /** Trusted build-owned business pages; native UI owns their navigation lifecycle. */
+  applicationPages?: readonly import("./ApplicationPages.js").ApplicationPage[];
   /** Optional application-owned account display; credentials stay with the provider. */
   applicationAccount?: { profile: UserInfo; onLogout: () => void };
   services: IServiceAccessor;

@@ -124,6 +124,7 @@ describe("marketplace store listing", () => {
       JSON.stringify({
         name: "hello",
         version: "1.2.3",
+        entrySkill: "daily",
         description: "hello plugin",
         author: { name: "Acme", url: "https://acme.dev" },
         homepage: "https://acme.dev/hello",
@@ -153,6 +154,7 @@ describe("marketplace store listing", () => {
       storageRoot,
     });
     expect(result.metadata).toEqual({
+      entrySkill: "daily",
       author: "Acme",
       authorUrl: "https://acme.dev",
       homepage: "https://acme.dev/hello",

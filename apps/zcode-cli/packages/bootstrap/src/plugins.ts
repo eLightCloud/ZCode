@@ -150,6 +150,7 @@ export interface ZCodeMarketplaceUpdateData {
 export interface AddZCodeMarketplaceOptions extends ResolveZCodePluginsOptions {
   abortSignal?: AbortSignal;
   dryRun?: boolean;
+  expectedId?: string;
   source: string;
   /** `marketplace add --sparse`：仅 git/github 源支持 sparse checkout 子目录。 */
   sparsePaths?: string[];
@@ -500,6 +501,8 @@ export async function addZCodePluginMarketplace(
     };
   }
   const record = await addMarketplace({
+    // dryRun 不读取清单；准确身份必须由既有 adapter 在写入前核对。
+    expectedId: options.expectedId,
     signal: options.abortSignal,
     source,
     storageRoot: pluginStorageRoot,

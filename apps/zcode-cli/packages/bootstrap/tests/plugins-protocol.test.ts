@@ -57,6 +57,28 @@ afterAll(async () => {
 // 协议契约层面的回归: 确保 plugins/list 与 plugins/setEnabled 已注册且 schema 可用。
 // 端到端发现逻辑由 bootstrap/tests/plugins.test.ts (resolveZCodePlugins) 覆盖。
 describe("plugins protocol contracts", () => {
+  it("projects the current declared entry even while the plugin is disabled", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zcode-entry-projection-"));
+    const pluginRoot = join(root, "plugin");
+    const manifestPath = join(pluginRoot, ".zcode-plugin", "plugin.json");
+    const configPath = join(root, ".zcode", "config.json");
+    try {
+      await writeTestFile(manifestPath, JSON.stringify({ name: "entry-proof", entrySkill: "daily" }));
+      await writeTestFile(configPath, JSON.stringify({ plugins: {
+        dirs: [pluginRoot], enabledPlugins: { "entry-proof@inline": false },
+      } }));
+      const params = { workspace: { workspacePath: root, workspaceKey: root } };
+      const current = await listPlugins({} as ZCodeProtocolAgentServerContext, params);
+      expect(zcodePluginsListResultSchema.parse(current).plugins.find(p => p.id === "entry-proof@inline"))
+        .toMatchObject({ entrySkill: "daily", enabled: false });
+      await writeTestFile(manifestPath, JSON.stringify({ name: "entry-proof", entrySkill: "other" }));
+      const changed = await listPlugins({} as ZCodeProtocolAgentServerContext, params);
+      expect(changed.plugins.find(p => p.id === "entry-proof@inline")?.entrySkill).toBe("other");
+      await writeTestFile(manifestPath, JSON.stringify({ name: "entry-proof" }));
+      const ordinary = await listPlugins({} as ZCodeProtocolAgentServerContext, params);
+      expect(ordinary.plugins.find(p => p.id === "entry-proof@inline")).not.toHaveProperty("entrySkill");
+    } finally { await rm(root, { force: true, recursive: true }); }
+  });
   it("serializes marketplace mutations behind the workspace plugin storage lock", async () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-protocol-marketplace-lock-"));
     const previousStorageDir = process.env.ZCODE_STORAGE_DIR;

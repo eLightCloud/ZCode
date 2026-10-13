@@ -14,7 +14,9 @@ export function applicationRootPlugin(env) {
   return {
     name: "zcode-application-root",
     resolveId(id) {
-      return id === "virtual:zcode-application-root" ? "\0zcode-application-root" : null;
+      return id === "virtual:zcode-application-root"
+        ? "\0zcode-application-root"
+        : null;
     },
     load(id) {
       if (id !== "\0zcode-application-root") return null;
@@ -35,9 +37,9 @@ export function applicationRootPlugin(env) {
         (entry
           ? `export { default as ApplicationRoot } from ${JSON.stringify(entry)};`
           : `export { Root as ApplicationRoot } from ${JSON.stringify(
-              createRequire(new URL("../packages/web/package.json", import.meta.url)).resolve(
-                "@zcode/ui",
-              ),
+              createRequire(
+                new URL("../packages/web/package.json", import.meta.url),
+              ).resolve("@zcode/ui"),
             )};`)
       );
     },
@@ -52,10 +54,30 @@ export function applicationAccountProxy(env) {
   const target = env.ZCODE_APPLICATION_ACCOUNT_API;
   if (!target) return {};
   const url = new URL(target);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  ) {
     throw new Error("application-root.invalid-account-api");
   }
-  return { "/api/auth": { target, changeOrigin: false } };
+  const prefixes = [
+    "/api/auth",
+    ...(env.ZCODE_APPLICATION_API_PREFIXES ?? "").split(",").filter(Boolean),
+  ];
+  const reserved = [
+    "/api/server-info",
+    "/api/rpc-host-capability",
+    "/api/native",
+  ];
+  for (const prefix of prefixes) {
+    if (!/^\/api\/[a-z][a-z0-9-]*$/.test(prefix) || reserved.includes(prefix)) {
+      throw new Error("application-root.invalid-api-prefix");
+    }
+  }
+  return Object.fromEntries(
+    prefixes.map((prefix) => [prefix, { target, changeOrigin: false }]),
+  );
 }
 
 export function applicationNativeProxy(env) {

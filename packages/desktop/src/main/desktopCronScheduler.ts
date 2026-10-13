@@ -7,10 +7,7 @@ import { HostMessageTypes } from "@zcode/shared";
 import { buildHostProcessEnv, schedulerModulePath } from "./desktopRuntimeEnv.js";
 import { ingestSchedulerSelfResourceSample } from "./processResourceSelfHeapSource.js";
 import { registerSchedulerProcess, unregisterSchedulerProcess } from "./resourceManagerWindow.js";
-import type {
-  MainToSchedulerMessage,
-  SchedulerToMainMessage,
-} from "../scheduler/schedulerProtocol.js";
+import type { MainToSchedulerMessage, SchedulerToMainMessage } from "@zcode/services/node";
 
 export interface CronRunResultPayload {
   runId: string;
@@ -87,7 +84,7 @@ export function spawnCronScheduler(deps: CronSchedulerDeps): CronSchedulerHandle
 
     if (msg.type === "scheduler-log") {
       const level = msg.level === "warn" ? "warn" : msg.level === "error" ? "error" : "info";
-      deps.logger[level](`[cron-scheduler] ${msg.message}`);
+      deps.logger[level](`[cron-scheduler] ${msg.message}`, msg.diagnostic);
       return;
     }
 

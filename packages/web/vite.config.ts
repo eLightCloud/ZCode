@@ -1,5 +1,9 @@
 import { applicationBrandPlugin } from "../../scripts/application-brand-plugin.mjs";
-import { applicationRootPlugin, applicationAccountProxy, applicationNativeProxy } from "../../scripts/application-root-plugin.mjs";
+import {
+  applicationRootPlugin,
+  applicationAccountProxy,
+  applicationNativeProxy,
+} from "../../scripts/application-root-plugin.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,9 +43,21 @@ export default defineConfig(({ mode }) => {
   const zaiOAuthOrigin = resolveZaiOAuthOrigin(endpointEnv);
   // ZAI OAuth client_id 是公开标识，允许注入浏览器包；secret/token 不得走 VITE_。
   const zaiOAuthClientId = resolveZaiOAuthClientId(endpointEnv);
+  // 原生开发 server 已消费 PORT，代理必须使用相同配置，避免改端口后连接旧实例。
+  const nativePort = Number(env.PORT ?? "3030");
+  if (!Number.isInteger(nativePort) || nativePort < 1024 || nativePort > 65535) {
+    throw new Error("web.development.invalid-server-port");
+  }
 
   return {
-    plugins: [applicationRootPlugin(env), applicationBrandPlugin(env), pdfJsCMapsPlugin(), react(), tailwindcss(), thirdPartyNoticesVitePlugin()],
+    plugins: [
+      applicationRootPlugin(env),
+      applicationBrandPlugin(env),
+      pdfJsCMapsPlugin(),
+      react(),
+      tailwindcss(),
+      thirdPartyNoticesVitePlugin(),
+    ],
     resolve: {
       dedupe: ["@zcode/ui", "@zcode/shared", "react", "react-dom"],
       alias: {
@@ -67,10 +83,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
-        // 将 /ws 和 /api 请求代理到 server（默认 3030 端口）
-        "/ws": { target: "ws://localhost:3030", ws: true },
+        // 显式使用 IPv4 loopback，与隔离开发 server 的监听地址一致。
+        "/ws": { target: `ws://127.0.0.1:${nativePort}`, ws: true },
         ...applicationNativeProxy(env),
-        "/api": { target: "http://localhost:3030" },
+        "/api": { target: `http://127.0.0.1:${nativePort}` },
       },
     },
     optimizeDeps: {

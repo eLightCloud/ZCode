@@ -32,6 +32,11 @@ const testState = vi.hoisted(() => ({
 }));
 
 const renderMock = vi.fn();
+const admissionMock = vi.fn();
+vi.mock("virtual:zcode-application-root", async (original) => ({
+  ...(await original<typeof import("virtual:zcode-application-root")>()),
+  prepareApplication: (options: unknown) => admissionMock(options),
+}));
 // 应用装配壳可增加包装层；回归检查业务 props，不绑定 React 树的固定深度。
 function renderedProp(element: any, name: string): any {
   if (!element?.props) return undefined;
@@ -316,7 +321,32 @@ describe("external relay frame gap recovery", () => {
     renderMock.mockClear();
     navigateMock.mockClear();
     noticeMock.mockClear();
+    admissionMock.mockReset();
   });
+
+  it.each(["/web-remote", "/remote/v4", "/share/example", "/share/callback", "/"])(
+    "application can decline cloud route %s before credentials or transport",
+    async (pathname) => {
+      vi.stubEnv("BASE_URL", "/remote/v4/");
+      setupExternalRelayGlobals(pathname);
+      if (pathname === "/") window.location.search = "?remoteControlToken=controlled";
+      admissionMock.mockImplementation(({ render }: { render: (content: string) => void }) => {
+        render("application route unavailable");
+        return false;
+      });
+      await import("../src/main.js");
+      await vi.waitFor(() => expect(admissionMock).toHaveBeenCalledOnce());
+      expect(admissionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ route: "native-cloud" }),
+      );
+      expect(renderMock.mock.calls[0]![0].props.children).toBe("application route unavailable");
+      expect(testState.relayProtocolOptions).toHaveLength(0);
+      expect(testState.transportOptions).toHaveLength(0);
+      expect(navigateMock).not.toHaveBeenCalled();
+      const client = await import("@zcode/client");
+      expect(client.connectViaWebSocket).not.toHaveBeenCalled();
+    },
+  );
 
   it("corrects v4 before opening a business bridge", async () => {
     vi.stubEnv("BASE_URL", "/remote/v4/");
@@ -354,9 +384,7 @@ describe("external relay frame gap recovery", () => {
       await import("../src/main.js");
       await vi.waitFor(() =>
         expect(
-          renderMock.mock.calls.some(([element]) =>
-            Boolean(renderedProp(element, "services")),
-          ),
+          renderMock.mock.calls.some(([element]) => Boolean(renderedProp(element, "services"))),
         ).toBe(true),
       );
       const renderCount = renderMock.mock.calls.length;

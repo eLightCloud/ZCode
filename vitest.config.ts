@@ -11,6 +11,8 @@ const processLifecycleTests = [
 ];
 const forkIsolatedTests = [
   ...processLifecycleTests,
+  // 全量并发时真实目录监听连续两次超时，独立运行均通过；沿现有串行组隔离磁盘压力，保留全部用例与原时限。
+  "packages/services/src/gen-ui/adapters/stateStorage.test.ts",
   // electron-builder 下载 NSIS 时把进程 stdio 传给子进程，不能使用 threads 的虚拟 stdio。
   "packages/desktop/test/windowsInstallerCompile.test.ts",
   "packages/desktop/test/cdnPreloadScript.test.ts",

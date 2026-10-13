@@ -56,7 +56,8 @@ describe("conversation share route", () => {
     // 而 document.title 此前从未设置，标签只显示 index.html 的通用标题。
     const source = readFileSync("packages/web/src/main.tsx", "utf8");
     expect(source).toContain("document.documentElement.lang = routeLocale");
-    expect(source).toMatch(/setApplicationDocumentTitle\(routeLocale === "zh-CN"/u);
+    // 格式化可把参数换行；仍校验同一个语言条件，不能因空白变化误报标题丢失。
+    expect(source).toMatch(/setApplicationDocumentTitle\(\s*routeLocale === "zh-CN"/u);
   });
 
   it("dev server base 不能写死 /cn/share/，否则英文路由本地不可达", () => {

@@ -2,6 +2,9 @@ import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages
 /** English translations */
 const enUS: Record<string, string> = {
   "application.name": "ZCode",
+  "application.account.cloudUnavailableTitle": "This feature is unavailable",
+  "application.account.cloudUnavailableDescription":
+    "This application uses its own account. The native cloud account required by this feature is not connected. You can still configure API models in model settings.",
   "startPlan.recommendation.subagentDescription":
     "Your Start Plan has quota available for {model}. Switch this subagent’s model to the Start Plan?",
   "startPlan.recommendation.preferenceSaveFailed":
@@ -1077,7 +1080,8 @@ const enUS: Record<string, string> = {
   "browser.permission.deviceBluetooth": "Bluetooth devices",
   "browser.permission.unknownCapability": "an unknown capability",
   "browser.permission.screenShareTitle": "{origin} wants to share your screen",
-  "browser.permission.screenShareDescription": "Choose the screen or window to share. This choice applies only to this session.",
+  "browser.permission.screenShareDescription":
+    "Choose the screen or window to share. This choice applies only to this session.",
   "browser.permission.deviceTitle": "{origin} wants to connect a device",
   "browser.permission.connect": "Connect",
   "browser.permission.screenGroup.screen": "Entire Screen",
@@ -6213,7 +6217,8 @@ const enUS: Record<string, string> = {
   "chat.mention.plugins.empty": "No plugins available to reference",
   "chat.mention.plugins.conflict": "Name conflicts with another enabled plugin",
   "chat.mention.plugins.ordinaryWork": "Return to ordinary work",
-  "chat.mention.plugins.ordinaryWorkDescription": "Clear the required entry skill while retaining existing permissions.",
+  "chat.mention.plugins.ordinaryWorkDescription":
+    "Clear the required entry skill while retaining existing permissions.",
   "chat.mention.sessions.title": "Sessions",
   "chat.mention.sessions.empty": "No recent sessions match",
   "chat.mention.sessions.searchHint": "Type to search recent sessions",

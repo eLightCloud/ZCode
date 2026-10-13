@@ -1,5 +1,9 @@
 import { setApplicationDocumentTitle } from "./applicationBrandTitle.js";
-import { ApplicationRoot, ApplicationShell, prepareApplication } from "virtual:zcode-application-root";
+import {
+  ApplicationRoot,
+  ApplicationShell,
+  prepareApplication,
+} from "virtual:zcode-application-root";
 import { sessionCreateTelemetrySchema, type RendererTelemetryEventPayload } from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
 import { createRoot } from "react-dom/client";
@@ -335,7 +339,9 @@ async function renderConversationSharePage(): Promise<void> {
   document.documentElement.lang = routeLocale;
   // 分享页必须设置 title：否则浏览器标签只显示 index.html 的通用标题。
   // 会话标题要等 preview 加载完，先给一个语言正确的兜底。
-  setApplicationDocumentTitle(routeLocale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share");
+  setApplicationDocumentTitle(
+    routeLocale === "zh-CN" ? "ZCode 会话分享" : "ZCode Conversation Share",
+  );
   const shareCode = resolveConversationShareCodeFromPath(window.location.pathname);
   if (!shareCode) {
     renderApplication(
@@ -2424,6 +2430,16 @@ async function bootstrapWebRemoteControlByToken(params: URLSearchParams): Promis
 
 async function bootstrapWebApp() {
   const params = new URLSearchParams(window.location.search);
+  // 应用准入必须先于所有原生云账号恢复和远程 transport；未配置装配仍沿原生分支。
+  const route =
+    isWebOAuthCallback(params) ||
+    isConversationSharePath(window.location.pathname) ||
+    isWebRemoteControlRoute() ||
+    params.has("remoteControlToken") ||
+    shouldUseWebRemoteAuth(params)
+      ? "native-cloud"
+      : "server";
+  if ((await prepareApplication({ render: renderApplication, route })) === false) return;
   if (isWebOAuthCallback(params)) {
     renderWebAuthCallbackPage();
     return;
@@ -2465,8 +2481,6 @@ async function bootstrapWebApp() {
     renderWebLoggedInWaitingPage(auth);
     return;
   }
-
-  await prepareApplication({ render: renderApplication });
 
   let bootstrap: WebBootstrapResult;
   try {

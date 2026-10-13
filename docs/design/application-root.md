@@ -1,5 +1,16 @@
 # Optional application admission
 
+The admission hook receives route `server` or `native-cloud` before any Web route
+restores credentials or opens a transport. It may return false after rendering an
+explicit unavailable view; undefined preserves native routing. The application
+assembly can decline native cloud login, remote relay and share routes without
+replacing native personal API model settings or changing unconfigured builds.
+
+An application-owned Root rejects native login requests with a localized explanation,
+marks the attempt failed and clears that exact request. Requests from provider
+settings or cloud features cannot remain silently pending or invoke native OAuth.
+No vendor credential or model entitlement is inferred from application admission.
+
 A trusted build assembly may configure an absolute ZCODE_APPLICATION_ROOT_MODULE.
 It supplies ApplicationRoot through the existing public UI Root contract and may
 export prepareApplication({ render }). The Web host owns its React root and awaits

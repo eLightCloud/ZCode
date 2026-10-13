@@ -25,17 +25,21 @@ export function applicationRootPlugin(env) {
         ? `import * as applicationExtension from ${JSON.stringify(entry)};
            export async function prepareApplication(options) {
              if (typeof applicationExtension.prepareApplication === "function") {
-               await applicationExtension.prepareApplication(options);
+               return await applicationExtension.prepareApplication(options);
              }
            }`
         : "export async function prepareApplication() {}";
-      return shellExport + preparationExport + (entry
-        ? `export { default as ApplicationRoot } from ${JSON.stringify(entry)};`
-        : `export { Root as ApplicationRoot } from ${JSON.stringify(
-            createRequire(new URL("../packages/web/package.json", import.meta.url)).resolve(
-              "@zcode/ui",
-            ),
-          )};`);
+      return (
+        shellExport +
+        preparationExport +
+        (entry
+          ? `export { default as ApplicationRoot } from ${JSON.stringify(entry)};`
+          : `export { Root as ApplicationRoot } from ${JSON.stringify(
+              createRequire(new URL("../packages/web/package.json", import.meta.url)).resolve(
+                "@zcode/ui",
+              ),
+            )};`)
+      );
     },
     configureServer(server) {
       if (entry) server.config.server.fs.allow.push(dirname(entry));
@@ -58,8 +62,14 @@ export function applicationNativeProxy(env) {
   const target = env.ZCODE_APPLICATION_NATIVE_API;
   if (!target) return {};
   const url = new URL(target);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
-      url.search || url.hash || url.pathname !== "/") {
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/"
+  ) {
     throw new Error("application-root.invalid-native-api");
   }
   return {

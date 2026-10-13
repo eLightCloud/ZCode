@@ -4,7 +4,7 @@ import {
   startManualClaimHeartbeat,
   settleCronRunTerminalOutcome,
   settleManualDispatchFailureBestEffort,
-} from "../src/host/cronRunLifecycle.js";
+} from "../src/session/automationRunLifecycle.js";
 
 function createRepo() {
   return {
@@ -84,6 +84,12 @@ describe("cron run lifecycle", () => {
     expect(logWarn).toHaveBeenCalledWith(
       expect.stringContaining("释放 manual automation claim 失败"),
       expect.any(Error),
+      expect.objectContaining({
+        event: "automation.claim.release",
+        runId: identity.runId,
+        automationId: identity.automationId,
+        reason: "native_write_failed",
+      }),
     );
   });
 

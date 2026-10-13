@@ -1,5 +1,8 @@
 import { applicationBrandPlugin } from "../../scripts/application-brand-plugin.mjs";
-import { applicationRootPlugin, applicationAccountProxy } from "../../scripts/application-root-plugin.mjs";
+import {
+  applicationRootPlugin,
+  applicationAccountProxy,
+} from "../../scripts/application-root-plugin.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
@@ -11,6 +14,7 @@ import { resolveZCodeEndpointOrigin } from "@zcode/shared/zcodeEndpoint";
 import { pdfJsCMapsPlugin } from "../ui/vite/pdfJsCMapsPlugin.js";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
+import { resolveDesktopDevPort } from "./scripts/dev-port.mjs";
 
 // 动态加载仓库根的构建工具，避免配置打包后其 import.meta.dirname 被重定位到 desktop。
 // 构建期可选能力（ARMS、事件上报、自动更新），见 docs/desktop/build-time-optional-capabilities.md
@@ -177,7 +181,8 @@ export default defineConfig(({ mode }) => {
   const codingPlanWebviewOrigin =
     env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? process.env.VITE_CODING_PLAN_WEBVIEW_ORIGIN ?? "";
   const plugins = [
-    applicationRootPlugin(env), applicationBrandPlugin(env),
+    applicationRootPlugin(env),
+    applicationBrandPlugin(env),
     ...(e2eCoverageEnabled ? [createE2EUIRendererCoveragePlugin(repoRoot)] : []),
     pdfJsCMapsPlugin(),
     react(),
@@ -202,7 +207,11 @@ export default defineConfig(({ mode }) => {
       },
       dedupe: ["@zcode/ui", "@zcode/shared", "react", "react-dom", "lucide-react"],
     },
-    server: { port: 5174, strictPort: true, proxy: applicationAccountProxy(env) },
+    server: {
+      port: resolveDesktopDevPort(process.env),
+      strictPort: true,
+      proxy: applicationAccountProxy(env),
+    },
     define: {
       __ZCODE_VERSION__: JSON.stringify(buildMetadata.appVersion),
       __ZCODE_COMMIT__: JSON.stringify(buildMetadata.buildCommitId),
@@ -215,7 +224,9 @@ export default defineConfig(({ mode }) => {
       // 兼容旧 renderer 读取名；新代码统一读 VITE_ZCODE_BASE_URL。
       "import.meta.env.VITE_ZCODE_ENDPOINT_ORIGIN": JSON.stringify(zcodeEndpointOrigin),
       "import.meta.env.VITE_CODING_PLAN_WEBVIEW_ORIGIN": JSON.stringify(codingPlanWebviewOrigin),
-      "import.meta.env.VITE_REWARDS_WEBVIEW_ORIGIN": JSON.stringify(env.VITE_REWARDS_WEBVIEW_ORIGIN ?? process.env.VITE_REWARDS_WEBVIEW_ORIGIN ?? ""),
+      "import.meta.env.VITE_REWARDS_WEBVIEW_ORIGIN": JSON.stringify(
+        env.VITE_REWARDS_WEBVIEW_ORIGIN ?? process.env.VITE_REWARDS_WEBVIEW_ORIGIN ?? "",
+      ),
       // Bugfix: E2E store bridge 只能由 WDIO 专用变量打开，避免把 ZCODE_ENV=test 产品环境误当成测试运行态。
       "import.meta.env.VITE_ZCODE_E2E_STORE_BRIDGE": JSON.stringify(
         e2eStoreBridgeEnabled ? "1" : "",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveAutomationSubmissionModelSelection } from "../src/host/automationModelSelection.js";
+import { resolveAutomationSubmissionModelSelection } from "../src/session/automationModelSelection.js";
 
 describe("resolveAutomationSubmissionModelSelection", () => {
   it("首次派发重读导入后的配置；读取失败不能落入 Workspace 默认，同 run 不重读", async () => {
@@ -117,6 +117,6 @@ describe("resolveAutomationSubmissionModelSelection", () => {
           getView: vi.fn().mockResolvedValue({ revision: 3, providers: [] }),
         },
       }),
-    ).rejects.toThrow("Automation 无法从目标 Host 解析首选模型");
+    ).rejects.toThrow("Automation 模型选择不可用");
   });
 });

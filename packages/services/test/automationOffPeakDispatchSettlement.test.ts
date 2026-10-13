@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OFF_PEAK_DISPATCH_RETRY_BASE_MS,
   settleOffPeakDispatchResult,
-} from "../src/scheduler/offPeakDispatchSettlement.js";
+} from "../src/session/automationOffPeakDispatchSettlement.js";
 
 const NOW = 1_700_000_000_000;
 

@@ -1,18 +1,20 @@
 /** Sole native scheduler algorithm. Adapters own transport and termination. */
+import { randomUUID } from "node:crypto";
 import { AutomationRepo } from "./automationRepo.js";
-import {
-  resolveWorkspaceKey,
-  type ZCodeAutomation,
-  type ZCodeAutomationTrigger,
-  type ZCodeAutomationRun,
-  type ZCodeOffPeakTask,
-} from "@zcode/shared";
+import { resolveWorkspaceKey, type ZCodeAutomation, type ZCodeAutomationRun } from "@zcode/shared";
 import type {
+  AutomationDiagnostic,
   MainToSchedulerMessage,
   SchedulerToMainMessage,
 } from "./automationSchedulerProtocol.js";
-import { settleManualClaimForDispatchResult } from "./automationManualClaimRelease.js";
-import { settleOffPeakDispatchResult } from "./automationOffPeakDispatchSettlement.js";
+import {
+  settleSchedulerDispatchResult,
+  type SchedulerDispatchContext,
+} from "./automationRunLifecycle.js";
+import {
+  dispatchClaimedOffPeakTask,
+  settleOffPeakDispatchResult,
+} from "./automationOffPeakDispatchSettlement.js";
 import {
   startSchedulerResourceTelemetry,
   type SchedulerResourceTelemetry,
@@ -44,15 +46,9 @@ export function startAutomationScheduler(
    */
   const MISFIRE_GRACE_MS = 5 * 60_000;
 
-  type InFlight = {
-    automationId: string;
-    workspaceKey: string;
-    trigger: ZCodeAutomationTrigger;
-  };
-
   const repo = new AutomationRepo(options.databasePath);
   /** runId → 在途派发上下文；等 main 回报后结算。scheduler 重启丢失时靠 claimDue 的僵尸回收兜底。 */
-  const inFlight = new Map<string, InFlight>();
+  const inFlight = new Map<string, SchedulerDispatchContext>();
 
   // ---- 闲时任务（off-peak）----
   const offPeakRepo = new OffPeakTaskRepo(options.databasePath);
@@ -73,8 +69,20 @@ export function startAutomationScheduler(
   /** 资源遥测：本进程唯一的自采定时器。 */
   let resourceTelemetry: SchedulerResourceTelemetry | null = null;
 
-  function log(level: "info" | "warn" | "error", message: string): void {
-    const msg: SchedulerToMainMessage = { type: "scheduler-log", level, message };
+  function log(
+    level: "info" | "warn" | "error",
+    message: string,
+    diagnostic: AutomationDiagnostic,
+  ): void {
+    const msg: SchedulerToMainMessage = {
+      type: "scheduler-log",
+      level,
+      message,
+      diagnostic: {
+        ...diagnostic,
+        correlationId: diagnostic.runId ?? diagnostic.correlationId ?? randomUUID(),
+      },
+    };
     options.postMessage(msg);
   }
 
@@ -106,13 +114,27 @@ export function startAutomationScheduler(
           if (options.offPeakEnabled !== false) {
             const offPeakClaimed = await offPeakRepo.claimDue(now);
             for (const task of offPeakClaimed) {
-              await handleOffPeakClaimed(task, now);
+              await dispatchClaimedOffPeakTask(
+                {
+                  repo: offPeakRepo,
+                  retryAt: offPeakRetryAt,
+                  inFlight: offPeakInFlight,
+                  postMessage: options.postMessage,
+                  log,
+                },
+                task,
+                now,
+              );
             }
             // keep-awake：只处理当前宿主实际承载的闲时任务。
             await reportOffPeakActiveCount();
           }
         } catch (error) {
-          log("error", `tick failed: ${error instanceof Error ? error.message : String(error)}`);
+          log("error", `tick failed: ${error instanceof Error ? error.message : String(error)}`, {
+            event: "automation.scheduler.tick",
+            outcome: "failed",
+            reason: "native_write_failed",
+          });
         }
         // manual run 的唤醒可能与当前 tick 重叠；因 ticking=true 直接丢弃会让
         // 用户仍需等待下一轮 20 秒轮询。记录 pending，并在本轮完成后立即补跑。
@@ -161,6 +183,13 @@ export function startAutomationScheduler(
       log(
         "info",
         `skip missed window automation=${automation.automationId} scheduledAt=${scheduledAt}${finalize ? " finalized=one-shot" : ""}`,
+        {
+          event: "automation.scheduler.misfire",
+          outcome: "skipped",
+          reason: "missed_window",
+          automationId: automation.automationId,
+          runId,
+        },
       );
       return;
     }
@@ -232,102 +261,9 @@ export function startAutomationScheduler(
       log(
         "warn",
         `off-peak active count report failed: ${error instanceof Error ? error.message : String(error)}`,
+        { event: "automation.offpeak.count", outcome: "failed", reason: "native_write_failed" },
       );
     }
-  }
-
-  // ---- 闲时任务派发 ----
-
-  /**
-   * 认领后派发闲时任务。退避中的任务立即释放认领等下轮（进程内退避表；每轮 claim+release
-   * 两次写，任务数小、WAL 下开销可忽略——若退避任务成规模再把退避下沉进 claimDue）。
-   */
-  async function handleOffPeakClaimed(task: ZCodeOffPeakTask, now: number): Promise<void> {
-    const retryAt = offPeakRetryAt.get(task.offPeakTaskId) ?? 0;
-    if (retryAt > now) {
-      await offPeakRepo.releaseClaim(task.offPeakTaskId, { now });
-      return;
-    }
-    offPeakInFlight.add(task.offPeakTaskId);
-    const request: SchedulerToMainMessage = {
-      type: "offpeak-dispatch-request",
-      offPeakTaskId: task.offPeakTaskId,
-      prompt: task.prompt,
-      permissionMode: task.permissionMode,
-      // claimDue 已校验模型选择；保留认领 owner 的唯一裁决，不另选默认模型。
-      modelSelection: task.modelSelection!,
-      ...(task.conversationId ? { conversationId: task.conversationId } : {}),
-      ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-      ...(task.serverTicketId ? { serverTicketId: task.serverTicketId } : {}),
-      workspacePath: task.workspacePath,
-      ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
-    };
-    options.postMessage(request);
-    log("info", `off-peak dispatch requested task=${task.offPeakTaskId}`);
-  }
-
-  async function settleDispatchResult(
-    msg: Extract<MainToSchedulerMessage, { type: "cron-dispatch-result" }>,
-  ): Promise<void> {
-    const context = inFlight.get(msg.runId);
-    inFlight.delete(msg.runId);
-    const now = Date.now();
-    // 从 runId 还原 automationId（context 丢失时兜底，如 scheduler 重启后收到迟到回报）。
-    const automationId = context?.automationId ?? msg.runId.split(":")[0]!;
-    const workspaceKey = context?.workspaceKey;
-    const trigger: ZCodeAutomationTrigger =
-      context?.trigger ?? (msg.runId.includes(":manual:") ? "manual" : "schedule");
-    const settleManualClaim = async (ok: boolean): Promise<void> => {
-      await settleManualClaimForDispatchResult({
-        repo,
-        automationId,
-        runId: msg.runId,
-        workspaceKey,
-        ok,
-        logError: (message) => log("error", message),
-      });
-    };
-
-    if (msg.ok) {
-      if (trigger === "manual") {
-        await repo.markManualRunDispatched({
-          runId: msg.runId,
-          sessionId: msg.sessionId ?? null,
-          dispatchedAt: now,
-        });
-        await settleManualClaim(true);
-        return;
-      }
-      await repo.markRunDispatch({
-        runId: msg.runId,
-        dispatchStatus: "dispatched",
-        sessionId: msg.sessionId ?? null,
-      });
-      const automation = await repo.get(automationId);
-      const nextRunAt = automation ? computeAutomationNextRunAt(automation, now) : null;
-      await repo.markDispatched(automationId, { dispatchedAt: now, nextRunAt });
-      return;
-    }
-
-    await repo.markRunDispatch({
-      runId: msg.runId,
-      dispatchStatus: "failed_to_dispatch",
-      error: msg.error ?? "dispatch failed",
-    });
-    if (trigger === "manual") {
-      await settleManualClaim(false);
-      return;
-    }
-    const kind = msg.failureKind ?? "transient";
-    await repo.markDispatchFailed(automationId, {
-      failedAt: now,
-      error: msg.error ?? "dispatch failed",
-      kind,
-      // transient 达上限后循环任务跳下一个正常 next_run_at。
-      nextRunAt: await repo
-        .get(automationId)
-        .then((automation) => (automation ? computeAutomationNextRunAt(automation, now) : null)),
-    });
   }
 
   function dispose(): Promise<void> {
@@ -394,7 +330,7 @@ export function startAutomationScheduler(
     }
     if (msg.type === "cron-dispatch-result") {
       settle(
-        settleDispatchResult(msg)
+        settleSchedulerDispatchResult({ repo, inFlight, log }, msg)
           .then(() => {
             // manual run 可能因同一 automation 已有派发在途而暂时无法认领。
             // 前一轮结算释放 single-flight 锁后主动 tick，避免再次等待 20 秒轮询。
@@ -404,6 +340,12 @@ export function startAutomationScheduler(
             log(
               "error",
               `settle dispatch result failed runId=${msg.runId}: ${error instanceof Error ? error.message : String(error)}`,
+              {
+                event: "automation.dispatch.write",
+                outcome: "failed",
+                reason: "native_write_failed",
+                runId: msg.runId,
+              },
             );
           }),
       );
@@ -418,20 +360,36 @@ export function startAutomationScheduler(
             retryAt: offPeakRetryAt,
             retryAttempts: offPeakRetryAttempts,
             now: Date.now,
-            log,
+            log: (level, message) =>
+              log(level, message, {
+                event: "automation.offpeak.settlement",
+                outcome: msg.ok ? "skipped" : "failed",
+                reason: msg.ok ? "task_changed" : "native_dispatch_failed",
+                offPeakTaskId: msg.offPeakTaskId,
+              }),
           },
           msg,
         ).catch((error) => {
           log(
             "error",
             `settle off-peak dispatch result failed task=${msg.offPeakTaskId}: ${error instanceof Error ? error.message : String(error)}`,
+            {
+              event: "automation.offpeak.settlement",
+              outcome: "failed",
+              reason: "native_write_failed",
+              offPeakTaskId: msg.offPeakTaskId,
+            },
           );
         }),
       );
       return;
     }
     if (msg.type === "scheduler-wake") {
-      log("info", `manual run wake requested automation=${msg.automationId}`);
+      log("info", `manual run wake requested automation=${msg.automationId}`, {
+        event: "automation.scheduler.wake",
+        outcome: "started",
+        automationId: msg.automationId,
+      });
       requestTick();
     }
   }
@@ -441,19 +399,31 @@ export function startAutomationScheduler(
     // 闲时任务中断恢复：scheduler 是 app 单例、先于任何派发启动——此刻 DB 里的
     // running 必属上一个 app 实例残留，安全置回 queued（session 保留供 resume 续跑）。
     try {
-      const recovered = options.offPeakEnabled === false ? 0 : await offPeakRepo.recoverInterrupted(Date.now());
+      const recovered =
+        options.offPeakEnabled === false ? 0 : await offPeakRepo.recoverInterrupted(Date.now());
       if (recovered > 0) {
-        log("info", `off-peak recovered ${recovered} interrupted task(s) back to queued`);
+        log("info", `off-peak recovered ${recovered} interrupted task(s) back to queued`, {
+          event: "automation.scheduler.recovery",
+          outcome: "succeeded",
+        });
       }
     } catch (error) {
       log(
         "error",
         `off-peak recoverInterrupted failed: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          event: "automation.scheduler.recovery",
+          outcome: "failed",
+          reason: "native_write_failed",
+        },
       );
     }
     if (disposed) return;
     schedulerReady = true;
-    log("info", "cron scheduler started");
+    log("info", "cron scheduler started", {
+      event: "automation.scheduler.started",
+      outcome: "succeeded",
+    });
     requestTick();
     pollTimer = setInterval(requestTick, POLL_INTERVAL_MS);
     // 资源遥测：60 秒自采一次 CPU / 内存发给 main（heap 只有本进程读得到）。

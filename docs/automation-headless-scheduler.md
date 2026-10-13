@@ -1,11 +1,27 @@
 # Native scheduler transport separation
 
+## Failure and diagnostic contract
+
+Desktop and Server use the same native dispatch failure classifier. Unknown errors
+are transient and retain native bounded retries. Only explicit native configuration
+errors (unresolvable model selection or a target owned by another Host) are permanent.
+Classification never guesses from an exception message. Scheduled permanent failure
+disables the rule; failed manual admission releases its claim without changing cron.
+
+Outcome, claim, unread and delivery failures carry stable event/reason fields and
+runId/automationId at their owning operation. Scheduler messages carry optional
+structured diagnostics; Desktop retains its human-readable logs, and Server logs
+only those low-sensitivity fields, never raw errors, prompts or workspace paths.
+Public node exports expose scheduler, dispatcher, protocol and the manual failure
+operation actually used by hosts; internal settlement helpers are tested by session.
+
 The existing native scheduler algorithm owns polling, durable claims, misfire,
 manual wake, dispatch settlement, retry and interrupted off-peak recovery. Extract
 that algorithm into the native session module and export it through services/node.
 Desktop remains a thin Electron parentPort adapter; it must not retain a second
 copy of the algorithm. Protocol, settlement helpers and resource sampling follow
-the same owner. Existing Desktop import shims re-export the sole implementation.
+the same owner. Desktop consumes the public scheduler/dispatcher/protocol directly;
+session tests cover the internal helpers without Desktop import shims.
 
 The public startAutomationScheduler({ postMessage, databasePath? }) returns ready, acceptMessage,
 and dispose. postMessage transports the existing native control messages without

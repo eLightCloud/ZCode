@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { startSchedulerResourceTelemetry } from "../src/scheduler/schedulerResourceTelemetry.js";
-import type { SchedulerToMainMessage } from "../src/scheduler/schedulerProtocol.js";
+import { startSchedulerResourceTelemetry } from "../src/session/automationSchedulerResourceTelemetry.js";
+import type { SchedulerToMainMessage } from "../src/session/automationSchedulerProtocol.js";
 
 const usage = (): NodeJS.MemoryUsage => ({
   rss: 120 * 1024 * 1024,

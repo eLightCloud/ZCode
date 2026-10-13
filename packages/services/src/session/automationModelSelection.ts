@@ -1,5 +1,6 @@
 import type { ModelSelection } from "@zcode/shared";
 import type { IModelSelectionService } from "../model-provider/providerFacadeServices.js";
+import { AutomationDispatchConfigurationError } from "./automationDispatchFailure.js";
 
 /** 在 Automation Select 转为一次 Submission 的边界固定模型身份。 */
 export async function resolveAutomationSubmissionModelSelection(params: {
@@ -15,14 +16,14 @@ export async function resolveAutomationSubmissionModelSelection(params: {
   if (selection) {
     const view = await params.modelSelectionService.getView({ selection });
     if (view.selectionIssue || !view.effectiveSelection?.options?.reasoningLevel) {
-      throw new Error("Automation 模型选择不可用，请重新选择模型与思考档位");
+      throw new AutomationDispatchConfigurationError("model_selection_unavailable");
     }
     return view.effectiveSelection;
   }
 
   const preferredSelection = (await params.modelSelectionService.getView()).preferredSelection;
   if (!preferredSelection?.options?.reasoningLevel) {
-    throw new Error("Automation 无法从目标 Host 解析首选模型");
+    throw new AutomationDispatchConfigurationError("model_selection_unavailable");
   }
   return preferredSelection;
 }

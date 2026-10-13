@@ -59,6 +59,7 @@ import { useRootProviderStateRefresh } from "@/root/useRootProviderStateRefresh.
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
 import { useRootOAuthEffects } from "@/root/useRootOAuthEffects.js";
+import { useApplicationAccountLoginEntry } from "@/root/useApplicationAccountLoginEntry.js";
 import { consumeZcodeJwtInvalidRestartMarker } from "@/root/zcodeJwtInvalidRestartMarker.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
 import { useRootPlatformEffects } from "@/root/useRootPlatformEffects.js";
@@ -634,11 +635,13 @@ function RootInner({
         });
       },
     });
-  const isResolvingProviderStartupState = !applicationAccount && shouldResolveProviderStartupState({
-    isWebRemoteControlRoot,
-    providerStartupSyncPending,
-    providerAvailabilityStartupCheckCompleted,
-  });
+  const isResolvingProviderStartupState =
+    !applicationAccount &&
+    shouldResolveProviderStartupState({
+      isWebRemoteControlRoot,
+      providerStartupSyncPending,
+      providerAvailabilityStartupCheckCompleted,
+    });
   const isStartupProviderLoginEntryOpen = welcomeScreenOpenReason === "startup-provider-required";
   // 首次安装时 provider 登录入口判定晚于 workspace 注入，ChatView 会先 mount 并触发草稿预热。
   // 这里把 provider 启动检查纳入 workspace 恢复门禁，避免未连接账号前启动 ZCode session。
@@ -926,6 +929,7 @@ function RootInner({
     });
   }, [platform]);
 
+  useApplicationAccountLoginEntry(Boolean(applicationAccount));
   useRootOAuthEffects({
     enabled: !applicationAccount,
     accountIntentKey: JSON.stringify([

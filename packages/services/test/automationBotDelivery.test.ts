@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { watchCronRunBotDelivery } from "../src/host/cronBotDelivery.js";
+import { watchCronRunBotDelivery } from "../src/session/automationBotDelivery.js";
 
 describe("watchCronRunBotDelivery", () => {
   it("等待 Bot continuous watcher 完成订阅后才返回给 prompt 派发方", async () => {

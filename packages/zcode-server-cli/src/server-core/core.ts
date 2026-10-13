@@ -46,10 +46,14 @@ export async function runServerCore(generation: number): Promise<void> {
     zcodeBuiltinProviderConfigFilePath,
     serviceAuthorityMode: "standalone-server",
     topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
-    ...(automationEnabled ? { onAutomationManualRunRequested: async (params) => {
-      if (!automation) throw new Error("Native automation runtime is unavailable");
-      await automation.runManual(params);
-    } } : {}),
+    ...(automationEnabled
+      ? {
+          onAutomationManualRunRequested: async (params) => {
+            if (!automation) throw new Error("Native automation runtime is unavailable");
+            await automation.runManual(params);
+          },
+        }
+      : {}),
   });
   const taskActivityTracker = createTaskActivityTracker(services.getOptional(IZCodeAgentService));
   const configuredPort = process.env.ZCODE_SERVER_PORT?.trim();
@@ -60,16 +64,17 @@ export async function runServerCore(generation: number): Promise<void> {
   const bindHost = process.env.ZCODE_SERVER_HOST?.trim();
   const authToken = process.env.ZCODE_SERVER_AUTH_TOKEN?.trim();
   const authTokenHash = process.env.ZCODE_SERVER_AUTH_TOKEN_SHA256?.trim();
+  const serverId = await resolveCoreServerId();
   const http = await createCoreHttpServer(services, {
     ...(bindHost ? { host: bindHost } : {}),
     ...(bindPort === undefined ? {} : { port: bindPort }),
     ...(authToken ? { authToken } : {}),
     ...(authTokenHash ? { authTokenHash } : {}),
-    serverId: await resolveCoreServerId(),
+    serverId,
     topicResourcePeers,
   });
   if (automationEnabled) {
-    automation = startServerAutomationRuntime(services);
+    automation = startServerAutomationRuntime(services, { serverId });
     await automation.ready;
   }
   const send = (message: unknown): Promise<void> => {

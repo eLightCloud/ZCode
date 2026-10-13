@@ -1,5 +1,10 @@
 import type { OffPeakTaskRepo } from "./offPeakTaskRepo.js";
-import type { MainToSchedulerMessage } from "./automationSchedulerProtocol.js";
+import type { ZCodeOffPeakTask } from "@zcode/shared";
+import type {
+  AutomationDiagnostic,
+  SchedulerToMainMessage,
+  MainToSchedulerMessage,
+} from "./automationSchedulerProtocol.js";
 
 export const OFF_PEAK_DISPATCH_RETRY_BASE_MS = 30_000;
 export const OFF_PEAK_DISPATCH_RETRY_CAP_MS = 15 * 60_000;
@@ -82,4 +87,44 @@ export async function settleOffPeakDispatchResult(
     "warn",
     `off-peak dispatch failed task=${msg.offPeakTaskId} attempts=${attempts} retryIn=${backoff}ms: ${error}`,
   );
+}
+
+interface OffPeakClaimDispatchDeps {
+  repo: Pick<OffPeakTaskRepo, "releaseClaim">;
+  retryAt: Map<string, number>;
+  inFlight: Set<string>;
+  postMessage(message: SchedulerToMainMessage): void;
+  log(level: "info" | "warn" | "error", message: string, diagnostic: AutomationDiagnostic): void;
+}
+/** The off-peak owner dispatches and settles its claims; scheduler owns the shared tick. */
+export async function dispatchClaimedOffPeakTask(
+  deps: OffPeakClaimDispatchDeps,
+  task: ZCodeOffPeakTask,
+  now: number,
+): Promise<void> {
+  const retryAt = deps.retryAt.get(task.offPeakTaskId) ?? 0;
+  if (retryAt > now) {
+    await deps.repo.releaseClaim(task.offPeakTaskId, { now });
+    return;
+  }
+  deps.inFlight.add(task.offPeakTaskId);
+  const request: SchedulerToMainMessage = {
+    type: "offpeak-dispatch-request",
+    offPeakTaskId: task.offPeakTaskId,
+    prompt: task.prompt,
+    permissionMode: task.permissionMode,
+    // claimDue 已校验模型选择；保留认领 owner 的唯一裁决，不另选默认模型。
+    modelSelection: task.modelSelection!,
+    ...(task.conversationId ? { conversationId: task.conversationId } : {}),
+    ...(task.sessionId ? { sessionId: task.sessionId } : {}),
+    ...(task.serverTicketId ? { serverTicketId: task.serverTicketId } : {}),
+    workspacePath: task.workspacePath,
+    ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
+  };
+  deps.postMessage(request);
+  deps.log("info", `off-peak dispatch requested task=${task.offPeakTaskId}`, {
+    event: "automation.offpeak.dispatch",
+    outcome: "started",
+    offPeakTaskId: task.offPeakTaskId,
+  });
 }

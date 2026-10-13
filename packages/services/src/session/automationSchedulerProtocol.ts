@@ -3,6 +3,36 @@
 // 这层是 main 与「常驻 cron scheduler 进程」之间的私有通道；main 收到派发请求后再翻译成 CronRun 转发给 host。
 import type { ModelSelection, NodeSelfResourceSample } from "@zcode/shared";
 
+/** Structured native facts only: never include prompts, paths or raw exceptions. */
+export interface AutomationDiagnostic {
+  event:
+    | "automation.claim.renew"
+    | "automation.claim.release"
+    | "automation.outcome.write"
+    | "automation.dispatch.write"
+    | "automation.unread.write"
+    | "automation.delivery.subscribe"
+    | "automation.scheduler.tick"
+    | "automation.scheduler.misfire"
+    | "automation.scheduler.wake"
+    | "automation.scheduler.recovery"
+    | "automation.scheduler.started"
+    | "automation.offpeak.dispatch"
+    | "automation.offpeak.settlement"
+    | "automation.offpeak.count";
+  outcome: "failed" | "succeeded" | "skipped" | "started";
+  reason?:
+    | "native_write_failed"
+    | "native_dispatch_failed"
+    | "claim_context_missing"
+    | "missed_window"
+    | "task_changed";
+  runId?: string;
+  automationId?: string;
+  offPeakTaskId?: string;
+  correlationId?: string;
+}
+
 /** scheduler → main */
 export type SchedulerToMainMessage =
   | {
@@ -34,6 +64,7 @@ export type SchedulerToMainMessage =
       type: "scheduler-log";
       level: "info" | "warn" | "error";
       message: string;
+      diagnostic?: AutomationDiagnostic;
     }
   | {
       // 闲时任务 running 计数变化 → main 据此 + keepAwakeWhileRunning 设置

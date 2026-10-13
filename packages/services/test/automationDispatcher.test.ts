@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Emitter } from "@zcode/rpc";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ServiceCollection, IZCodeTaskService, IModelSelectionService,
-  type ZCodeTaskTerminalOutcome } from "../src/index.js";
+import {
+  ServiceCollection,
+  IZCodeTaskService,
+  IModelSelectionService,
+  type ZCodeTaskTerminalOutcome,
+} from "../src/index.js";
 import { AutomationRepo, createAutomationDispatcher } from "../src/node.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -16,14 +20,34 @@ async function fixture(manual = false) {
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
   cleanups.push(async () => repo.close());
-  const selection = { providerId: "controlled", modelId: "proof", options: { reasoningLevel: "medium" } };
-  const automation = await repo.create({ title: "controlled", cronExpr: "0 9 * * *",
-    prompt: "controlled private prompt", recurring: true, workspacePath: directory,
-    modelSelection: selection }, { nextRunAt: Date.now() + 3600_000 });
-  const run = manual ? (await repo.runNow(automation.automationId, { now: Date.now() }))!.run : undefined;
+  const selection = {
+    providerId: "controlled",
+    modelId: "proof",
+    options: { reasoningLevel: "medium" },
+  };
+  const automation = await repo.create(
+    {
+      title: "controlled",
+      cronExpr: "0 9 * * *",
+      prompt: "controlled private prompt",
+      recurring: true,
+      workspacePath: directory,
+      modelSelection: selection,
+    },
+    { nextRunAt: Date.now() + 3600_000 },
+  );
+  const run = manual
+    ? (await repo.runNow(automation.automationId, { now: Date.now() }))!.run
+    : undefined;
   const runId = run?.runId ?? `${automation.automationId}:${Date.now()}`;
-  if (!run) await repo.upsertRunClaimed({ runId, automationId: automation.automationId,
-    workspaceKey: directory, scheduledAt: Date.now(), trigger: "schedule" });
+  if (!run)
+    await repo.upsertRunClaimed({
+      runId,
+      automationId: automation.automationId,
+      workspaceKey: directory,
+      scheduledAt: Date.now(),
+      trigger: "schedule",
+    });
   const terminal = new Emitter<ZCodeTaskTerminalOutcome>();
   const service = {
     createTask: vi.fn(async () => ({ taskId: "native-session" })),
@@ -33,45 +57,118 @@ async function fixture(manual = false) {
     setTaskUnread: vi.fn(async () => ({})),
     onDynamicTaskTerminalOutcome: vi.fn(() => terminal.event),
   };
-  const modelView = vi.fn(async () => ({ effectiveSelection: selection, preferredSelection: selection }));
+  const modelView = vi.fn(async () => ({
+    effectiveSelection: selection,
+    preferredSelection: selection,
+  }));
   const services = new ServiceCollection()
     .register(IZCodeTaskService, service as unknown as IZCodeTaskService)
     .register(IModelSelectionService, { getView: modelView } as unknown as IModelSelectionService);
   const report = vi.fn();
   const warnings = vi.fn();
-  const dispatcher = createAutomationDispatcher({ repo, resolveServices: () => services,
-    clientMode: "web-remote-replayable", logWarn: warnings, onSessionCreated: report });
+  const dispatcher = createAutomationDispatcher({
+    repo,
+    resolveServices: () => services,
+    clientMode: "web-remote-replayable",
+    logWarn: warnings,
+    onSessionCreated: report,
+  });
   cleanups.push(() => dispatcher.dispose());
-  const request = { automationId: automation.automationId, runId,
-    prompt: automation.prompt, workspacePath: directory };
-  return { dispatcher, repo, service, report, modelView, terminal, request, automation, selection, warnings };
+  const request = {
+    automationId: automation.automationId,
+    runId,
+    prompt: automation.prompt,
+    workspacePath: directory,
+  };
+  return {
+    dispatcher,
+    repo,
+    service,
+    report,
+    modelView,
+    terminal,
+    request,
+    automation,
+    selection,
+    warnings,
+  };
 }
 
 describe("native shared automation dispatcher", () => {
+  it("keeps distinct low-sensitivity diagnostics for outcome and unread writes", async () => {
+    const f = await fixture();
+    await f.dispatcher.dispatch(f.request);
+    await vi.waitFor(async () =>
+      expect((await f.repo.getRun(f.request.runId))?.outcome).toBe("running"),
+    );
+    const privateError = new Error("synthetic-private-write-response");
+    vi.spyOn(f.repo, "markRunOutcome").mockRejectedValueOnce(privateError);
+    f.service.setTaskUnread.mockRejectedValueOnce(privateError);
+    f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome: "succeeded" });
+    await f.dispatcher.dispose();
+    const diagnostics = f.warnings.mock.calls.map((call) => call[2]);
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "automation.outcome.write",
+          runId: f.request.runId,
+          automationId: f.automation.automationId,
+          reason: "native_write_failed",
+        }),
+        expect.objectContaining({
+          event: "automation.unread.write",
+          runId: f.request.runId,
+          automationId: f.automation.automationId,
+          reason: "native_write_failed",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(diagnostics)).not.toContain(privateError.message);
+    expect(JSON.stringify(diagnostics)).not.toContain(f.request.workspacePath);
+  });
   it.each([false, true])("reports new sessions only after admission; manual=%s", async (manual) => {
     const f = await fixture(manual);
     let accept!: () => void;
-    f.service.sendPrompt.mockImplementation(() => new Promise<void>(resolve => { accept = resolve; }));
+    f.service.sendPrompt.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          accept = resolve;
+        }),
+    );
     const work = f.dispatcher.dispatch(f.request);
     await vi.waitFor(() => expect(f.service.sendPrompt).toHaveBeenCalledOnce());
     expect(f.report).not.toHaveBeenCalled();
     expect(f.service.onDynamicTaskTerminalOutcome).toHaveBeenCalledBefore(f.service.sendPrompt);
     accept();
     await work;
-    expect(f.report).toHaveBeenCalledExactlyOnceWith({ sessionId: "native-session",
-      messageId: f.request.runId, workspaceIdentity: undefined });
-    expect(f.service.sendPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      traceId: f.request.runId, clientMode: "web-remote-replayable", content: f.request.prompt,
-      automationId: f.automation.automationId }));
+    expect(f.report).toHaveBeenCalledExactlyOnceWith({
+      sessionId: "native-session",
+      messageId: f.request.runId,
+      workspaceIdentity: undefined,
+    });
+    expect(f.service.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        traceId: f.request.runId,
+        clientMode: "web-remote-replayable",
+        content: f.request.prompt,
+        automationId: f.automation.automationId,
+      }),
+    );
   });
 
   it("resumes bound tasks, applies the saved model and never reports a new session", async () => {
     const f = await fixture();
     await f.dispatcher.dispatch({ ...f.request, targetTaskId: "bound-session" });
     expect(f.service.createTask).not.toHaveBeenCalled();
-    expect(f.service.resumeTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: "bound-session" }));
-    expect(f.service.setAutomationSessionConfig).toHaveBeenCalledWith(expect.objectContaining({
-      modelSelection: f.selection, traceId: f.request.runId }));
+    expect(f.service.resumeTask).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "bound-session" }),
+    );
+    expect(f.service.setAutomationSessionConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelSelection: f.selection,
+        traceId: f.request.runId,
+      }),
+    );
     expect(f.report).not.toHaveBeenCalled();
   });
 
@@ -84,17 +181,22 @@ describe("native shared automation dispatcher", () => {
     expect((await f.repo.getRun(f.request.runId))?.outcome).toBe("failed");
   });
 
-  it.each(["succeeded", "failed", "stopped"] as const)("settles only the exact input terminal: %s", async (outcome) => {
-    const f = await fixture(true);
-    await f.dispatcher.dispatch(f.request);
-    f.terminal.fire({ taskId: "native-session", inputId: "unrelated", outcome: "succeeded" });
-    expect(await f.repo.runNow(f.automation.automationId, { now: Date.now() })).toBeNull();
-    f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome });
-    await vi.waitFor(async () => expect((await f.repo.getRun(f.request.runId))?.outcome).toBe(outcome));
-    await f.dispatcher.dispose();
-    expect(await f.repo.runNow(f.automation.automationId, { now: Date.now() })).not.toBeNull();
-    expect(f.service.setTaskUnread).toHaveBeenCalledOnce();
-  });
+  it.each(["succeeded", "failed", "stopped"] as const)(
+    "settles only the exact input terminal: %s",
+    async (outcome) => {
+      const f = await fixture(true);
+      await f.dispatcher.dispatch(f.request);
+      f.terminal.fire({ taskId: "native-session", inputId: "unrelated", outcome: "succeeded" });
+      expect(await f.repo.runNow(f.automation.automationId, { now: Date.now() })).toBeNull();
+      f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome });
+      await vi.waitFor(async () =>
+        expect((await f.repo.getRun(f.request.runId))?.outcome).toBe(outcome),
+      );
+      await f.dispatcher.dispose();
+      expect(await f.repo.runNow(f.automation.automationId, { now: Date.now() })).not.toBeNull();
+      expect(f.service.setTaskUnread).toHaveBeenCalledOnce();
+    },
+  );
 
   it("does not reinterpret a frozen run after model configuration changes", async () => {
     const f = await fixture();
@@ -102,12 +204,17 @@ describe("native shared automation dispatcher", () => {
     f.modelView.mockRejectedValue(new Error("current model registry unavailable"));
     await f.dispatcher.dispatch(f.request);
     expect(f.modelView).not.toHaveBeenCalled();
-    expect(f.service.createTask).toHaveBeenCalledWith(expect.objectContaining({ thoughtLevel: "medium" }));
+    expect(f.service.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ thoughtLevel: "medium" }),
+    );
   });
 
   it("rejects an unresolved model before session creation", async () => {
     const f = await fixture();
-    f.modelView.mockResolvedValue({ effectiveSelection: undefined, preferredSelection: undefined } as never);
+    f.modelView.mockResolvedValue({
+      effectiveSelection: undefined,
+      preferredSelection: undefined,
+    } as never);
     await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("模型选择不可用");
     expect(f.service.createTask).not.toHaveBeenCalled();
     expect(f.service.sendPrompt).not.toHaveBeenCalled();
@@ -116,13 +223,20 @@ describe("native shared automation dispatcher", () => {
   it("waits for admission and pending terminal writes during shared disposal", async () => {
     const f = await fixture(true);
     let accept!: () => void;
-    f.service.sendPrompt.mockImplementation(() => new Promise<void>(resolve => { accept = resolve; }));
+    f.service.sendPrompt.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          accept = resolve;
+        }),
+    );
     const work = f.dispatcher.dispatch(f.request);
     await vi.waitFor(() => expect(f.service.sendPrompt).toHaveBeenCalledOnce());
     const disposal = f.dispatcher.dispose();
     expect(f.dispatcher.dispose()).toBe(disposal);
     let done = false;
-    void disposal.then(() => { done = true; });
+    void disposal.then(() => {
+      done = true;
+    });
     await Promise.resolve();
     expect(done).toBe(false);
     f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome: "succeeded" });

@@ -39,7 +39,6 @@ import {
   IClientConfigService,
   IMediaPreviewService,
   IOffPeakTaskService,
-  IModelSelectionService,
   ISettingService,
   IOnboardingRecordService,
   IWindowControllerService,
@@ -59,6 +58,8 @@ import {
   disposeServiceResourcesAndWait,
   AutomationRepo,
   createAutomationDispatcher,
+  settleManualDispatchFailureBestEffort,
+  describeAutomationDispatchFailure,
   OffPeakTaskRepo,
   OffPeakTaskService,
   createServiceLogger,
@@ -135,9 +136,6 @@ import { flushHostE2ECoverage } from "./e2eCoverage.js";
 import { runHostShutdownPhases, type HostShutdownResult } from "./hostShutdownPhases.js";
 import { initializeHostApiNetworkTransportOwner } from "./hostInitialization.js";
 import { createHostUncaughtExceptionHandler } from "./hostUncaughtExceptionGuard.js";
-import {
-  settleManualDispatchFailureBestEffort,
-} from "./cronRunLifecycle.js";
 import {
   createRemotePromptAttachmentSessionService,
   createRemotePromptAttachmentTaskService,
@@ -737,12 +735,16 @@ const cronDispatcher = createAutomationDispatcher({
   repo: cronAutomationRepo,
   resolveServices: resolveAutomationTargetServices,
   clientMode: "desktop-continuous",
-  logWarn: (message, error) => logger.warn(message, error),
-  onSessionCreated: (event) => reportHostSessionCreate(parentPort, {
-    ...event, source: "automation_scheduled",
-  }),
+  logWarn: (message, error, diagnostic) => logger.warn(message, error, diagnostic),
+  onSessionCreated: (event) =>
+    reportHostSessionCreate(parentPort, {
+      ...event,
+      source: "automation_scheduled",
+    }),
 });
-async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{ taskId: string; sessionId: string }> {
+async function dispatchCronRun(
+  request: CronRunDispatchRequest,
+): Promise<{ taskId: string; sessionId: string }> {
   return cronDispatcher.dispatch(request);
 }
 
@@ -2236,7 +2238,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
           runId: msg.runId,
           ok: false,
           error: error instanceof Error ? error.message : String(error),
-          failureKind: "transient",
+          failureKind: describeAutomationDispatchFailure(error).failureKind,
         });
       }
     })();

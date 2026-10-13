@@ -12,6 +12,7 @@ export {
   AssistantCodeCommentFeatureProvider,
   useAssistantCodeCommentFeatureEnabled,
 } from "./AssistantCodeCommentFeatureProvider.js";
+export { PluginStoreCatalogRow } from "./settings/PluginStoreCatalogRow.js";
 export { Root } from "./Root.js";
 export { UpdateStatusWindowRoot } from "./UpdateStatusWindowRoot.js";
 export type { WebRemoteControlTerminalTransportState } from "./root/types.js";
@@ -35,6 +36,7 @@ export type { Theme } from "./useTheme.js";
 export { useTestActions } from "./test-actions.js";
 export type { TestActions } from "./test-actions.js";
 export { StoreProvider, useZCodeStore } from "./store/StoreProvider.js";
+export type { ApplicationPluginStoreSection } from "./root/ApplicationPluginStoreSection.js";
 export type { ApplicationPage, ApplicationPageContext } from "./root/ApplicationPages.js";
 export type { ZCodeState } from "./store/index.js";
 export {

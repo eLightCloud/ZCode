@@ -43,6 +43,8 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
 }
 
 export interface RootProps {
+  /** Optional trusted catalog segment after the native Public / Personal segments. */
+  applicationPluginStoreSection?: import("./ApplicationPluginStoreSection.js").ApplicationPluginStoreSection;
   /** Trusted build-owned business pages; native UI owns their navigation lifecycle. */
   applicationPages?: readonly import("./ApplicationPages.js").ApplicationPage[];
   /** Optional application-owned account display; credentials stay with the provider. */

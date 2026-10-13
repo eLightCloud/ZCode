@@ -66,3 +66,18 @@ by query strings or client payloads; production needs same-origin server routing
 
 Verify no-configuration startup, native remote recovery, malformed target rejection,
 real local login before RPC, logout/revocation and new-login transport establishment.
+
+## Optional application catalog section
+
+Root.applicationPluginStoreSection adds one build-owned segment after Public and
+Personal in the existing store. It supplies label, marketplaceIds, onRefresh and
+render. The native store owns selection and query; render receives query plus the
+current native workspace / RPC availability, under that location's service provider.
+Application sources are excluded from Personal discovery, while the installed strip
+continues to show the actual native inventory. Search in the application segment
+uses the same query input and remains within its authorized catalog. Refresh asks
+the application owner to reload alongside native inventory refresh. A removed
+section returns selection to Public. The application owns its authorized projection,
+loading / empty / error feedback and business install constraints, through public
+services. The generic shell never fetches tenant data or changes install authority.
+Unconfigured builds retain the existing two segments and cross-native search.

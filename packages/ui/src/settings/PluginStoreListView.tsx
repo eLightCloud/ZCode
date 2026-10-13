@@ -1,15 +1,21 @@
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 /* eslint-disable max-lines -- 商店列表页把标题/搜索/已安装条/公开-个人分段/Featured/分类折叠聚合成一个连贯浏览面，拆散反而难以维持 1:1 布局。 */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Download, Loader2, Settings2 } from "lucide-react";
-import type { PluginStoreOrder, ZCodePluginMarketplaceSummary } from "@zcode/shared";
+import type {
+  PluginStoreOrder,
+  ZCodePluginMarketplaceSummary,
+} from "@zcode/shared";
 import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
-import { PluginStoreCard, type PluginStoreActions } from "@/settings/PluginStoreCard.js";
+import {
+  PluginStoreCard,
+  type PluginStoreActions,
+} from "@/settings/PluginStoreCard.js";
 import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
 import {
   FALLBACK_CATEGORY,
@@ -31,7 +37,7 @@ import { resolveMarketplaceDisplayName } from "@/settings/pluginSourceLabel.js";
 const CATEGORY_VISIBLE_LIMIT = 6;
 const RETIRED_STORE_PLUGIN_ID = `restore-legacy-sessions@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID}`;
 
-export type PluginStoreSegment = "public" | "personal";
+export type PluginStoreSegment = "public" | "personal" | "application";
 
 export function PluginStoreListView({
   items: allItems,
@@ -44,7 +50,13 @@ export function PluginStoreListView({
   segment,
   onSegmentChange,
   onOpenManage,
+  applicationSection,
 }: {
+  applicationSection?: {
+    label: string;
+    marketplaceIds: readonly string[];
+    content: ReactNode;
+  };
   items: StorePluginItem[];
   order?: PluginStoreOrder | null;
   marketplaces: ZCodePluginMarketplaceSummary[];
@@ -60,7 +72,9 @@ export function PluginStoreListView({
   const isOfficeMode = useIsOfficeMode();
   const modeOrder = isOfficeMode ? order?.work : order?.code;
   const keyword = query.trim().toLowerCase();
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
   // 旧版会话恢复入口退出市场；统一过滤所有浏览投影，旧缓存/精选也不能重新露出。
   // 完整 ID 只命中官方插件，插件管理页继续使用原始条目管理已有安装。
   const items = useMemo(
@@ -81,8 +95,13 @@ export function PluginStoreListView({
     [items],
   );
   const personalItems = useMemo(
-    () => items.filter((item) => !isPublicStoreMarketplaceId(item.marketplace)),
-    [items],
+    () =>
+      items.filter(
+        (item) =>
+          !isPublicStoreMarketplaceId(item.marketplace) &&
+          !applicationSection?.marketplaceIds.includes(item.marketplace),
+      ),
+    [items, applicationSection?.marketplaceIds],
   );
 
   const resolveCategoryLabel = useMemo(() => {
@@ -115,7 +134,11 @@ export function PluginStoreListView({
     const titled: PersonalMarketplaceGroup[] = [...groups.entries()].map(
       ([marketplace, groupItems]) => ({
         marketplace,
-        title: resolveMarketplaceDisplayName(marketplace, marketplaces, claudeCodePlugins),
+        title: resolveMarketplaceDisplayName(
+          marketplace,
+          marketplaces,
+          claudeCodePlugins,
+        ),
         items: groupItems.toSorted((left, right) =>
           resolveItemDisplayName(left, locale).localeCompare(
             resolveItemDisplayName(right, locale),
@@ -129,7 +152,7 @@ export function PluginStoreListView({
 
   const searchResults = useMemo(() => {
     if (!keyword) return [];
-    return items
+    return [...publicItems, ...personalItems]
       .filter((item) => storeItemMatches(item, keyword, locale))
       .toSorted((left, right) =>
         resolveItemDisplayName(left, locale).localeCompare(
@@ -137,10 +160,13 @@ export function PluginStoreListView({
           locale,
         ),
       );
-  }, [items, keyword, locale]);
+  }, [publicItems, personalItems, keyword, locale]);
 
   const toggleGroup = (key: string) => {
-    setExpandedGroups((current) => ({ ...current, [key]: !(current[key] ?? true) }));
+    setExpandedGroups((current) => ({
+      ...current,
+      [key]: !(current[key] ?? true),
+    }));
   };
 
   return (
@@ -189,9 +215,15 @@ export function PluginStoreListView({
           <div className="mt-1 flex items-center gap-3 overflow-x-auto px-2 pt-2 pb-1 sm:-mx-2">
             {installedItems.map((item) => {
               const displayName = resolveItemDisplayName(item, locale);
-              const updating = actions.operationId === `plugin:update:${item.id}`;
+              const updating =
+                actions.operationId === `plugin:update:${item.id}`;
               return (
-                <ControlHintTooltip key={item.id} title={displayName} side="top" sideOffset={8}>
+                <ControlHintTooltip
+                  key={item.id}
+                  title={displayName}
+                  side="top"
+                  sideOffset={8}
+                >
                   <div className="relative shrink-0">
                     <button
                       type="button"
@@ -209,7 +241,9 @@ export function PluginStoreListView({
                         type="button"
                         data-testid="plugin-store-installed-item-update"
                         data-plugin-id={item.id}
-                        aria-label={intl.formatMessage({ id: "settings.plugins.detail.update" })}
+                        aria-label={intl.formatMessage({
+                          id: "settings.plugins.detail.update",
+                        })}
                         className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-success text-success-foreground shadow-sm transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused disabled:opacity-60"
                         disabled={actions.operationId !== null}
                         onClick={(event) => {
@@ -218,7 +252,10 @@ export function PluginStoreListView({
                         }}
                       >
                         {updating ? (
-                          <Loader2 className="size-2.5 animate-spin" aria-hidden="true" />
+                          <Loader2
+                            className="size-2.5 animate-spin"
+                            aria-hidden="true"
+                          />
                         ) : (
                           <Download className="size-2.5" aria-hidden="true" />
                         )}
@@ -232,7 +269,7 @@ export function PluginStoreListView({
         </section>
       ) : null}
 
-      {/* 公开 / 个人分段。 */}
+      {/* 原生分段与可信应用分段共用发现入口。 */}
       <div className="flex items-center gap-1.5">
         <SegmentPill
           active={segment === "public"}
@@ -250,9 +287,19 @@ export function PluginStoreListView({
           })}
           onClick={() => onSegmentChange("personal")}
         />
+        {applicationSection && (
+          <SegmentPill
+            active={segment === "application"}
+            testId="plugin-store-segment-application"
+            label={applicationSection.label}
+            onClick={() => onSegmentChange("application")}
+          />
+        )}
       </div>
 
-      {keyword ? (
+      {segment === "application" && applicationSection ? (
+        applicationSection.content
+      ) : keyword ? (
         <StoreSection
           key="search"
           title={intl.formatMessage(
@@ -353,7 +400,12 @@ function CardGrid({
   return (
     <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
       {items.map((item) => (
-        <PluginStoreCard key={item.id} item={item} actions={actions} locale={locale} />
+        <PluginStoreCard
+          key={item.id}
+          item={item}
+          actions={actions}
+          locale={locale}
+        />
       ))}
     </div>
   );
@@ -378,7 +430,9 @@ function CollapsibleCardGroup({
   const { intl } = useZCodeIntl();
   const visible = expanded ? items : items.slice(0, CATEGORY_VISIBLE_LIMIT);
   const hidden = expanded ? [] : items.slice(CATEGORY_VISIBLE_LIMIT);
-  const hiddenNames = hidden.slice(0, 2).map((item) => resolveItemDisplayName(item, locale));
+  const hiddenNames = hidden
+    .slice(0, 2)
+    .map((item) => resolveItemDisplayName(item, locale));
   return (
     <div>
       <CardGrid items={visible} actions={actions} locale={locale} />
@@ -390,7 +444,10 @@ function CollapsibleCardGroup({
           className="mt-2 flex w-full min-w-0 items-center gap-2 rounded-xl px-2 py-2 text-left text-ui-base text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
           onClick={() => onToggle(groupKey)}
         >
-          <span className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
+          <span
+            className="flex shrink-0 items-center gap-1.5"
+            aria-hidden="true"
+          >
             {hidden.slice(0, 3).map((item) => (
               <PluginStoreAvatar
                 key={item.id}
@@ -405,14 +462,18 @@ function CollapsibleCardGroup({
               ? intl.formatMessage(
                   { id: "settings.plugins.store.viewMore" },
                   {
-                    names: hiddenNames.join(intl.formatMessage({ id: "common.listSeparator" })),
+                    names: hiddenNames.join(
+                      intl.formatMessage({ id: "common.listSeparator" }),
+                    ),
                     count: String(hidden.length - hiddenNames.length),
                   },
                 )
               : intl.formatMessage(
                   { id: "settings.plugins.store.viewMoreFew" },
                   {
-                    names: hiddenNames.join(intl.formatMessage({ id: "common.listSeparator" })),
+                    names: hiddenNames.join(
+                      intl.formatMessage({ id: "common.listSeparator" }),
+                    ),
                   },
                 )}
           </span>
@@ -534,7 +595,9 @@ function PersonalSegment({
           <CollapsibleCardGroup
             groupKey={`marketplace:${group.marketplace}`}
             items={group.items}
-            expanded={expandedGroups[`marketplace:${group.marketplace}`] ?? true}
+            expanded={
+              expandedGroups[`marketplace:${group.marketplace}`] ?? true
+            }
             onToggle={onToggleGroup}
             actions={actions}
             locale={locale}

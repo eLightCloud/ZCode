@@ -16,6 +16,9 @@ vi.mock("@/store/TabStoreProvider.js", () => ({
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useWorkspaceServicesResolution: () => ({ services: {}, rpcReady: false }),
 }));
+vi.mock("@/DesktopOverlayWindowControls.js", () => ({
+  DesktopOverlayWindowControls: () => null,
+}));
 afterEach(cleanup);
 function element(pages: ApplicationPage[]) {
   return createElement(ZCodeIntlProvider, {

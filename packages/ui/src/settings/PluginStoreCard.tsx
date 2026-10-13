@@ -1,3 +1,4 @@
+import { PluginStoreCatalogRow } from "@/settings/PluginStoreCatalogRow.js";
 import {
   Crown,
   Download,
@@ -41,7 +42,10 @@ export interface PluginStoreActions {
   togglingPluginId: string | null;
 }
 
-export function isItemBusy(item: StorePluginItem, actions: PluginStoreActions): boolean {
+export function isItemBusy(
+  item: StorePluginItem,
+  actions: PluginStoreActions,
+): boolean {
   return (
     actions.operationId === `plugin:install:${item.name}@${item.marketplace}` ||
     actions.operationId === `plugin:restore:${item.id}` ||
@@ -67,8 +71,12 @@ export function PluginStorePaidPlanBadge({
 }) {
   const { intl } = useZCodeIntl();
   if (!item.listing?.requiresPaidPlan) return null;
-  const label = intl.formatMessage({ id: "settings.plugins.store.requiresPaidPlan" });
-  const badgeLabel = intl.formatMessage({ id: "settings.plugins.store.paidPlanBadge" });
+  const label = intl.formatMessage({
+    id: "settings.plugins.store.requiresPaidPlan",
+  });
+  const badgeLabel = intl.formatMessage({
+    id: "settings.plugins.store.paidPlanBadge",
+  });
   return (
     <ControlHintTooltip title={label}>
       <span
@@ -149,7 +157,9 @@ export function PluginStoreItemMenu({
           variant={triggerVariant}
           size={triggerSize}
           className={triggerClassName}
-          aria-label={intl.formatMessage({ id: "settings.plugins.store.menu.label" })}
+          aria-label={intl.formatMessage({
+            id: "settings.plugins.store.menu.label",
+          })}
           onClick={(event) => event.stopPropagation()}
         >
           {busy ? (
@@ -159,7 +169,10 @@ export function PluginStoreItemMenu({
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+      <DropdownMenuContent
+        align="end"
+        onClick={(event) => event.stopPropagation()}
+      >
         {canToggleEnabled ? (
           <DropdownMenuItem
             data-testid="plugin-store-menu-enabled"
@@ -169,8 +182,12 @@ export function PluginStoreItemMenu({
           >
             <Power className="size-4" aria-hidden="true" />
             {enabled
-              ? intl.formatMessage({ id: "settings.plugins.store.menu.disable" })
-              : intl.formatMessage({ id: "settings.plugins.store.menu.enable" })}
+              ? intl.formatMessage({
+                  id: "settings.plugins.store.menu.disable",
+                })
+              : intl.formatMessage({
+                  id: "settings.plugins.store.menu.enable",
+                })}
           </DropdownMenuItem>
         ) : null}
         {updatePending ? (
@@ -191,7 +208,9 @@ export function PluginStoreItemMenu({
             disabled={busy}
             onSelect={() => actions.onResetConfig?.(item.id)}
           >
-            {intl.formatMessage({ id: "settings.plugins.store.menu.resetConfig" })}
+            {intl.formatMessage({
+              id: "settings.plugins.store.menu.resetConfig",
+            })}
           </DropdownMenuItem>
         ) : null}
         {item.installed ? (
@@ -240,14 +259,20 @@ export function PluginStoreInstallButton({
       onClick={(event) => {
         event.stopPropagation();
         runUserAction({
-          input: { featureId: "extension.plugin", action: "install", trigger: "button" },
+          input: {
+            featureId: "extension.plugin",
+            action: "install",
+            trigger: "button",
+          },
           operation: () => actions.onInstall(item),
           completed: { resultSource: "optimistic_projection" },
           failureStage: "plugin_install",
         });
       }}
     >
-      {installing ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : null}
+      {installing ? (
+        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+      ) : null}
       {installing
         ? intl.formatMessage({ id: "settings.plugins.marketplace.installing" })
         : intl.formatMessage({ id: "settings.plugins.store.install" })}
@@ -259,11 +284,16 @@ export function PluginStoreInstallButton({
 export function PluginStoreUpdateBadge({
   item,
 }: {
-  item: Pick<StorePluginItem, "id" | "installedMeta" | "orphaned"> | null | undefined;
+  item:
+    | Pick<StorePluginItem, "id" | "installedMeta" | "orphaned">
+    | null
+    | undefined;
 }) {
   const { intl } = useZCodeIntl();
   if (!canUpdatePluginItem(item)) return null;
-  const label = intl.formatMessage({ id: "settings.plugins.list.updateAvailable" });
+  const label = intl.formatMessage({
+    id: "settings.plugins.list.updateAvailable",
+  });
   return (
     <span
       data-testid="plugin-store-update-badge"
@@ -331,12 +361,23 @@ export function PluginStoreCard({
   const displayName = resolveItemDisplayName(item, locale);
   const description = resolveItemDescription(item, locale);
   return (
-    <div
+    <PluginStoreCatalogRow
+      avatar={<PluginStoreAvatar item={item} className="size-10" />}
+      actions={
+        item.installed ? (
+          <>
+            <PluginStoreUpdateButton item={item} actions={actions} />
+            <PluginStoreItemMenu item={item} actions={actions} />
+          </>
+        ) : (
+          <PluginStoreInstallButton item={item} actions={actions} />
+        )
+      }
       role="button"
       tabIndex={0}
       data-testid="plugin-store-card"
       data-plugin-id={item.id}
-      className="group/card flex min-w-0 cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
+      className="cursor-pointer"
       onClick={() => actions.onOpenDetail(item.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -345,43 +386,30 @@ export function PluginStoreCard({
         }
       }}
     >
-      <PluginStoreAvatar item={item} className="size-10" />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-ui-base font-semibold text-foreground">
-            {displayName}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate text-ui-base font-semibold text-foreground">
+          {displayName}
+        </span>
+        <PluginStorePaidPlanBadge item={item} />
+        <PluginStoreUpdateBadge item={item} />
+      </div>
+      {item.orphaned ? (
+        <div
+          data-testid="plugin-store-source-degraded"
+          data-plugin-id={item.id}
+          className="mt-0.5 flex items-center gap-1 truncate text-ui-sm text-warning"
+        >
+          <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {intl.formatMessage({ id: "settings.plugins.store.sourceMissing" })}
           </span>
-          <PluginStorePaidPlanBadge item={item} />
-          <PluginStoreUpdateBadge item={item} />
         </div>
-        {item.orphaned ? (
-          <div
-            data-testid="plugin-store-source-degraded"
-            data-plugin-id={item.id}
-            className="mt-0.5 flex items-center gap-1 truncate text-ui-sm text-warning"
-          >
-            <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">
-              {intl.formatMessage({ id: "settings.plugins.store.sourceMissing" })}
-            </span>
-          </div>
-        ) : null}
-        {description ? (
-          <div className="mt-0.5 truncate text-ui-sm text-foreground-subtle">{description}</div>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {item.installed ? (
-          <>
-            <PluginStoreUpdateButton item={item} actions={actions} />
-            {/* Bugfix：旧版误写 suppression 后可能只剩安装记录、没有运行时 info；
-                此时仍须保留卸载菜单，让用户能清理安装记录与脏 suppression。 */}
-            <PluginStoreItemMenu item={item} actions={actions} />
-          </>
-        ) : (
-          <PluginStoreInstallButton item={item} actions={actions} />
-        )}
-      </div>
-    </div>
+      ) : null}
+      {description ? (
+        <div className="mt-0.5 truncate text-ui-sm text-foreground-subtle">
+          {description}
+        </div>
+      ) : null}
+    </PluginStoreCatalogRow>
   );
 }

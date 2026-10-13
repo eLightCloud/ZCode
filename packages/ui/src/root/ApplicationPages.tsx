@@ -35,11 +35,17 @@ export interface ApplicationPageContext {
 
 const ApplicationPageActionContext = createContext<ReactNode>(null);
 
+export function useHasApplicationPages() {
+  return useContext(ApplicationPageActionContext) !== null;
+}
+
 export function ApplicationPageHeaderAction() {
   return useContext(ApplicationPageActionContext);
 }
 
-function PageContent({ page }: { page: ApplicationPage }) {
+export function ApplicationPageContent({
+  render,
+}: Pick<ApplicationPage, "render">) {
   const active = useTabStore((state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId),
   );
@@ -52,7 +58,7 @@ function PageContent({ page }: { page: ApplicationPage }) {
   );
   return (
     <ServiceProvider services={resolution.services}>
-      {page.render({
+      {render({
         rpcReady: Boolean(workspace) && resolution.rpcReady,
         workspace: workspace
           ? {
@@ -100,7 +106,7 @@ export function ApplicationPages({
         ref={trigger}
         variant="ghost"
         size={first.Icon ? "icon-md" : "default"}
-        className="text-foreground hover:bg-hover hover:text-foreground [app-region:no-drag]"
+        className="text-foreground hover:bg-hover hover:text-foreground max-sm:min-h-11 max-sm:min-w-11 [app-region:no-drag]"
         aria-label={first.label}
         onClick={() => {
           setSelected(first.id);
@@ -187,7 +193,7 @@ export function ApplicationPages({
               key={`${page.id}:${generation}`}
             >
               <ScopedErrorBoundary scope={`application-page:${page.id}`}>
-                <PageContent page={page} />
+                <ApplicationPageContent render={page.render} />
               </ScopedErrorBoundary>
             </div>
           </DialogContent>

@@ -104,6 +104,7 @@ export class StartupDiskSampler {
     if (this.busy || this.stopped) return;
     this.busy = true;
     try {
+      // eslint-disable-next-line unicorn/no-useless-spread -- 快照本轮 scope 集合：循环内会 delete/set scopes，快照避免同轮重复处理重建的 key
       for (const scope of [...this.scopes.values()]) {
         if (this.stopped) break;
         try {

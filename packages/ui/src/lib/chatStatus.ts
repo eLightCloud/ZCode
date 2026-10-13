@@ -18,7 +18,7 @@ export function deriveChatComposerStatusFromTaskRuntime(
   }
 }
 
-export function isChatComposerEditingDisabled(status: ChatComposerStatus) {
+export function isChatComposerEditingDisabled(_status: ChatComposerStatus) {
   // Bugfix: 用户在“准备中”阶段也需要能继续补全下一条草稿。
   // 之前把 submitting 当成编辑锁，导致 task 创建/恢复稍慢时输入框整段时间都不可输入。
   // 这里统一放开编辑能力，只把“是否允许再次提交”交给 submissionBlocked 控制。
@@ -72,8 +72,8 @@ export function shouldShowChatThinkingShimmer(taskStatus: ZCodeTaskRuntimeStatus
 
 export function getChatSubmitLabelId(
   status: ChatComposerStatus,
-  workspaceInitStatus: ZCodeWorkspaceInitStatus,
-  taskStatus: ZCodeTaskRuntimeStatus,
+  _workspaceInitStatus: ZCodeWorkspaceInitStatus,
+  _taskStatus: ZCodeTaskRuntimeStatus,
 ) {
   if (status !== "submitting") {
     return "chat.send";

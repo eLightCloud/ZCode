@@ -674,7 +674,7 @@ export function hasStartPlanEntitlementQuota(
 
 export function resolveCodingPlanStatusCardTitle({
   isPurchased,
-  isUnavailable = false,
+  isUnavailable: _isUnavailable = false,
   isStartPlanProvider,
   inactivePlanTitle,
   rawPlanLevel,

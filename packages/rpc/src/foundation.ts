@@ -155,6 +155,7 @@ export class Emitter<T> implements IDisposable {
     if (this.disposed) {
       return;
     }
+    // eslint-disable-next-line unicorn/no-useless-spread -- 快照本次监听集合：listener 内可能同步退订，退订自下一次 fire 生效
     for (const listener of [...this.listeners]) {
       listener(event);
     }

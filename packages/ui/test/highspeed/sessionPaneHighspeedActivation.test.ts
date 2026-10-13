@@ -247,6 +247,7 @@ const domEventListeners: Array<{
 }> = [];
 
 function triggerDomEvent(target: "document" | "window", type: string): void {
+  // eslint-disable-next-line unicorn/no-useless-spread -- 快照派发时的监听列表：handler 内可能增删监听
   for (const listener of [...domEventListeners]) {
     if (listener.target === target && listener.type === type) listener.handler();
   }

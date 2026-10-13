@@ -10,6 +10,7 @@ const listeners = new Set<() => void>();
 /** task row 或 membership mutation 后调用：通知所有 sessions-index 派生列表重新拉取左表。 */
 export function bumpTaskListMembershipVersion(): void {
   version += 1;
+  // eslint-disable-next-line unicorn/no-useless-spread -- 快照本轮通知集合：listener 内可能同步退订（React 卸载）
   for (const listener of [...listeners]) {
     listener();
   }

@@ -82,17 +82,6 @@ function createZCodeError(overrides: Partial<ZCodeError> = {}): ZCodeError {
   };
 }
 
-function createComposerDraft(
-  overrides: Pick<ComposerDraftState, "text"> & Partial<ComposerDraftState>,
-): ComposerDraftState {
-  return {
-    attachments: [],
-    codeCommentAttachments: [],
-    webElementContexts: [],
-    ...overrides,
-  };
-}
-
 function createModelConfigOption(currentValue: string): ZCodeConfigOption {
   return {
     id: "model",
@@ -637,8 +626,6 @@ describe("useZCodeSessionStore provider preference", () => {
 
     // 模拟 protocol-v4 投影已经更新当前工具条，但尚未写入 legacy task 级缓存。
     useZCodeSessionStore.getState().startDraft(workspacePath, "glm");
-
-    const workspaceState = useZCodeSessionStore.getState().getWorkspaceState(workspacePath);
   });
 
   it("startDraft 在 task 级缓存为空时仍继承当前输入框配置", () => {
@@ -667,8 +654,6 @@ describe("useZCodeSessionStore provider preference", () => {
 
     // 模拟首轮 session 先以空目录建立，随后 protocol-v4 只更新当前工具条投影。
     useZCodeSessionStore.getState().startDraft(workspacePath, "glm");
-
-    const workspaceState = useZCodeSessionStore.getState().getWorkspaceState(workspacePath);
   });
 
   it("草稿目录水合不应清掉从 active task 继承的预热配置", () => {
@@ -690,8 +675,6 @@ describe("useZCodeSessionStore provider preference", () => {
     useZCodeSessionStore
       .getState()
       .setConfigOptions(workspacePath, [createModelConfigOption("glm/GLM-5.2")]);
-
-    const workspaceState = useZCodeSessionStore.getState().getWorkspaceState(workspacePath);
   });
 
   it("grouped 草稿在不同 New task 入口之间切换时会更新创建位置", () => {

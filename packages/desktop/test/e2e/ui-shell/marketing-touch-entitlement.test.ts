@@ -21,7 +21,6 @@ import {
   clickTestIdByWebDriver,
   readSettings,
   seedSettings,
-  waitForTestIdByDom,
 } from "../helpers/desktop-app.js";
 
 describe("Marketing Touch 领取后的权益与模型连接", () => {
@@ -445,13 +444,6 @@ async function waitForTestIdMissing(testId: string) {
       )) as boolean,
     { timeout: 10_000, timeoutMsg: `页面仍然存在 test id：${testId}` },
   );
-}
-
-async function readTestIdText(testId: string): Promise<string> {
-  return (await browser.execute(
-    (value) => document.querySelector(`[data-testid="${value}"]`)?.textContent?.trim() ?? "",
-    testId,
-  )) as string;
 }
 
 async function readMockRequests(): Promise<

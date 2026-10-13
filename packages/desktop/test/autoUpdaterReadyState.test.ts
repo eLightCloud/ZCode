@@ -16,7 +16,6 @@ const { loggerErrorMock, loggerInfoMock, loggerWarnMock, readFileMock, spawnMock
 
 const originalPlatform = process.platform;
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const TWO_MINUTES_MS = 2 * 60 * 1000;
 

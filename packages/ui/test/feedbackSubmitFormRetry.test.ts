@@ -252,7 +252,10 @@ describe("FeedbackSubmitForm retry", () => {
         );
       });
       expect(formCapture.logProps?.checked).toBe(includeLogs ?? true);
-      act(() => (formCapture.logProps?.onCheckedChange as (checked: boolean) => void)(false));
+      const onCheckedChange = formCapture.logProps?.onCheckedChange as
+        | ((checked: boolean) => void)
+        | undefined;
+      act(() => onCheckedChange?.(false));
       await act(async () => {
         await getCapturedSubmit()();
       });

@@ -125,6 +125,7 @@ function createRestartHook() {
   return {
     fire() {
       act(() => {
+        // eslint-disable-next-line unicorn/no-useless-spread -- 快照本轮监听集合：listener 内可能同步退订
         for (const listener of [...listeners]) listener();
       });
     },
@@ -141,6 +142,7 @@ function createLifecycleHook() {
   return {
     fire(state: "available" | "unavailable") {
       act(() => {
+        // eslint-disable-next-line unicorn/no-useless-spread -- 快照本轮监听集合：listener 内可能同步退订
         for (const listener of [...listeners]) listener(state);
       });
     },

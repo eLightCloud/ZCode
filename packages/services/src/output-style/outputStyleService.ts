@@ -5,7 +5,6 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DEFAULT_OUTPUT_STYLE = "default";
 const SETTINGS_FILE = "settings.json";
 
 const BUILT_IN_STYLES: OutputStyle[] = [

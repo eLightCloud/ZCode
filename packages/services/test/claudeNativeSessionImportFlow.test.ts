@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const originalHome = process.env.HOME;
@@ -161,7 +161,7 @@ describe("Claude native import flow", () => {
 
       const workspacePath = makeTempDir("zcode-claude-import-workspace-");
       // Windows 上 workspacePath 是 C:\...格式，用posix 路径格式避免 Windows 路径解析问题
-      const encodedWorkspace = "ws_" + workspacePath.replace(/[\/\\]/g, "_");
+      const encodedWorkspace = "ws_" + workspacePath.replace(/[/\\]/g, "_");
       const sessionId= "session-live";
       // 先把 home转换为正斜杠格式
       const homeSlash = home.replace(/\\/g, "/");

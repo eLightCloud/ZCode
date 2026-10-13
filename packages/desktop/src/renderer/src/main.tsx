@@ -5,7 +5,6 @@ import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import {
   AppErrorBoundary,
-  Root,
   GlobalDatabaseStartupLoading,
   UpdateStatusWindowRoot,
   ZCodeIntlProvider,

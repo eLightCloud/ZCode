@@ -61,6 +61,10 @@ function withRuntimeInvocationLayer(
   retryBudget?: ModelRetryBudget,
 ): Model {
   const layer: ModelInvocationContext = {
+    // 后台子代理 / 工作流可晚于父 turn；句柄保留其创建时的限制，主会话不粘住该状态。
+    ...(runtime.modelRequestPurpose === "automation"
+      ? { modelRequestPurpose: "automation" as const }
+      : {}),
     // 原因：标题、Memory、工具调用曾按用途覆写 other，丢失宿主分类。
     // 会话类型统一绑定在句柄上；工作区独立请求即使借用会话 runtime 也保持 other。
     modelRequestSessionType: sessionType,

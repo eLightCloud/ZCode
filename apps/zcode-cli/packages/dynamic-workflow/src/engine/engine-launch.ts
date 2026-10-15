@@ -16,6 +16,7 @@ import type { RunEvent } from "./types.js";
  */
 export interface RunLaunchConfig {
   inputId: string;
+  modelRequestPurpose?: "automation";
   phaseNames?: string[];
   subagentModel?: string;
   /** 脚本点名的模型名（逐字）→ 规范串（docs/dynamic-workflow/launch.md「Models the script names」）。 */
@@ -42,6 +43,7 @@ export function runLaunchedEvent(
 ): RunEvent {
   const {
     inputId,
+    modelRequestPurpose,
     phaseNames,
     subagentModel,
     subagentPermissionMode,
@@ -53,6 +55,7 @@ export function runLaunchedEvent(
   return {
     type: "run-launched",
     inputId,
+    ...(modelRequestPurpose === undefined ? {} : { modelRequestPurpose }),
     ...(origin.toolCallId === undefined ? {} : { toolCallId: origin.toolCallId }),
     ...(origin.parentSessionId === undefined ? {} : { parentSessionId: origin.parentSessionId }),
     ...(phaseNames === undefined ? {} : { phaseNames }),

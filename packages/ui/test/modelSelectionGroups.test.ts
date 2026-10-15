@@ -4,6 +4,51 @@ import type { ModelSelectionView } from "@zcode/services";
 import { buildRegistryModelSelectGroups } from "../src/lib/modelSelectionGroups.js";
 
 describe("model selection groups", () => {
+  it("keeps both application sections before a personal provider or any system model is available", () => {
+    const view: ModelSelectionView = {
+      revision: 1,
+      providers: [
+        {
+          providerId: "application:fixture",
+          config: { group: "application-managed", api: { type: "openai-chat-completions" } },
+          models: [],
+        },
+      ],
+    };
+    expect(
+      buildRegistryModelSelectGroups("glm", view).map(({ key, items }) => ({ key, items })),
+    ).toEqual([
+      { key: "application-models:system", items: [] },
+      { key: "application-models:personal", items: [] },
+    ]);
+  });
+  it("separates managed and personal models while preserving provider identities", () => {
+    const view: ModelSelectionView = {
+      revision: 1,
+      providers: [
+        {
+          providerId: "application:fixture",
+          providerName: "Managed",
+          config: { group: "application-managed", api: { type: "openai-chat-completions" } },
+          models: [{ modelId: "same-name", config: {} }],
+        },
+        {
+          providerId: "personal",
+          providerName: "My provider",
+          config: { group: "standard-personal", api: { type: "openai-chat-completions" } },
+          models: [{ modelId: "same-name", config: {} }],
+        },
+      ],
+    };
+    const groups = buildRegistryModelSelectGroups("glm", view);
+    expect(groups.map((group) => group.key)).toEqual([
+      "application-models:system",
+      "application-models:personal",
+    ]);
+    expect(groups.every((group) => group.directItems)).toBe(true);
+    expect(groups[0]!.items[0]!.value).not.toBe(groups[1]!.items[0]!.value);
+    expect(groups[1]!.items[0]!.badgeLabel).toBe("My provider");
+  });
   it.each([
     [{ type: "zhipu-account", accountType: "zai", mode: "individual-coding-plan" }, false],
     [{ type: "zhipu-account", accountType: "bigmodel", mode: "team-coding-plan" }, false],

@@ -1,4 +1,6 @@
 import type { ModelSelection, PersonalProviderConfigRepository } from "@zcode/provider";
+import { readFile } from "node:fs/promises";
+import { decodeZCodeBuiltinRelease } from "./zcode-builtin-release.js";
 
 export interface NodeModelSelectionConfigRepositoryOptions {
   readonly personalRepository: PersonalProviderConfigRepository;
@@ -16,7 +18,12 @@ export class NodeModelSelectionConfigRepository {
 
   async read(): Promise<ModelSelection | undefined> {
     this.#assertNotDisposed();
-    return (await this.#personal.read()).defaultModelSelection;
+    const personal = (await this.#personal.read()).defaultModelSelection;
+    if (personal) return personal;
+    const path = process.env["ZCODE_APPLICATION_PROVIDER_CONFIG_FILE"]?.trim();
+    return path
+      ? decodeZCodeBuiltinRelease(JSON.parse(await readFile(path, "utf8"))).applicationDefault
+      : undefined;
   }
 
   async saveConfiguredDefault(

@@ -8,6 +8,7 @@
 // {@link DynamicWorkflowRunEntryContext} 从 service 显式递进来，本文件不持有任何自己的状态。
 
 import { randomUUID } from "node:crypto";
+import { getCurrentModelInvocationContext } from "@zcode/contracts";
 import type {
   DynamicWorkflowRunAmendRequest,
   DynamicWorkflowRunAmendResult,
@@ -311,6 +312,9 @@ function startNewRun(ctx: DynamicWorkflowRunEntryContext, input: StartNewRunInpu
             return predecessor === undefined ? {} : { predecessor };
           })()),
     }),
+    ...(getCurrentModelInvocationContext()?.modelRequestPurpose === "automation"
+      ? { modelRequestPurpose: "automation" as const }
+      : {}),
     ...(input.phaseNames === undefined ? {} : { phaseNames: input.phaseNames }),
     // 子代理模型与阶段表并列同车（同样不进 resolveLaunchAnchor：修订绝不继承前驱的模型）。
     // 零 SQL——它活在这条事件里，`dwf_run` 上没有对应的列（刻意不做迁移）。

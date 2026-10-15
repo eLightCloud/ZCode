@@ -8,6 +8,7 @@ export const providerApiTypeDataSchema = z.enum([
 ]);
 export const providerGroupDataSchema = z.enum([
   "standard-personal",
+  "application-managed",
   "zai-family",
   "bigmodel-family",
 ]);

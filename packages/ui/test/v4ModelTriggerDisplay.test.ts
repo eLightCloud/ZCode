@@ -140,6 +140,23 @@ describe("resolveV4ModelTriggerLabel", () => {
 });
 
 describe("resolveV4ModelTriggerDisplay", () => {
+  it("shows only the system model while retaining channel information in the full accessible label", () => {
+    const group = createGroup({
+      key: "application:lighting-openai",
+      label: "System models",
+      modelName: "gpt-6.1-sol",
+    });
+    group.key = "application-models:system";
+    expect(
+      resolveV4ModelTriggerDisplay({
+        modelGroups: [group],
+        normalizedValue: "custom:application:lighting-openai:gpt-6.1-sol",
+        fallbackLabel: "Select model",
+        providerId: "application:lighting-openai",
+        providerName: "系统模型 · Lighting",
+      }),
+    ).toEqual({ fullLabel: "系统模型 · Lighting/gpt-6.1-sol", modelLabel: "gpt-6.1-sol" });
+  });
   it.each([undefined, "", "   "])(
     "名称为 %s 时以 providerId 保留完整身份和前缀",
     (providerName) => {

@@ -180,6 +180,7 @@ export interface RunWorkflowOptions {
    */
   launch?: {
     inputId: string;
+    modelRequestPurpose?: "automation";
     phaseNames?: string[];
     subagentModel?: string;
     /** 脚本点名的模型 → 规范串（docs/dynamic-workflow/launch.md「Models the script names」），同车同规。 */

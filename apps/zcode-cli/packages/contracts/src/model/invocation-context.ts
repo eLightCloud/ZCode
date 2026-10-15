@@ -21,6 +21,8 @@ export interface ModelInvocationContext {
   metadata?: Record<string, unknown>;
   modelCall?: ModelApiCallObservation;
   modelRequestSessionType?: ModelRequestSessionType;
+  /** Trusted turn purpose; queued / derived work may inherit denial, never grant credentials. */
+  modelRequestPurpose?: "automation";
   /** 重试预算档位；runtime 按 taskType 决定，adapter 据此放宽瞬态失败的放弃条件。 */
   modelRetryBudget?: ModelRetryBudget;
   /** 准入端口；runtime 从 deps 带入，adapter 每次尝试先 acquire。 */
@@ -81,6 +83,10 @@ export function getCurrentModelInvocationContext(): ModelInvocationContext | und
 }
 
 export function runWithModelInvocationContext<T>(context: ModelInvocationContext, run: () => T): T {
+  // 调用点可覆盖遥测等字段，不能清除父自动化的凭据限制。
+  if (modelInvocationStorage.getStore()?.modelRequestPurpose === "automation") {
+    context = { ...context, modelRequestPurpose: "automation" };
+  }
   const result = modelInvocationStorage.run(context, run);
   if (!isAsyncIterable(result)) return result;
 

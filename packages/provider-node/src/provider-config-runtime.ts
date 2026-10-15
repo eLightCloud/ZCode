@@ -17,6 +17,7 @@ import {
   NodePersonalProviderConfigRepository,
   type PersonalProviderConfigRecoveryEvent,
 } from "./personal-provider-config-repository.js";
+import { decodeZCodeBuiltinRelease } from "./zcode-builtin-release.js";
 
 export interface NodeProviderConfigRuntimeOptions {
   readonly zcodeBuiltinFilePath: string;
@@ -48,27 +49,68 @@ export class NodeProviderConfigRuntime {
   readonly #onRemoteRefreshError?: (error: unknown) => void;
   #startPromise: Promise<void> | null = null;
   #disposed = false;
+  readonly #checkIntervalMs: number;
   readonly #checkListeners = new Set<() => Promise<void>>();
   #checkTimer: ReturnType<typeof setInterval> | null = null;
   #checkInFlight: Promise<void> | null = null;
 
   constructor(options: NodeProviderConfigRuntimeOptions) {
-    this.#zcodeBuiltinSource = options.zcodeBuiltinEnvironment
-      ? new EndpointScopedZCodeBuiltinSource({
-          bundledFilePath: options.zcodeBuiltinFilePath,
-          ...options.zcodeBuiltinEnvironment,
-        })
-      : new NodeZCodeBuiltinProviderConfigSource({
-          bundledFilePath: options.zcodeBuiltinFilePath,
-          activeFilePath: options.zcodeBuiltinActiveFilePath,
-          watch: options.watch,
-        });
+    // 应用发布用户范围目录；沿现有文件 Source 热更新，不把进程凭据放入 Config。
+    const applicationFile = process.env["ZCODE_APPLICATION_PROVIDER_CONFIG_FILE"]?.trim();
+    this.#checkIntervalMs = applicationFile ? 5000 : 60_000;
+    this.#zcodeBuiltinSource =
+      !applicationFile && options.zcodeBuiltinEnvironment
+        ? new EndpointScopedZCodeBuiltinSource({
+            bundledFilePath: options.zcodeBuiltinFilePath,
+            ...options.zcodeBuiltinEnvironment,
+          })
+        : new NodeZCodeBuiltinProviderConfigSource({
+            bundledFilePath: applicationFile ?? options.zcodeBuiltinFilePath,
+            activeFilePath: applicationFile ?? options.zcodeBuiltinActiveFilePath,
+            watch: options.watch,
+          });
+    const configUrl = process.env["ZCODE_APPLICATION_MODEL_CONFIG_URL"];
+    const applicationRemote =
+      applicationFile && configUrl
+        ? {
+            controlFilePath: applicationFile + ".refresh.json",
+            resolveEndpointKey: () => configUrl,
+            successIntervalMs: 5000,
+            fetchRelease: async (url: string, signal: AbortSignal) => {
+              const parsed = new URL(url);
+              const token = process.env["ZCODE_APPLICATION_MODEL_TOKEN"];
+              if (
+                !token ||
+                token.length < 32 ||
+                parsed.username ||
+                parsed.password ||
+                (parsed.protocol !== "https:" &&
+                  !(
+                    parsed.protocol === "http:" &&
+                    ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)
+                  ))
+              )
+                throw new Error("application_provider_configuration_invalid");
+              const response = await fetch(url, {
+                signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+                redirect: "error",
+                headers: { Authorization: "Bearer " + token },
+              });
+              if (!response.ok) throw new Error(`application_provider_http_${response.status}`);
+              try {
+                return decodeZCodeBuiltinRelease(await response.json());
+              } catch {
+                throw new Error("application_provider_configuration_invalid");
+              }
+            },
+          }
+        : undefined;
+    const remote = applicationRemote ?? options.zcodeBuiltinRemote;
     this.#remoteSynchronizer =
-      options.zcodeBuiltinRemote &&
-      this.#zcodeBuiltinSource instanceof NodeZCodeBuiltinProviderConfigSource
+      remote && this.#zcodeBuiltinSource instanceof NodeZCodeBuiltinProviderConfigSource
         ? new ZCodeBuiltinRemoteSynchronizer({
             source: this.#zcodeBuiltinSource,
-            ...options.zcodeBuiltinRemote,
+            ...remote,
           })
         : undefined;
     this.#onRemoteRefreshError = options.onZCodeBuiltinRefreshError;
@@ -119,7 +161,7 @@ export class NodeProviderConfigRuntime {
       ) {
         this.#checkTimer = setInterval(() => {
           void this.#checkBackground();
-        }, 60_000);
+        }, this.#checkIntervalMs);
         this.#checkTimer.unref?.();
       }
     });

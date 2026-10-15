@@ -1,4 +1,9 @@
-import { beginLocalTurnPreparation, type LocalTtftDetail } from "@zcode/contracts";
+import {
+  beginLocalTurnPreparation,
+  getCurrentModelInvocationContext,
+  runWithModelInvocationContext,
+  type LocalTtftDetail,
+} from "@zcode/contracts";
 import { runtimeInputMetadata } from "../../agent/runtime-input-presentation.js";
 import { withConversationQuotes } from "../helpers/conversation-quotes.js";
 import { ensureGroupTaskPermissionScope } from "./input-intent-persistence.js";
@@ -53,7 +58,10 @@ import {
   maybeStartDeferredSessionTitleGeneration,
   maybeStartSessionTitleGeneration,
 } from "./session-title.js";
-import type { RegularTurnLoopState } from "./turn-loop-state.js";
+import {
+  isAutomationMutationRestrictedTurn,
+  type RegularTurnLoopState,
+} from "./turn-loop-state.js";
 import { finishOutputTokenRecovery } from "./turn-output-token-continuation.js";
 import { recordTurnUsageFact } from "./usage-observability.js";
 import { persistStableForkCompletionBoundary } from "./stable-fork-boundary.js";
@@ -85,6 +93,10 @@ export async function executeTurn(
   attachments?: TurnState["attachments"],
   options?: ExecuteTurnOptions,
 ): Promise<TurnResult> {
+  // 子调用入队后可能换异步执行栈，先冻结来源，不能在 drain 时丢失自动化限制。
+  if (getCurrentModelInvocationContext()?.modelRequestPurpose === "automation") {
+    options = { ...options, modelRequestPurpose: "automation" };
+  }
   return await enqueueCancellableRuntimeCommand<TurnResult, PromptRuntimeCommand>(this, {
     abortSignal: options?.abortSignal,
     createCommand: ({ reject, resolve }) => ({
@@ -103,6 +115,37 @@ export async function executeTurn(
 }
 
 export async function executeTurnCommand(
+  this: AgentRuntimeInternal,
+  input: string,
+  attachments?: TurnState["attachments"],
+  options?: ExecuteTurnOptions,
+  startReservation?: ActiveTurnStartReservation,
+): Promise<TurnResult> {
+  const inherited = getCurrentModelInvocationContext();
+  const trace = options?.traceContext ?? this.rootTraceContext;
+  const automatic =
+    isAutomationMutationRestrictedTurn({
+      automationId: options?.automationId,
+      toolDisallowlist: options?.toolDisallowlist,
+      turnTraceContext: {
+        ...trace,
+        queryId: options?.queryId ?? (options?.inputId as QueryId | undefined) ?? trace.queryId,
+      },
+    }) ||
+    ((options?.inputSource === "background_task" || options?.inputSource === "subagent_message") &&
+      isAutomationMutationRestrictedTurn({ turnTraceContext: trace }));
+  return runWithModelInvocationContext(
+    {
+      ...inherited,
+      ...(this.modelRequestPurpose || automatic || options?.modelRequestPurpose
+        ? { modelRequestPurpose: "automation" as const }
+        : {}),
+    },
+    () => executeAdmittedTurnCommand.call(this, input, attachments, options, startReservation),
+  );
+}
+
+async function executeAdmittedTurnCommand(
   this: AgentRuntimeInternal,
   input: string,
   attachments?: TurnState["attachments"],

@@ -10,6 +10,7 @@ import {
   createRootTraceContext,
   createToolRegistry,
   defaultPermissionConfig,
+  getCurrentModelInvocationContext,
   EventReducer,
   MessageHistoryImpl,
   PermissionService,
@@ -167,6 +168,7 @@ export class AgentRuntime {
   private browserControlPort?: AgentRuntimeDeps["browserControlPort"];
   /** 模型请求准入端口；随每次模型请求进调用上下文。 */
   private modelRequestAdmission?: AgentRuntimeDeps["modelRequestAdmission"];
+  private readonly modelRequestPurpose?: AgentRuntimeDeps["modelRequestPurpose"];
   private sessionModelSelection: ModelSelection | undefined;
   private messageHistory: MessageHistory;
   private readFileState: ReadFileStateMap;
@@ -307,6 +309,8 @@ export class AgentRuntime {
     this.providerRuntimeHeadersPort = deps.providerRuntimeHeadersPort;
     this.browserControlPort = deps.browserControlPort;
     this.modelRequestAdmission = deps.modelRequestAdmission;
+    this.modelRequestPurpose =
+      deps.modelRequestPurpose ?? getCurrentModelInvocationContext()?.modelRequestPurpose;
     // 旧会话的选择缺失不能阻断历史恢复；不在这里制造默认模型。
     this.sessionModelSelection =
       config.modelSelection && cloneModelSelection(config.modelSelection);

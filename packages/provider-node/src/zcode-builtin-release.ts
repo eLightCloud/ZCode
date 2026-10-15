@@ -17,6 +17,11 @@ export interface ZCodeBuiltinConfigContent {
 }
 
 export interface ZCodeBuiltinRelease {
+  readonly applicationDefault?: {
+    readonly providerId: string;
+    readonly modelId: string;
+    readonly options: { readonly reasoningLevel: string };
+  };
   readonly schemaVersion: typeof ZCODE_BUILTIN_RELEASE_SCHEMA_VERSION;
   readonly revision: number;
   readonly config: ZCodeBuiltinConfigContent;
@@ -24,6 +29,14 @@ export interface ZCodeBuiltinRelease {
 
 const releaseSchema = z
   .object({
+    applicationDefault: z
+      .object({
+        providerId: z.string().min(1),
+        modelId: z.string().min(1),
+        options: z.object({ reasoningLevel: z.string().min(1) }).strict(),
+      })
+      .strict()
+      .optional(),
     schemaVersion: z.literal(ZCODE_BUILTIN_RELEASE_SCHEMA_VERSION),
     revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     config: z
@@ -48,6 +61,7 @@ export function decodeZCodeBuiltinRelease(input: unknown): ZCodeBuiltinRelease {
   return Object.freeze({
     schemaVersion: ZCODE_BUILTIN_RELEASE_SCHEMA_VERSION,
     revision: parsed.revision,
+    ...(parsed.applicationDefault ? { applicationDefault: parsed.applicationDefault } : {}),
     config: Object.freeze({
       providers,
       providerTemplates,
@@ -60,6 +74,7 @@ export function encodeZCodeBuiltinRelease(release: ZCodeBuiltinRelease): object 
   return {
     schemaVersion: ZCODE_BUILTIN_RELEASE_SCHEMA_VERSION,
     revision: release.revision,
+    ...(release.applicationDefault ? { applicationDefault: release.applicationDefault } : {}),
     config: {
       providerConfigRules: {
         templateRules: release.config.providerTemplates.toJSON(),

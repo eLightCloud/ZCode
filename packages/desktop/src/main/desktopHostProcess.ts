@@ -60,6 +60,7 @@ import {
   unregisterHostProcess,
 } from "./resourceManagerWindow.js";
 import type { TaskRealtimeBus } from "./taskRealtimeBus.js";
+import { applicationModelBrokerEnvironment } from "./applicationModelBroker.js";
 
 export interface WindowBootstrapOptions {
   restoreSession?: boolean;
@@ -269,6 +270,7 @@ export function spawnHostProcess(
     execArgv,
     env: {
       ...buildHostProcessEnv(dependencies.hostProcessLocalEnv),
+      ...applicationModelBrokerEnvironment(dependencies.logger),
       ...buildHostE2ECoverageEnv(),
       ZCODE_PROCESS_LABEL: label,
       // macOS-only: the Computer Use Helper launcher runs inside this forked host utilityProcess, whose

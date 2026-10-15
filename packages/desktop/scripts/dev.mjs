@@ -128,9 +128,30 @@ if (process.platform === "darwin" && existsSync(electronBinary)) {
     runtimeRoot: resolve(root, "../../.zcode-runtime/desktop-dev"),
     electronVersion: electronPackage.version,
     arch: process.arch,
+  }).catch((error) => {
+    console.error(
+      JSON.stringify({
+        event: "desktop.dev.bundle.prepare",
+        outcome: "failed",
+        reason: "bundle-preparation-failed",
+        electronVersion: electronPackage.version,
+        arch: process.arch,
+      }),
+    );
+    throw error;
   });
   electronCommand = devBundle.executablePath;
-  console.log(`[dev] Prepared macOS ZCode Dev bundle: ${devBundle.appPath}`);
+  console.log(
+    JSON.stringify({
+      event: "desktop.dev.bundle.prepare",
+      outcome: "succeeded",
+      appName: devBundle.appName,
+      appBundleId: devBundle.appBundleId,
+      rebuilt: devBundle.rebuilt,
+      electronVersion: electronPackage.version,
+      arch: process.arch,
+    }),
+  );
 }
 
 const electron = spawn(electronCommand, ["."], {

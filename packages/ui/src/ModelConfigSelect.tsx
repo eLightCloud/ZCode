@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { useOptionalZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
@@ -46,6 +47,8 @@ import {
 } from "@/lib/pickerFocus.js";
 import { RollingToolbarLabel } from "@/chat-input-toolbar/RollingToolbarLabel.js";
 import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadge.js";
+import type { ProviderConfigObject } from "@zcode/provider";
+import { ProviderLogo } from "@/settings/model-provider-section/ProviderLogo.js";
 
 export interface ModelSelectGroupItem {
   key: string;
@@ -53,6 +56,7 @@ export interface ModelSelectGroupItem {
   name: string;
   badgeLabel?: string;
   supportsVisionInput?: boolean;
+  logo?: ProviderConfigObject["logo"];
 }
 
 export interface ModelSelectConnectionOption {
@@ -108,7 +112,12 @@ export function shouldRenderModelGroupSeparator(
   if (!previousGroup) {
     return false;
   }
-  return isFamilyConnectionGroup(previousGroup) || isFamilyConnectionGroup(currentGroup);
+  return (
+    isFamilyConnectionGroup(previousGroup) ||
+    isFamilyConnectionGroup(currentGroup) ||
+    previousGroup.key.startsWith("application-models:") ||
+    currentGroup.key.startsWith("application-models:")
+  );
 }
 
 export function isModelSelectGroupSelected(
@@ -227,6 +236,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   leadingItems,
   triggerBadge,
 }: ModelConfigSelectProps) {
+  const applicationIntl = useOptionalZCodeIntl();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const lastOpenRequestKeyRef = useRef(openRequestKey);
@@ -299,6 +309,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
       } as const;
       const content = (
         <>
+          {item.logo ? <ProviderLogo logo={item.logo} className="size-4" /> : null}
           <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
             <span className="min-w-0 truncate" title={item.name}>
               {item.name}
@@ -394,14 +405,20 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           )}
           title={group.label}
         >
-          {group.label}
+          {group.key === "application-models:system"
+            ? (applicationIntl?.intl.formatMessage({ id: "chat.toolbar.model.systemModels" }) ??
+              "System models")
+            : group.key === "application-models:personal"
+              ? (applicationIntl?.intl.formatMessage({ id: "chat.toolbar.model.customModels" }) ??
+                "Custom models")
+              : group.label}
         </span>
         {group.labelBadge ? (
           <span className={MODEL_CONFIG_SELECT_BADGE_CLASS_NAME}>{group.labelBadge}</span>
         ) : null}
       </span>
     ),
-    [],
+    [applicationIntl],
   );
 
   const renderProviderConnectionHeader = useCallback(
@@ -506,7 +523,11 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
         )}
         <span className={triggerLabelClassName} title={currentTriggerTitle}>
           <RollingToolbarLabel
-            label={currentTriggerLabel}
+            label={
+              !pending && triggerLabelPrefix === undefined && triggerLabelValue !== undefined
+                ? triggerLabelValue
+                : currentTriggerLabel
+            }
             prefix={pending ? undefined : triggerLabelPrefix}
             prefixClassName={triggerLabelPrefixClassName}
             value={pending ? undefined : triggerLabelValue}
@@ -547,7 +568,11 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
         <DropdownMenuContent
           className={cn(
             shouldShowProviderLevel
-              ? "w-max min-w-48 max-w-[calc(100vw-2rem)]"
+              ? cn(
+                  "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto",
+                  modelGroups.some((group) => group.key.startsWith("application-models:")) &&
+                    "min-w-64",
+                )
               : "w-48 max-h-72 overflow-y-auto",
           )}
           align={contentAlign}
@@ -602,6 +627,36 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
                         <DropdownMenuRadioGroup value={normalizedValue}>
                           {group.items.map((item) => renderModelItem(item))}
                         </DropdownMenuRadioGroup>
+                        {group.key.startsWith("application-models:") && group.items.length === 0 ? (
+                          <div
+                            className="px-2 py-1 text-ui-sm text-foreground-subtle"
+                            role="status"
+                          >
+                            {group.key === "application-models:personal"
+                              ? (applicationIntl?.intl.formatMessage({
+                                  id: "chat.toolbar.model.customEmpty",
+                                }) ?? "No custom models yet")
+                              : (applicationIntl?.intl.formatMessage({
+                                  id: "chat.toolbar.model.systemEmpty",
+                                }) ?? "No system models available")}
+                          </div>
+                        ) : null}
+                        {group.key === "application-models:personal" &&
+                        showManageModelsAction &&
+                        onManageModels ? (
+                          <DropdownMenuItem
+                            className="min-h-8 gap-2 px-2 text-ui-base"
+                            data-model-footer-action="add-custom-model"
+                            onSelect={() => {
+                              handlePopoverOpenChange(false);
+                              onManageModels();
+                            }}
+                          >
+                            {applicationIntl?.intl.formatMessage({
+                              id: "chat.toolbar.model.addCustom",
+                            }) ?? "Add custom model"}
+                          </DropdownMenuItem>
+                        ) : null}
                       </div>
                     </Fragment>
                   );

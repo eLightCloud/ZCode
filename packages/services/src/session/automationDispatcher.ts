@@ -251,9 +251,9 @@ export function createAutomationDispatcher(options: {
     const existingRun = await options.repo.getRun(request.runId);
     const resolvedSubmissionModelSelection = await resolveAutomationSubmissionModelSelection({
       selection: request.modelSelection,
+      diagnostic: request,
       fixedSelection: existingRun?.modelSelection,
       modelSelectionService,
-      // Repo 已在读取前完成离线导入；不再为迁移绕行 Agent/账号服务。
       // 未迁入或损坏的新值仍由此入口明确拒绝，不能当成跟随 Workspace。
       readSelection: () =>
         options.repo.getModelSelectionForDispatch(

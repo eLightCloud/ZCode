@@ -52,6 +52,54 @@ describe("dev Electron app bundle", () => {
     ).toBe("/tmp/zcode-runtime/41.0.3-arm64/ZCode Dev.app");
   });
 
+  it("uses the configured system name and development identity without changing raw Electron", async () => {
+    const root = await mkdtemp(join(tmpdir(), "branded-dev-bundle-test-"));
+    tempRoots.push(root);
+    const sourceApp = join(root, "source", "Electron.app");
+    await mkdir(join(sourceApp, "Contents", "MacOS"), { recursive: true });
+    const sourcePlist = `<?xml version="1.0"?><plist version="1.0"><dict>
+<key>CFBundleDisplayName</key><string>Electron</string>
+<key>CFBundleIdentifier</key><string>com.github.Electron</string>
+<key>CFBundleName</key><string>Electron</string>
+</dict></plist>\n`;
+    await writeFile(join(sourceApp, "Contents", "Info.plist"), sourcePlist);
+    await writeFile(join(sourceApp, "Contents", "MacOS", "Electron"), "source");
+    const options = {
+      electronAppPath: sourceApp,
+      runtimeRoot: join(root, "runtime"),
+      electronVersion: "41.0.3",
+      arch: "arm64",
+      env: {
+        ZCODE_APPLICATION_NAME: "Example Product",
+        ZCODE_DESKTOP_APPLICATION_NAME: "Example",
+        ZCODE_APPLICATION_ID: "com.example.app",
+      },
+    };
+    const first = await prepareDevElectronAppBundle(options);
+    expect(first.appPath).toBe(join(root, "runtime", "41.0.3-arm64", "Example.app"));
+    const plist = await readFile(join(first.appPath, "Contents", "Info.plist"), "utf8");
+    for (const key of ["CFBundleDisplayName", "CFBundleName", "CFBundleURLName"]) {
+      expect(plist).toMatch(new RegExp(`<key>${key}</key>\\s*<string>Example</string>`));
+    }
+    expect(plist).toContain("<string>com.example.app.dev</string>");
+    expect(plist).toContain("<string>zcode</string>");
+    expect(plist).not.toContain("ZCode Dev");
+    expect(await readFile(join(sourceApp, "Contents", "Info.plist"), "utf8")).toBe(sourcePlist);
+    expect((await prepareDevElectronAppBundle(options)).rebuilt).toBe(false);
+    // 显示名不变、品牌 ID 变化时，旧缓存也必须刷新，避免系统注册身份漂移。
+    const refreshed = await prepareDevElectronAppBundle({
+      ...options,
+      env: { ...options.env, ZCODE_APPLICATION_ID: "com.example.other" },
+    });
+    expect(refreshed.rebuilt).toBe(true);
+    expect(await readFile(join(refreshed.appPath, "Contents", "Info.plist"), "utf8")).toContain(
+      "<string>com.example.other.dev</string>",
+    );
+    const native = await prepareDevElectronAppBundle({ ...options, env: {} });
+    expect(native.appPath).toContain("ZCode Dev.app");
+    expect(native.appBundleId).toBe(DEV_ELECTRON_APP_BUNDLE_ID);
+  });
+
   it("makes the macOS dev launcher use the prepared bundle executable", async () => {
     const devScript = await readFile(new URL("../scripts/dev.mjs", import.meta.url), "utf8");
 

@@ -38,6 +38,8 @@ export function resolveInitialModelSelection(input: {
         selection: freezeSelection(input.configuredDefault),
       };
     }
+    // 应用默认已撤销时不能借普通 Registry fallback 自动切换系统模型或个人通道。
+    if (input.configuredDefault.providerId.startsWith("application:")) return { source: "none" };
   }
 
   // 仅用于全新草稿的 Host 初始推荐；历史未绑定状态不能进入这个初始化分支。

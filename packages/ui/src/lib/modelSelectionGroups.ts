@@ -35,7 +35,7 @@ export function buildRegistryModelSelectGroups(
   view: ModelSelectionView,
   labels: ModelProviderGroupLabelOptions = {},
 ): ModelSelectGroup[] {
-  return view.providers.flatMap((provider) => {
+  const groups = view.providers.flatMap((provider) => {
     if (!supportsRegistryApiFormat(selectedProvider, provider.config.api?.type)) {
       return [];
     }
@@ -55,6 +55,16 @@ export function buildRegistryModelSelectGroups(
           key: `registry-provider:${provider.providerId}:${modelId}`,
           value: encodeCustomModelValue(provider.providerId, modelId),
           name: modelId,
+          ...(provider.config.logo ? { logo: provider.config.logo } : {}),
+          ...(provider.config.group === "application-managed"
+            ? /^claude-/i.test(modelId)
+              ? { logo: { type: "builtin" as const, key: "anthropic" } }
+              : /^gpt-/i.test(modelId)
+                ? { logo: { type: "builtin" as const, key: "openai" } }
+                : /^minimax-/i.test(modelId)
+                  ? { logo: { type: "builtin" as const, key: "minimax" } }
+                  : {}
+            : {}),
           ...(shouldShowModelVisionBadge(
             modelId,
             config.properties?.inputFormat?.supportsImage,
@@ -66,6 +76,37 @@ export function buildRegistryModelSelectGroups(
       },
     ];
   });
+  if (!view.providers.some((provider) => provider.config.group === "application-managed"))
+    return groups;
+  const system: ModelSelectGroup = {
+    key: "application-models:system",
+    label: "System models",
+    directItems: true,
+    items: [],
+  };
+  const personal: ModelSelectGroup = {
+    key: "application-models:personal",
+    label: "Custom models",
+    directItems: true,
+    items: [],
+  };
+  const other: ModelSelectGroup[] = [];
+  for (const group of groups) {
+    const provider = view.providers.find(
+      (candidate) => `registry-provider:${candidate.providerId}` === group.key,
+    )!;
+    if (provider.config.group === "application-managed") system.items.push(...group.items);
+    else if (provider.config.group === "standard-personal")
+      personal.items.push(
+        ...group.items.map((item) => ({
+          ...item,
+          badgeLabel: provider.providerName?.trim() || provider.providerId,
+        })),
+      );
+    else other.push(group);
+  }
+  // 空态也保留分区，首次使用者才能发现自定义 Provider 的添加入口。
+  return [system, personal, ...other.filter((group) => group.items.length > 0)];
 }
 
 function getRegistryAccountProviderGroupPresentation(

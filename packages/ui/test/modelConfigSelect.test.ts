@@ -3,7 +3,8 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { Locale } from "@zcode/shared";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { MODEL_INPUT_CAPABILITY_BADGE_CLASS_NAME } from "@/components/ModelInputCapabilityBadge.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
@@ -55,6 +56,45 @@ function renderInteractive(element: ReactElement, locale: Locale) {
 afterEach(() => cleanup());
 
 describe("ModelConfigSelect menu hierarchy", () => {
+  it.each([
+    ["zh-CN", "自定义模型", "尚未添加自定义模型", "添加自定义模型"],
+    ["en-US", "Custom models", "No custom models yet", "Add custom model"],
+  ] as const)("empty custom section remains discoverable in %s", (locale, title, empty, action) => {
+    const manage = vi.fn();
+    const change = vi.fn();
+    renderInteractive(
+      createElement(ModelConfigSelect, {
+        modelGroups: [
+          {
+            key: "application-models:system",
+            label: "System models",
+            directItems: true,
+            items: createGroup("System").items,
+          },
+          {
+            key: "application-models:personal",
+            label: "Custom models",
+            directItems: true,
+            items: [],
+          },
+        ],
+        normalizedValue: "System/model",
+        triggerLabel: "Model",
+        showManageModelsAction: true,
+        lockReasonMessage: "Locked",
+        isItemLocked: () => false,
+        onValueChange: change,
+        onManageModels: manage,
+        open: true,
+      }),
+      locale,
+    );
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(empty);
+    fireEvent.click(screen.getByRole("menuitem", { name: action }));
+    expect(manage).toHaveBeenCalledOnce();
+    expect(change).not.toHaveBeenCalled();
+  });
   it("多个 provider 时展示 provider 一级菜单", () => {
     expect(
       shouldShowModelProviderLevel([createGroup("Provider A"), createGroup("Provider B")]),
@@ -194,6 +234,24 @@ describe("ModelConfigSelect badge style", () => {
 });
 
 describe("ModelConfigSelect trigger label", () => {
+  it("system trigger shows only the model while its accessible name retains the provider", () => {
+    renderInteractive(
+      createElement(ModelConfigSelect, {
+        modelGroups: [],
+        normalizedValue: "system",
+        triggerLabel: "Lighting/gpt-6.1-sol",
+        triggerLabelValue: "gpt-6.1-sol",
+        showManageModelsAction: false,
+        lockReasonMessage: "",
+        isItemLocked: () => false,
+        onValueChange: () => {},
+      }),
+      "zh-CN",
+    );
+    expect(screen.getByRole("button", { name: "Lighting/gpt-6.1-sol" }).textContent).toBe(
+      "gpt-6.1-sol",
+    );
+  });
   it("composer 仅在小于 sm 的超窄宽度隐藏模型名称", () => {
     const className = getModelTriggerLabelClassName({
       labelVisibilityClassName: "hidden @sm/composer:inline-flex",

@@ -374,6 +374,8 @@ export interface AgentRuntimeDeps {
    * 包装（受闸门约束），主 runtime 拿治理器的 observer（只喂信号）；缺席即不设闸门。
    */
   modelRequestAdmission?: ModelRequestAdmission;
+  /** Immutable inherited execution provenance for a derived runtime. */
+  modelRequestPurpose?: "automation";
   workflowPort?: WorkflowPort;
   /** workflow run 的提交/观察/取消端口；存在即 CreateWorkflow 真启动，缺席则回占位诊断。 */
   dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
@@ -471,6 +473,8 @@ export interface ModelExecutionContext {
 
 export interface ExecuteTurnOptionsBase {
   abortSignal?: AbortSignal;
+  /** Runtime-only inherited Automation purpose, captured before a child enters its queue. */
+  modelRequestPurpose?: "automation";
   browserAmbientContext?: {
     tabCount: number;
     currentUrl?: string;

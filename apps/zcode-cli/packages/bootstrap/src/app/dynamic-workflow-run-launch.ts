@@ -13,6 +13,8 @@
 import { randomUUID } from "node:crypto";
 import {
   CoreErrorType,
+  getCurrentModelInvocationContext,
+  runWithModelInvocationContext,
   ZCODE_DWF_CHILD_COMMAND,
   type CreateSessionTaskLinkInput,
   type SessionId,
@@ -308,41 +310,51 @@ export function launchDynamicWorkflowRun(
       submitProfile,
       modelRequestAdmission,
     }) => {
-      const runtime = deps.createActorRuntime({
-        runId,
-        sessionId,
-        actor,
-        persona,
-        submitPort,
-        // 工厂据 profile 决定端口是否注入、声明是否 typed（create-app.ts 的 createActorRuntime）。
-        submitProfile,
-        // 请求级准入端口与两个工具端口同路下传到 runtime deps。
-        ...(modelRequestAdmission === undefined ? {} : { modelRequestAdmission }),
-        // 升级端口与 submit 端口同路下传：core 侧的注册门以端口存在为准，所以恒传。
-        escalatePort,
-        // resume 的 pin：这个 actor 上一次跑在哪个模型上。必须在**造 runtime 之前**读，
-        // 因为下面那行 journalActorResolvedModel 会把这一轮的解析结果写回同一个字段。
-        //
-        // 种子带来的 pin 是**承袭**（amend-resume）：修订 run 的第一次派发时本 run 的 journal 还
-        // 没有解析结果，pin 只能来自前驱——转录接续下静默换模型正是 pin 要防的身份突变。两者都在
-        // 场（修订 run 崩溃后 resume）时以本 run 的记录为准：那是这个 actor 在**这个 run 里**实际
-        // 跑过的模型，比前驱的更具体，且两者本就应当相等。畸形 pin 的大声失败沿用既有那一套
-        // （workflow-actor-model.ts 的 WorkflowActorPinnedModelError），此处不分叉。
-        pinnedModel:
-          pinnedActorModel({ actor, journal: deps.journal, runId }) ?? seed?.resolvedModel,
-        // 本 run 的子代理模型：在 pin **之上**（workflow-actor-model.ts 的优先级表）。它是用户对
-        // 这一次 run 的显式表态（AmendWorkflow 带 subagent_model 就是「resume 时换模型」的那个显式
-        // 决定），pin 只守没有它时的隐式缺省。与 pin 不同，它整条带着 reasoning 档位下去——
-        // journal 的 pin 只记身份两段。
-        ...(runSubagentModel === undefined ? {} : { runSubagentModel }),
-        // persona 点名的模型（最高优先级，workflow-actor-model.ts）：按本 run 的绑定表查成整条选择。
-        // 表里没有这个名字只可能来自绕过 9010 的类型断言——在建会话这里抛，这次 ask 以 DriverError 失败。
-        ...(() => {
-          const actorModel = resolveActorPersonaModel(persona.model, modelBindings);
-          return actorModel === undefined ? {} : { actorModel };
-        })(),
-        ...(subagentPermissionMode === undefined ? {} : { subagentPermissionMode }),
-      });
+      // 冷恢复 / 修订沿 journal 发起事实保留凭据限制，不依赖父 turn 是否还在运行。
+      const runtime = runWithModelInvocationContext(
+        {
+          ...getCurrentModelInvocationContext(),
+          ...(launch?.modelRequestPurpose === "automation"
+            ? { modelRequestPurpose: "automation" as const }
+            : {}),
+        },
+        () =>
+          deps.createActorRuntime({
+            runId,
+            sessionId,
+            actor,
+            persona,
+            submitPort,
+            // 工厂据 profile 决定端口是否注入、声明是否 typed（create-app.ts 的 createActorRuntime）。
+            submitProfile,
+            // 请求级准入端口与两个工具端口同路下传到 runtime deps。
+            ...(modelRequestAdmission === undefined ? {} : { modelRequestAdmission }),
+            // 升级端口与 submit 端口同路下传：core 侧的注册门以端口存在为准，所以恒传。
+            escalatePort,
+            // resume 的 pin：这个 actor 上一次跑在哪个模型上。必须在**造 runtime 之前**读，
+            // 因为下面那行 journalActorResolvedModel 会把这一轮的解析结果写回同一个字段。
+            //
+            // 种子带来的 pin 是**承袭**（amend-resume）：修订 run 的第一次派发时本 run 的 journal 还
+            // 没有解析结果，pin 只能来自前驱——转录接续下静默换模型正是 pin 要防的身份突变。两者都在
+            // 场（修订 run 崩溃后 resume）时以本 run 的记录为准：那是这个 actor 在**这个 run 里**实际
+            // 跑过的模型，比前驱的更具体，且两者本就应当相等。畸形 pin 的大声失败沿用既有那一套
+            // （workflow-actor-model.ts 的 WorkflowActorPinnedModelError），此处不分叉。
+            pinnedModel:
+              pinnedActorModel({ actor, journal: deps.journal, runId }) ?? seed?.resolvedModel,
+            // 本 run 的子代理模型：在 pin **之上**（workflow-actor-model.ts 的优先级表）。它是用户对
+            // 这一次 run 的显式表态（AmendWorkflow 带 subagent_model 就是「resume 时换模型」的那个显式
+            // 决定），pin 只守没有它时的隐式缺省。与 pin 不同，它整条带着 reasoning 档位下去——
+            // journal 的 pin 只记身份两段。
+            ...(runSubagentModel === undefined ? {} : { runSubagentModel }),
+            // persona 点名的模型（最高优先级，workflow-actor-model.ts）：按本 run 的绑定表查成整条选择。
+            // 表里没有这个名字只可能来自绕过 9010 的类型断言——在建会话这里抛，这次 ask 以 DriverError 失败。
+            ...(() => {
+              const actorModel = resolveActorPersonaModel(persona.model, modelBindings);
+              return actorModel === undefined ? {} : { actorModel };
+            })(),
+            ...(subagentPermissionMode === undefined ? {} : { subagentPermissionMode }),
+          }),
+      );
       // persona 的模型档位实际解析成了哪个模型，只有造好的 runtime 说得准（档位映射见
       // workflow-actor-model.ts）。先落库再接入会话：一次失败的会话持久化会让这次 ask 失败，
       // 但「当时选了哪个模型」这条审计事实照旧留在 journal 里。rehydrate 路径也要写——

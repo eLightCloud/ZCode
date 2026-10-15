@@ -46,6 +46,36 @@ describe("resolveLaunchAnchor：优先级", () => {
 });
 
 describe("readRunLaunchAnchor：从 journal 读回", () => {
+  it("preserves the credential restriction on cold resume and amend", () => {
+    const journal = new InMemoryJournalStore();
+    journal.createRun({
+      runId: "automatic",
+      caps: { maxConcurrency: 1 },
+      spentTokens: 0,
+      status: "running",
+    });
+    journal.appendEvent("automatic", {
+      type: "run-launched",
+      inputId: "origin",
+      modelRequestPurpose: "automation",
+    });
+    const predecessor = readRunLaunchAnchor(journal, "automatic");
+    expect(predecessor).toEqual({ inputId: "origin", modelRequestPurpose: "automation" });
+    expect(resolveLaunchAnchor({ predecessor, requested: "new-human-input", trace })).toEqual(
+      predecessor,
+    );
+    journal.createRun({
+      runId: "earlier",
+      caps: { maxConcurrency: 1 },
+      spentTokens: 0,
+      status: "running",
+    });
+    journal.appendEvent("earlier", {
+      type: "run-launched",
+      inputId: "automation-synthetic:manual:1",
+    });
+    expect(readRunLaunchAnchor(journal, "earlier")?.modelRequestPurpose).toBe("automation");
+  });
   it("首条 run-launched 的 inputId；没有则 undefined", () => {
     const journal = new InMemoryJournalStore();
     journal.createRun({

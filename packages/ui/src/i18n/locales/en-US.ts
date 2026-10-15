@@ -7400,6 +7400,11 @@ const enUS: Record<string, string> = {
     "I used the ZCode Highspeed card and saved {duration}s. Give it a try. Download ZCode https://zcode.z.ai",
   "globalNotice.highspeed.imageSummary": "{tokens} tokens · {duration}s saved",
   "globalNotice.highspeed.close": "Close Highspeed share card",
+  "chat.toolbar.model.systemModels": "System models",
+  "chat.toolbar.model.customModels": "Custom models",
+  "chat.toolbar.model.systemEmpty": "No system models available",
+  "chat.toolbar.model.customEmpty": "No custom models yet",
+  "chat.toolbar.model.addCustom": "Add custom model",
   ...requestSecurityMessagesEnUS,
 };
 

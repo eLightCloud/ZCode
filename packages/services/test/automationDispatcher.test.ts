@@ -13,15 +13,16 @@ import { AutomationRepo, createAutomationDispatcher } from "../src/node.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-async function fixture(manual = false) {
+async function fixture(manual = false, providerId = "controlled") {
   const directory = await mkdtemp(join(tmpdir(), "native-dispatcher-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
   cleanups.push(async () => repo.close());
   const selection = {
-    providerId: "controlled",
+    providerId,
     modelId: "proof",
     options: { reasoningLevel: "medium" },
   };
@@ -63,7 +64,9 @@ async function fixture(manual = false) {
   }));
   const services = new ServiceCollection()
     .register(IZCodeTaskService, service as unknown as IZCodeTaskService)
-    .register(IModelSelectionService, { getView: modelView } as unknown as IModelSelectionService);
+    .register(IModelSelectionService, {
+      getView: modelView,
+    } as unknown as IModelSelectionService);
   const report = vi.fn();
   const warnings = vi.fn();
   const dispatcher = createAutomationDispatcher({
@@ -104,7 +107,11 @@ describe("native shared automation dispatcher", () => {
     const privateError = new Error("synthetic-private-write-response");
     vi.spyOn(f.repo, "markRunOutcome").mockRejectedValueOnce(privateError);
     f.service.setTaskUnread.mockRejectedValueOnce(privateError);
-    f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome: "succeeded" });
+    f.terminal.fire({
+      taskId: "native-session",
+      inputId: f.request.runId,
+      outcome: "succeeded",
+    });
     await f.dispatcher.dispose();
     const diagnostics = f.warnings.mock.calls.map((call) => call[2]);
     expect(diagnostics).toEqual(
@@ -158,7 +165,10 @@ describe("native shared automation dispatcher", () => {
 
   it("resumes bound tasks, applies the saved model and never reports a new session", async () => {
     const f = await fixture();
-    await f.dispatcher.dispatch({ ...f.request, targetTaskId: "bound-session" });
+    await f.dispatcher.dispatch({
+      ...f.request,
+      targetTaskId: "bound-session",
+    });
     expect(f.service.createTask).not.toHaveBeenCalled();
     expect(f.service.resumeTask).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "bound-session" }),
@@ -186,9 +196,17 @@ describe("native shared automation dispatcher", () => {
     async (outcome) => {
       const f = await fixture(true);
       await f.dispatcher.dispatch(f.request);
-      f.terminal.fire({ taskId: "native-session", inputId: "unrelated", outcome: "succeeded" });
+      f.terminal.fire({
+        taskId: "native-session",
+        inputId: "unrelated",
+        outcome: "succeeded",
+      });
       expect(await f.repo.runNow(f.automation.automationId, { now: Date.now() })).toBeNull();
-      f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome });
+      f.terminal.fire({
+        taskId: "native-session",
+        inputId: f.request.runId,
+        outcome,
+      });
       await vi.waitFor(async () =>
         expect((await f.repo.getRun(f.request.runId))?.outcome).toBe(outcome),
       );
@@ -239,11 +257,38 @@ describe("native shared automation dispatcher", () => {
     });
     await Promise.resolve();
     expect(done).toBe(false);
-    f.terminal.fire({ taskId: "native-session", inputId: f.request.runId, outcome: "succeeded" });
+    f.terminal.fire({
+      taskId: "native-session",
+      inputId: f.request.runId,
+      outcome: "succeeded",
+    });
     accept();
     await work;
     await disposal;
     expect((await f.repo.getRun(f.request.runId))?.outcome).toBe("succeeded");
     await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("disposed");
   });
+});
+
+it.each([false, true])(
+  "rejects an application model before native admission (fixed=%s)",
+  async (fixed) => {
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_TOKEN", "synthetic-native-workload-token-only");
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_BASE_URL", "http://127.0.0.1:1/v1");
+    const f = await fixture(false, "application:fixture");
+    if (fixed) await f.repo.fixRunModelSelection(f.request.runId, f.selection);
+    await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("Automation");
+    expect(f.service.createTask).not.toHaveBeenCalled();
+    expect(f.service.resumeTask).not.toHaveBeenCalled();
+    expect(f.service.sendPrompt).not.toHaveBeenCalled();
+  },
+);
+
+it("keeps personal-provider automation available in an application host", async () => {
+  vi.stubEnv("ZCODE_APPLICATION_MODEL_TOKEN", "synthetic-native-workload-token-only");
+  vi.stubEnv("ZCODE_APPLICATION_MODEL_BASE_URL", "http://127.0.0.1:1/v1");
+  const f = await fixture();
+  await f.dispatcher.dispatch(f.request);
+  expect(f.service.createTask).toHaveBeenCalledOnce();
+  expect(f.service.sendPrompt).toHaveBeenCalledOnce();
 });

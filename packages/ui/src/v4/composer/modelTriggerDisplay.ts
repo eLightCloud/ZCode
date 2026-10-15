@@ -113,6 +113,8 @@ export function resolveV4ModelTriggerDisplay({
   }
 
   const modelLabel = selectedItem.name;
+  // 系统分组已解释通道，收起时仅显示型号；完整身份仍供 Tooltip 和无障碍名称使用。
+  if (selectedGroup.key === "application-models:system") return { fullLabel, modelLabel };
   const normalizedProviderName = providerName?.trim() || providerId;
   if (
     !normalizedProviderName ||

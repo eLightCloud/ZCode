@@ -433,9 +433,14 @@ export function ZCodeIntlProvider({
 
 /** 获取 intl 上下文 */
 export function useZCodeIntl(): IntlContextValue {
-  const ctx = useContext(IntlContext);
+  const ctx = useOptionalZCodeIntl();
   if (!ctx) {
     throw new Error("useZCodeIntl 必须在 ZCodeIntlProvider 内使用");
   }
   return ctx;
+}
+
+/** Presentational controls can retain caller labels when mounted without an app locale. */
+export function useOptionalZCodeIntl(): IntlContextValue | null {
+  return useContext(IntlContext);
 }

@@ -25,6 +25,8 @@ import {
 export interface RunLaunchAnchor {
   /** 发起 run 那一轮的 inputId（中枢直接启动为铸出的 UUID v7）。 */
   inputId: string;
+  /** Host-owned credential restriction; survives resume and amend with the launch origin. */
+  modelRequestPurpose?: "automation";
 }
 
 /**
@@ -84,7 +86,15 @@ export function readRunLaunchAnchor(
   runId: string,
 ): RunLaunchAnchor | undefined {
   const launched = firstRunLaunched(journal, runId);
-  return launched === undefined ? undefined : { inputId: launched.inputId };
+  return launched === undefined
+    ? undefined
+    : {
+        inputId: launched.inputId,
+        ...(launched.modelRequestPurpose === "automation" ||
+        launched.inputId.startsWith("automation-")
+          ? { modelRequestPurpose: "automation" }
+          : {}),
+      };
 }
 
 /**

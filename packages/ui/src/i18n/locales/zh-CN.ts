@@ -7042,6 +7042,11 @@ const zhCN: Record<string, string> = {
     "我用 ZCode 高速卡节省了 {duration} 秒的时间，你也来试试吧。下载 ZCode https://zcode.z.ai",
   "globalNotice.highspeed.imageSummary": "{tokens} tokens · 节省 {duration} 秒",
   "globalNotice.highspeed.close": "关闭加速分享卡片",
+  "chat.toolbar.model.systemModels": "系统模型",
+  "chat.toolbar.model.customModels": "自定义模型",
+  "chat.toolbar.model.systemEmpty": "暂无可用系统模型",
+  "chat.toolbar.model.customEmpty": "尚未添加自定义模型",
+  "chat.toolbar.model.addCustom": "添加自定义模型",
   ...requestSecurityMessagesZhCN,
 };
 

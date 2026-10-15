@@ -23,7 +23,9 @@ const SCRIPT = ['const a = agent("a");', 'const r = await a.ask("hello");', "ret
 describe("run metadata through the real entry point", () => {
   it("forwards scriptText / scriptHash / parentSessionId / cwd / toolCallId onto the journaled run record", async () => {
     const journal = new InMemoryJournalStore();
-    const driver = new AutoDriver(journal, { asks: { "ask#1": () => ({ type: "text", finalText: "hi" }) } });
+    const driver = new AutoDriver(journal, {
+      asks: { "ask#1": () => ({ type: "text", finalText: "hi" }) },
+    });
 
     const settlement = await runWorkflowScript({
       scriptText: SCRIPT,
@@ -78,7 +80,11 @@ describe("run metadata through the real entry point", () => {
         return driver;
       },
       timeoutMs: 20000,
-      launch: { inputId: "input-origin", subagentModel: "zhipu/glm-5.3-flash$high" },
+      launch: {
+        inputId: "input-origin",
+        subagentModel: "zhipu/glm-5.3-flash$high",
+        modelRequestPurpose: "automation",
+      },
     });
 
     const launched = journal
@@ -87,6 +93,7 @@ describe("run metadata through the real entry point", () => {
     expect(launched?.event).toEqual({
       type: "run-launched",
       inputId: "input-origin",
+      modelRequestPurpose: "automation",
       // 档位段原样带着走：`$high` 是选择的一部分，宿主从这条事件读回整串。
       subagentModel: "zhipu/glm-5.3-flash$high",
     });
@@ -130,7 +137,7 @@ describe("run metadata through the real entry point", () => {
     const driver = new AutoDriver(journal, {});
 
     const settlement = await runWorkflowScript({
-    cwd: TEST_CWD,
+      cwd: TEST_CWD,
       lowered: "return 7;",
       runId: RUN,
       caps: { maxConcurrency: 16 },
@@ -159,7 +166,7 @@ describe("run metadata through the real entry point", () => {
     const driver = new AutoDriver(journal, {});
 
     await runWorkflowScript({
-    cwd: TEST_CWD,
+      cwd: TEST_CWD,
       lowered: "return 1;",
       runId: RUN,
       caps: { maxConcurrency: 16 },
@@ -181,7 +188,7 @@ describe("run metadata through the real entry point", () => {
     const driver = new AutoDriver(journal, {});
 
     await runWorkflowScript({
-    cwd: TEST_CWD,
+      cwd: TEST_CWD,
       lowered: "return 1;",
       runId: RUN,
       caps: { maxConcurrency: 16 },
@@ -203,7 +210,9 @@ describe("run metadata through the real entry point", () => {
   it("rejects a resume whose scriptHash does not match the journaled one", async () => {
     // 端到端地证明这条校验现在有比对对象了：第一趟落库哈希，第二趟换一个哈希即被拒。
     const journal = new InMemoryJournalStore();
-    const driver = new AutoDriver(journal, { asks: { "ask#1": () => ({ type: "text", finalText: "hi" }) } });
+    const driver = new AutoDriver(journal, {
+      asks: { "ask#1": () => ({ type: "text", finalText: "hi" }) },
+    });
     const base = {
       runId: RUN,
       caps: { maxConcurrency: 16 },
@@ -213,7 +222,7 @@ describe("run metadata through the real entry point", () => {
     } as const;
 
     await runWorkflowScript({
-    cwd: TEST_CWD,
+      cwd: TEST_CWD,
       ...base,
       scriptText: SCRIPT,
       scriptHash: "hash-v1",
@@ -227,7 +236,7 @@ describe("run metadata through the real entry point", () => {
     const resumed = new AutoDriver(journal, {});
     await expect(
       runWorkflowScript({
-    cwd: TEST_CWD,
+        cwd: TEST_CWD,
         ...base,
         scriptText: `${SCRIPT}\n// edited`,
         scriptHash: "hash-v2",

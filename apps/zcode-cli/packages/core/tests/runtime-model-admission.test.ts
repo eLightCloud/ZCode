@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createSessionId,
+  createRootTraceContext,
+  type QueryId,
   runWithModelInvocationContext,
   type ModelInvocationContext,
   type ModelRequestAdmission,
@@ -76,6 +78,181 @@ function modelFactoryWithWebSearch(requests: SeenRequest[]) {
 }
 
 describe("runtime model factory binds admission and retry budget (v3 决策 42)", () => {
+  it("keeps Automation provenance on a background wake without classifying a later human input as Automation", async () => {
+    const requests: SeenRequest[] = [];
+    const runtime = createTestAgentRuntime(
+      createSessionId("automatic-wake"),
+      {
+        modelSelection,
+        modelStreaming: "off",
+      },
+      {
+        eventStore: createTestSessionEventStore(),
+        modelFactory: modelFactoryWithWebSearch(requests),
+      },
+    );
+    const traceContext = createRootTraceContext({
+      queryId: "automation-synthetic:manual:1" as QueryId,
+    });
+    await runtime.executeTurn("background result", undefined, {
+      inputSource: "background_task",
+      inputId: "fresh-wake-id",
+      traceContext,
+    });
+    expect(requests.every((request) => request.modelRequestPurpose === "automation")).toBe(true);
+    const previous = requests.length;
+    await runtime.executeTurn("human follow-up", undefined, {
+      inputId: "fresh-human-id",
+      traceContext,
+    });
+    expect(
+      requests.slice(previous).every((request) => request.modelRequestPurpose === undefined),
+    ).toBe(true);
+  });
+  it.each(["guide"] as const)(
+    "preserves Automation purpose through busy %s admission",
+    async (queueDelivery) => {
+      let started!: () => void;
+      let release!: () => void;
+      const firstStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const firstReleased = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const purposes: unknown[] = [];
+      const runtime = createTestAgentRuntime(
+        createSessionId("busy-purpose-" + queueDelivery),
+        {
+          modelSelection,
+          modelStreaming: "off",
+        },
+        {
+          eventStore: createTestSessionEventStore(),
+          modelFactory: createTestModelFactory({
+            async generateText(request, observation) {
+              purposes.push(observation.invocationContext?.modelRequestPurpose);
+              if (purposes.length === 1) {
+                started();
+                await firstReleased;
+              }
+              return {
+                text: "done",
+                finishReason: "stop",
+                model: request.model,
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              } as never;
+            },
+          }),
+        },
+      );
+      const first = runtime.executeTurn("first human turn");
+      await firstStarted;
+      const admitted = await runtime.admitPrompt("saved rule input", undefined, {
+        automationId: "automation-synthetic",
+        inputId: "automation-synthetic:manual:1",
+        delivery: "auto",
+        queueDelivery,
+        toolDisallowlist: ["CronCreate", "CronUpdate", "CronDelete"],
+      });
+      expect(admitted.kind).toBe("queued");
+      release();
+      await first;
+      await vi.waitFor(() => expect(purposes.at(-1)).toBe("automation"));
+    },
+  );
+  it("carries Automation purpose through tool calls and clears it for a later human turn", async () => {
+    const requests: SeenRequest[] = [];
+    const runtime = createTestAgentRuntime(
+      createSessionId("automation-purpose"),
+      {
+        modelSelection,
+        modelStreaming: "off",
+      },
+      {
+        eventStore: createTestSessionEventStore(),
+        modelFactory: modelFactoryWithWebSearch(requests),
+      },
+    );
+    await runtime.executeTurn("search", undefined, { automationId: "automation-synthetic" });
+    expect(requests.length).toBeGreaterThan(1);
+    expect(requests.every((request) => request.modelRequestPurpose === "automation")).toBe(true);
+    const previous = requests.length;
+    await runtime.executeTurn("human follow-up");
+    expect(requests.length).toBeGreaterThan(previous);
+    expect(
+      requests.slice(previous).every((request) => request.modelRequestPurpose === undefined),
+    ).toBe(true);
+  });
+
+  it.each(["subagent_child", "workflow_child", "nested_workflow_child"] as const)(
+    "retains the purpose on a %s model after its parent scope completes",
+    async (taskType) => {
+      const requests: SeenRequest[] = [];
+      const runtime = runWithModelInvocationContext({ modelRequestPurpose: "automation" }, () =>
+        createTestAgentRuntime(
+          createSessionId("derived-purpose-" + taskType),
+          {
+            modelSelection,
+            modelStreaming: "off",
+            taskType,
+          },
+          {
+            eventStore: createTestSessionEventStore(),
+            modelFactory: modelFactoryWithWebSearch(requests),
+          },
+        ),
+      );
+      await runtime.executeTurn("search after parent completed");
+      expect(requests.length).toBeGreaterThan(1);
+      expect(requests.every((request) => request.modelRequestPurpose === "automation")).toBe(true);
+    },
+  );
+
+  it("captures inherited purpose before a derived command waits in an existing queue", async () => {
+    let started!: () => void;
+    let release!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const firstReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const purposes: unknown[] = [];
+    const runtime = createTestAgentRuntime(
+      createSessionId("queued-purpose"),
+      {
+        modelSelection,
+        modelStreaming: "off",
+      },
+      {
+        eventStore: createTestSessionEventStore(),
+        modelFactory: createTestModelFactory({
+          async generateText(request, observation) {
+            purposes.push(observation.invocationContext?.modelRequestPurpose);
+            if (purposes.length === 1) {
+              started();
+              await firstReleased;
+            }
+            return {
+              text: "done",
+              finishReason: "stop",
+              model: request.model,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            } as never;
+          },
+        }),
+      },
+    );
+    const first = runtime.executeTurn("first human turn");
+    await firstStarted;
+    const second = runWithModelInvocationContext({ modelRequestPurpose: "automation" }, () =>
+      runtime.executeTurn("queued derived turn"),
+    );
+    release();
+    await Promise.all([first, second]);
+    expect(purposes).toEqual([undefined, "automation"]);
+  });
   it("WebSearch 工具内部的模型请求带 runtime 的准入端口与 workflow_child 的无上限预算", async () => {
     const admission = admissionStub();
     const requests: SeenRequest[] = [];

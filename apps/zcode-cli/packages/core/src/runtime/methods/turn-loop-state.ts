@@ -133,7 +133,9 @@ export interface RegularTurnLoopState {
   userMessageId: MessageId;
 }
 
-export function isAutomationMutationRestrictedTurn(state: RegularTurnLoopState): boolean {
+export function isAutomationMutationRestrictedTurn(
+  state: Pick<RegularTurnLoopState, "automationId" | "turnTraceContext" | "toolDisallowlist">,
+): boolean {
   if (state.automationId?.trim()) return true;
   if (state.turnTraceContext.queryId?.trim().startsWith(AUTOMATION_QUERY_ID_PREFIX)) return true;
 

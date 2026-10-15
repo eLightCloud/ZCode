@@ -22,7 +22,7 @@ function replacePlistString(plist, key, value) {
   );
 }
 
-function appendProtocolDeclaration(plist) {
+function appendProtocolDeclaration(plist, appName) {
   if (plist.includes(`<string>${DEV_ELECTRON_PROTOCOL_SCHEME}</string>`)) {
     return plist;
   }
@@ -32,7 +32,7 @@ function appendProtocolDeclaration(plist) {
     throw new Error("Dev Electron Info.plist is missing its root dict");
   }
 
-  const protocolDeclaration = `\n\t<key>CFBundleURLTypes</key>\n\t<array>\n\t\t<dict>\n\t\t\t<key>CFBundleURLName</key>\n\t\t\t<string>${DEV_ELECTRON_APP_NAME}</string>\n\t\t\t<key>CFBundleURLSchemes</key>\n\t\t\t<array>\n\t\t\t\t<string>${DEV_ELECTRON_PROTOCOL_SCHEME}</string>\n\t\t\t</array>\n\t\t</dict>\n\t</array>\n`;
+  const protocolDeclaration = `\n\t<key>CFBundleURLTypes</key>\n\t<array>\n\t\t<dict>\n\t\t\t<key>CFBundleURLName</key>\n\t\t\t<string>${escapeXml(appName)}</string>\n\t\t\t<key>CFBundleURLSchemes</key>\n\t\t\t<array>\n\t\t\t\t<string>${DEV_ELECTRON_PROTOCOL_SCHEME}</string>\n\t\t\t</array>\n\t\t</dict>\n\t</array>\n`;
   return `${plist.slice(0, closingDictIndex)}${protocolDeclaration}${plist.slice(closingDictIndex)}`;
 }
 
@@ -41,15 +41,23 @@ function appendProtocolDeclaration(plist) {
  * raw Electron 的 Info.plist 没有 CFBundleURLTypes，系统只能把 zcode 交给
  * com.github.Electron；这里仅修改启动副本，避免污染 node_modules 中的 Electron。
  */
-export function patchDevElectronInfoPlist(plist) {
-  let patched = replacePlistString(plist, "CFBundleDisplayName", DEV_ELECTRON_APP_NAME);
-  patched = replacePlistString(patched, "CFBundleIdentifier", DEV_ELECTRON_APP_BUNDLE_ID);
-  patched = replacePlistString(patched, "CFBundleName", DEV_ELECTRON_APP_NAME);
-  return appendProtocolDeclaration(patched);
+export function patchDevElectronInfoPlist(
+  plist,
+  { appName = DEV_ELECTRON_APP_NAME, appBundleId = DEV_ELECTRON_APP_BUNDLE_ID } = {},
+) {
+  let patched = replacePlistString(plist, "CFBundleDisplayName", appName);
+  patched = replacePlistString(patched, "CFBundleIdentifier", appBundleId);
+  patched = replacePlistString(patched, "CFBundleName", appName);
+  return appendProtocolDeclaration(patched, appName);
 }
 
-export function resolveDevElectronAppBundlePath({ runtimeRoot, electronVersion, arch }) {
-  return posix.join(runtimeRoot, `${electronVersion}-${arch}`, `${DEV_ELECTRON_APP_NAME}.app`);
+export function resolveDevElectronAppBundlePath({
+  runtimeRoot,
+  electronVersion,
+  arch,
+  appName = DEV_ELECTRON_APP_NAME,
+}) {
+  return posix.join(runtimeRoot, `${electronVersion}-${arch}`, `${appName}.app`);
 }
 
 export async function prepareDevElectronAppBundle({
@@ -57,8 +65,17 @@ export async function prepareDevElectronAppBundle({
   runtimeRoot,
   electronVersion,
   arch,
+  env = process.env,
 }) {
-  const appPath = resolveDevElectronAppBundlePath({ runtimeRoot, electronVersion, arch });
+  // Dock 提示读取启动副本的 plist，仅 app.setName 无法覆盖硬编码的原生 Dev 名称。
+  const appName =
+    env.ZCODE_DESKTOP_APPLICATION_NAME?.trim() ||
+    env.ZCODE_APPLICATION_NAME?.trim() ||
+    DEV_ELECTRON_APP_NAME;
+  const appBundleId = env.ZCODE_APPLICATION_ID?.trim()
+    ? `${env.ZCODE_APPLICATION_ID.trim()}.dev`
+    : DEV_ELECTRON_APP_BUNDLE_ID;
+  const appPath = resolveDevElectronAppBundlePath({ runtimeRoot, electronVersion, arch, appName });
   const infoPlistPath = posix.join(appPath, "Contents", "Info.plist");
   const sourceExecutablePath = posix.join(electronAppPath, "Contents", "MacOS", "Electron");
   const existingExecutablePath = posix.join(appPath, "Contents", "MacOS", "Electron");
@@ -77,6 +94,8 @@ export async function prepareDevElectronAppBundle({
   const sourceStamp = sourceStats
     ? JSON.stringify({
         format: DEV_ELECTRON_BUNDLE_FORMAT,
+        appName,
+        appBundleId,
         size: sourceStats.size,
         mtimeMs: sourceStats.mtimeMs,
       })
@@ -87,7 +106,7 @@ export async function prepareDevElectronAppBundle({
     await access(existingExecutablePath);
     const existingStamp = await readFile(sourceStampPath, "utf8");
     needsCopy =
-      !existingInfoPlist.includes(`<string>${DEV_ELECTRON_APP_BUNDLE_ID}</string>`) ||
+      !existingInfoPlist.includes(`<string>${escapeXml(appBundleId)}</string>`) ||
       !existingInfoPlist.includes(`<string>${DEV_ELECTRON_PROTOCOL_SCHEME}</string>`) ||
       sourceStamp === undefined ||
       existingStamp !== sourceStamp;
@@ -106,7 +125,10 @@ export async function prepareDevElectronAppBundle({
     // 等 macOS 沙箱子进程只允许读本 bundle 目录，顺链接出去会被拦，表现为
     // "icudtl.dat not found in bundle" 然后 "GPU process isn't usable. Goodbye."。
     await cp(electronAppPath, appPath, { recursive: true, verbatimSymlinks: true });
-    const patchedInfoPlist = patchDevElectronInfoPlist(await readFile(infoPlistPath, "utf8"));
+    const patchedInfoPlist = patchDevElectronInfoPlist(await readFile(infoPlistPath, "utf8"), {
+      appName,
+      appBundleId,
+    });
     await writeFile(infoPlistPath, patchedInfoPlist, "utf8");
     // 指纹最后写：中途失败时下次仍会判定为需要重拷，不会留下半成品缓存。
     if (sourceStamp !== undefined) await writeFile(sourceStampPath, sourceStamp, "utf8");
@@ -114,6 +136,9 @@ export async function prepareDevElectronAppBundle({
 
   return {
     appPath,
+    appName,
+    appBundleId,
+    rebuilt: needsCopy,
     executablePath: posix.join(appPath, "Contents", "MacOS", "Electron"),
   };
 }

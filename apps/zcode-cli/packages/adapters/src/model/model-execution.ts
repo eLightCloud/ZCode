@@ -1,3 +1,22 @@
+import {
+  ProviderBusinessError,
+  isNonZeroProviderCode,
+  providerCodeToStatusCode,
+  toProviderCode,
+  readProviderMessage,
+  readProviderRequestId,
+  summarizeProviderBusinessBody,
+  safeParseRecord,
+  asRecord,
+  type AiSdkProviderKind,
+  type ProviderCode,
+} from "./provider-business-error.js";
+export {
+  ProviderBusinessError,
+  isProviderBusinessError,
+  type ProviderBusinessErrorOptions,
+  type AiSdkProviderKind,
+} from "./provider-business-error.js";
 import { withoutRequestVerificationHeaders } from "@zcode/shared";
 /* eslint-disable max-lines -- AI SDK 模型执行装配集中维护 provider factory、鉴权和网络错误适配，拆分会让状态同步更脆弱。 */
 // ============================================================
@@ -14,6 +33,7 @@ import {
   type ModelOptionValues,
 } from "@zcode/model-option-map";
 import {
+  getCurrentModelInvocationContext,
   type Logger,
   type ModelId,
   type ModelProviderId,
@@ -36,11 +56,10 @@ import {
   withoutModelQuerySourceHeader,
 } from "./model-request-headers.js";
 
-export type AiSdkProviderKind = "openai" | "anthropic" | "openai-compatible";
-
 export type EnvRecord = Record<string, string | undefined>;
 
 interface AiSdkProviderConfig {
+  group: RegistryProviderConfig["group"];
   access: RegistryProviderConfig["access"];
   kind: AiSdkProviderKind;
   apiKey?: string;
@@ -92,7 +111,6 @@ export interface AiSdkBoundModelResolution {
 
 type LanguageModelFactory = (modelId: string) => LanguageModel;
 type ProviderFetch = typeof globalThis.fetch;
-type ProviderCode = string | number;
 
 export interface ProviderBusinessErrorFetchOptions {
   caCertFile?: string;
@@ -105,61 +123,8 @@ export interface ProviderBusinessErrorFetchOptions {
   noProxy?: string;
 }
 
-export interface ProviderBusinessErrorOptions {
-  providerCode?: ProviderCode;
-  providerId: string;
-  providerKind: AiSdkProviderKind;
-  providerMessage?: string;
-  providerRequestId?: string;
-  responseBodySummary?: Record<string, unknown>;
-  responseHeaders?: Record<string, string>;
-  responseStatus?: number;
-  statusCode?: number;
-}
-
-export class ProviderBusinessError extends Error {
-  readonly code = "PROVIDER_BUSINESS_ERROR";
-  readonly isProviderBusinessError = true;
-  readonly providerCode?: ProviderCode;
-  readonly providerId: string;
-  readonly providerKind: AiSdkProviderKind;
-  readonly providerMessage?: string;
-  readonly providerRequestId?: string;
-  readonly responseBodySummary?: Record<string, unknown>;
-  readonly responseHeaders?: Record<string, string>;
-  readonly responseStatus?: number;
-  readonly statusCode?: number;
-
-  constructor(options: ProviderBusinessErrorOptions) {
-    const providerMessage =
-      normalizeProviderMessage(options.providerMessage) ?? "Provider returned a business error.";
-    super(providerMessage);
-    this.name = "ProviderBusinessError";
-    this.providerCode = options.providerCode;
-    this.providerId = options.providerId;
-    this.providerKind = options.providerKind;
-    this.providerMessage = providerMessage;
-    this.providerRequestId = options.providerRequestId;
-    this.responseBodySummary = options.responseBodySummary;
-    this.responseHeaders = options.responseHeaders;
-    this.responseStatus = options.responseStatus;
-    this.statusCode = options.statusCode;
-  }
-}
-
-export function isProviderBusinessError(error: unknown): error is ProviderBusinessError {
-  if (error instanceof ProviderBusinessError) {
-    return true;
-  }
-
-  const record = asRecord(error);
-  return record?.isProviderBusinessError === true && record.name === "ProviderBusinessError";
-}
-
 const MAX_BUSINESS_ERROR_BODY_CHARS = 64_000;
-const MAX_PROVIDER_MESSAGE_CHARS = 1_000;
 const PROVIDER_BUSINESS_ERROR_BODY_CLEANUP_TIMEOUT_MS = 1_000;
-const PROVIDER_BUSINESS_ERROR_WRAPPER_CODE = "PROVIDER_BUSINESS_ERROR";
 const SSE_FRAME_SEPARATOR_PATTERN = /\r\n\r\n|\n\n|\r\r/;
 const AUTHORIZATION_HEADER_NAME = "Authorization";
 
@@ -218,6 +183,15 @@ export class AiSdkModelExecution {
     readonly supportsJsonSchemaOutput: boolean;
   }): AiSdkModelSnapshot {
     const configuredProvider = toAiSdkProviderConfig(input.providerId, input.providerConfig);
+    if (configuredProvider.group === "application-managed") {
+      // 托管 Key 不能经 Provider 快照到达 Renderer；仅在原生执行进程内装配私有身份。
+      const baseURL = this.env["ZCODE_APPLICATION_MODEL_BASE_URL"];
+      const token = this.env["ZCODE_APPLICATION_MODEL_TOKEN"];
+      if (!baseURL || configuredProvider.baseURL !== baseURL || !token || token.length < 32)
+        throw new Error("application_model_credentials_unavailable");
+      configuredProvider.apiKey = token;
+      configuredProvider.headers = withoutModelAuthHeaders(configuredProvider.headers);
+    }
     // 重构后模型 SDK 曾只接到用户 Header，漏掉版本和站点归因；在公共绑定边界恢复，
     // 不依赖签名成功，不给各业务重复补头，也不修改 Provider 或已绑定 Model 的配置。
     configuredProvider.headers = mergeModelRequestHeaders(
@@ -284,19 +258,45 @@ export class AiSdkModelExecution {
     const apiKey = this.resolveApiKey(providerConfig);
     // SDK 会合并 factory 默认 header；必须在这里去掉静态来源，才能保证缺失时真正省略。
     const headers = withoutModelQuerySourceHeader(providerConfig.headers);
-    const networkTransport = this.resolveProviderTransport(providerId);
+    const managed = providerConfig.group === "application-managed";
+    const networkTransport = managed
+      ? (this.baseTransport ?? globalThis.fetch)
+      : this.resolveProviderTransport(providerId);
     // ID 属于当前 attempt，不能放入按 Provider 缓存的 transport，避免切换账号后串用。
-    const providerTransport = this.endpointRoutingPort
-      ? createProviderEndpointRoutingFetch({
-          fetch: networkTransport,
-          routingPort: this.endpointRoutingPort,
-          apiKeyId,
-        })
-      : networkTransport;
+    const providerTransport =
+      !managed && this.endpointRoutingPort
+        ? createProviderEndpointRoutingFetch({
+            fetch: networkTransport,
+            routingPort: this.endpointRoutingPort,
+            apiKeyId,
+          })
+        : networkTransport;
     const requestTransport = this.requestSecurity.protectTransport({
       providerId,
       providerConfig,
-      transport: providerTransport,
+      // 选择器只检查主模型；实际传输还须阻止自动化派生调用借用交互宿主凭据。
+      transport: managed
+        ? async (input, init) => {
+            const context = getCurrentModelInvocationContext();
+            if (context?.modelRequestPurpose === "automation") {
+              this.logger?.warn("Application Automation credentials are unavailable", {
+                event: "model.admission",
+                outcome: "rejected",
+                reason_code: "application_automation_credentials_unavailable",
+                providerId,
+                traceId: context.traceContext?.traceId,
+              });
+              throw new ProviderBusinessError({
+                providerId,
+                providerKind: providerConfig.kind,
+                providerCode: "application_automation_credentials_unavailable",
+                providerMessage: "application_automation_credentials_unavailable",
+                statusCode: 403,
+              });
+            }
+            return providerTransport(input, init);
+          }
+        : providerTransport,
     });
     const fetch = createProviderBusinessErrorFetch({
       fetch: requestTransport,
@@ -385,6 +385,7 @@ function toAiSdkProviderConfig(
   config: RegistryProviderConfig,
 ): AiSdkProviderConfig {
   const common = {
+    group: config.group,
     ...(config.access.type !== "zhipu-account" && config.access.apiKey
       ? { apiKey: config.access.apiKey }
       : {}),
@@ -942,170 +943,4 @@ function readSseFrame(frame: string): { data?: string; event?: string } {
 
 function trimSseFieldValue(value: string): string {
   return value.startsWith(" ") ? value.slice(1) : value;
-}
-
-function safeParseRecord(value: string): Record<string, unknown> | undefined {
-  try {
-    return asRecord(JSON.parse(value));
-  } catch {
-    return undefined;
-  }
-}
-
-function isNonZeroProviderCode(value: ProviderCode | undefined): boolean {
-  if (value === undefined) {
-    return false;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) && value !== 0;
-  }
-
-  const normalized = value.trim();
-  if (normalized.length === 0) {
-    return false;
-  }
-
-  const numeric = Number(normalized);
-  return Number.isFinite(numeric) ? numeric !== 0 : true;
-}
-
-function providerCodeToStatusCode(value: ProviderCode | undefined): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const statusCode = Math.trunc(value);
-    return isHttpStatusCode(statusCode) ? statusCode : undefined;
-  }
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim();
-  if (!/^\d+$/.test(normalized)) {
-    return undefined;
-  }
-
-  const statusCode = Number(normalized);
-  return isHttpStatusCode(statusCode) ? statusCode : undefined;
-}
-
-function isHttpStatusCode(value: number): boolean {
-  return Number.isInteger(value) && value >= 100 && value <= 599;
-}
-
-function toProviderCode(value: unknown): ProviderCode | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const normalized = value.trim();
-    return normalized.toUpperCase() === PROVIDER_BUSINESS_ERROR_WRAPPER_CODE
-      ? undefined
-      : normalized;
-  }
-  return undefined;
-}
-
-function readProviderMessage(record: Record<string, unknown>): string | undefined {
-  const errorRecord = asRecord(record.error);
-  return (
-    normalizeProviderMessage(record.msg) ??
-    normalizeProviderMessage(record.message) ??
-    normalizeProviderMessage(errorRecord?.msg) ??
-    normalizeProviderMessage(errorRecord?.message) ??
-    normalizeProviderMessage(record.error)
-  );
-}
-
-function readProviderRequestId(record: Record<string, unknown>): string | undefined {
-  const errorRecord = asRecord(record.error);
-  return (
-    normalizeProviderId(record.request_id) ??
-    normalizeProviderId(record.requestId) ??
-    normalizeProviderId(record.id) ??
-    normalizeProviderId(errorRecord?.request_id) ??
-    normalizeProviderId(errorRecord?.requestId) ??
-    normalizeProviderId(errorRecord?.id)
-  );
-}
-
-function normalizeProviderMessage(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim().replace(/\s+/g, " ");
-  if (normalized.length === 0) {
-    return undefined;
-  }
-
-  return normalized.length > MAX_PROVIDER_MESSAGE_CHARS
-    ? `${normalized.slice(0, MAX_PROVIDER_MESSAGE_CHARS)}...`
-    : normalized;
-}
-
-function normalizeProviderId(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim();
-  if (normalized.length === 0) {
-    return undefined;
-  }
-  return normalized.length > MAX_PROVIDER_MESSAGE_CHARS
-    ? `${normalized.slice(0, MAX_PROVIDER_MESSAGE_CHARS)}...`
-    : normalized;
-}
-
-function summarizeProviderBusinessBody(record: Record<string, unknown>): Record<string, unknown> {
-  const summary: Record<string, unknown> = {
-    keys: Object.keys(record).slice(0, 20),
-  };
-
-  copyScalar(record, summary, "success");
-  copyScalar(record, summary, "code");
-  copyScalar(record, summary, "error_code");
-  copyScalar(record, summary, "msg");
-  copyScalar(record, summary, "message");
-  copyScalar(record, summary, "request_id");
-  copyScalar(record, summary, "requestId");
-
-  const errorRecord = asRecord(record.error);
-  if (errorRecord) {
-    const errorSummary: Record<string, unknown> = {
-      keys: Object.keys(errorRecord).slice(0, 20),
-    };
-    copyScalar(errorRecord, errorSummary, "code");
-    copyScalar(errorRecord, errorSummary, "error_code");
-    copyScalar(errorRecord, errorSummary, "msg");
-    copyScalar(errorRecord, errorSummary, "message");
-    copyScalar(errorRecord, errorSummary, "request_id");
-    copyScalar(errorRecord, errorSummary, "requestId");
-    copyScalar(errorRecord, errorSummary, "type");
-    summary.error = errorSummary;
-  }
-
-  return summary;
-}
-
-function copyScalar(
-  source: Record<string, unknown>,
-  target: Record<string, unknown>,
-  key: string,
-): void {
-  const value = source[key];
-  if (
-    value === undefined ||
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    target[key] = value;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

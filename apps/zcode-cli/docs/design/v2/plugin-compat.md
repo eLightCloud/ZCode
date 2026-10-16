@@ -45,6 +45,33 @@ ready Android target, then start a GUI Android Emulator only when no target is
 ready. P0 does not expose a user-configurable UI backend; UI automation uses
 Android SDK `adb` and UI Automator commands.
 
+## Authenticated HTTP plugin sources
+
+The host may set `ZCODE_PLUGIN_SOURCE_CREDENTIALS_FILE` to an absolute private
+deployment file before starting the native process. This is startup trust, not
+plugin configuration. Format: `{ "version": 1, "bindings": [{ "origin":
+"https://packages.example.test", "pathPrefix": "/protected/plugins/", "token":
+"<deployment-secret>" }] }`. Only an exact origin and slash-terminated path
+prefix receive the bearer header. HTTPS is required except loopback development.
+The file must be a regular non-symlink file, private on POSIX, at most 64 KiB;
+invalid configuration fails closed with a fixed diagnostic that contains no
+credentials. Tokens are read for each fetch, never persisted to manifests,
+source records, protocol results or logs. An authenticated fetch rejects all
+redirects. Unconfigured public sources retain their existing behavior.
+
+Both marketplace JSON and ZIP download use the same adapter-side resolver.
+An optional host-owned `transportOrigin` maps the logical source origin to a
+private gateway without changing persisted plugin identity; paths and queries
+are preserved. HTTPS is required for that transport unless a deployment
+explicitly sets `allowInsecureTransport: true` for local development. The file
+is trusted startup input; manifests cannot request remapping or auth injection.
+Manifest-supplied Authorization/Cookie headers remain forbidden. The server
+owns actor/tenant authorization and must recheck each download; native owns
+integrity, archive validation and installation. Each host using private sources
+requires an isolated data root and a principal-specific binding. A shared OS
+account with filesystem access is not an untrusted tenant boundary. Regression
+coverage includes origin/path mismatch, insecure file, rotation and redirects.
+
 ## Storage Layout
 
 ZCode stores plugin state under the CLI storage root:

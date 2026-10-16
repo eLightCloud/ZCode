@@ -20,6 +20,7 @@ import {
 import { enumeratePluginComponents, type PluginComponentGroup } from "./plugin-components.js";
 import { applyNetworkEgressEnv } from "../network/subprocess-env.js";
 import { createNodeWebFetchHttpClientAdapter } from "../http/index.js";
+import { pluginHttpHeaders } from "./http-source-credentials.js";
 import { planGitCheckout } from "./git-checkout-plan.js";
 import { writeCdnOfficialMarketplacePartitionSync } from "./official-marketplace.js";
 import {
@@ -660,8 +661,9 @@ async function requestMarketplaceJson(
     maxResponseBytes: MARKETPLACE_JSON_MAX_BYTES,
     timeoutMs,
   });
-  let currentHeaders = headers;
-  let currentUrl = url;
+  const credentials = await pluginHttpHeaders(url, headers);
+  let currentHeaders = credentials.headers;
+  let currentUrl = credentials.url;
   for (let redirectCount = 0; redirectCount <= MARKETPLACE_JSON_MAX_REDIRECTS; redirectCount += 1) {
     const response = await client.request(
       {
@@ -673,6 +675,8 @@ async function requestMarketplaceJson(
       { signal },
     );
     if (isMarketplaceJsonRedirectStatus(response.status)) {
+      if (credentials.authenticated)
+        throw new Error("Authenticated plugin source redirects are forbidden");
       const location = response.headers.location;
       if (!location) {
         throw new Error(`Marketplace redirect is missing Location header: ${currentUrl}`);

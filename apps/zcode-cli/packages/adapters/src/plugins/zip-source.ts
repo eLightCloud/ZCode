@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import * as yauzl from "yauzl";
 import { createNodeWebFetchHttpClientAdapter } from "../http/index.js";
+import { pluginHttpHeaders } from "./http-source-credentials.js";
 import {
   appendPluginSourceCleanupError,
   cleanupPluginSourceBestEffort,
@@ -175,11 +176,13 @@ async function downloadZipArchive(input: {
     maxResponseBytes: ZIP_DOWNLOAD_MAX_BYTES,
     timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
   });
-  let currentUrl = input.url;
-  let currentHeaders = input.headers;
+  const credentials = await pluginHttpHeaders(input.url, input.headers);
+  let currentUrl = credentials.url;
+  let currentHeaders = credentials.headers;
   for (let redirectCount = 0; redirectCount <= ZIP_MAX_REDIRECTS; redirectCount += 1) {
     throwIfAborted(input.signal);
-    validateZipDownloadUrl(currentUrl);
+    // 受信宿主显式配置的 transportOrigin 已校验协议；远端 manifest 不能开启此路径。
+    if (!credentials.authenticated) validateZipDownloadUrl(currentUrl);
     const response = await client.request(
       {
         headers: currentHeaders,
@@ -192,6 +195,8 @@ async function downloadZipArchive(input: {
     );
 
     if (isRedirectStatus(response.status)) {
+      if (credentials.authenticated)
+        throw new Error("Authenticated plugin source redirects are forbidden");
       const location = response.headers.location;
       if (!location) {
         throw new Error(`Plugin zip download redirect is missing Location header: ${currentUrl}`);

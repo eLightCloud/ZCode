@@ -40,6 +40,14 @@ _Avoid_: 官方 tab、商店 tab
 商店列表页的另一分段，展示全部个人来源的目录，按市场分组。
 _Avoid_: 第三方 tab、我的 tab
 
+Trusted application assembly may append server-authorized catalogs to the
+public/personal segments and provide an application segment. Build-owned
+`publicMarketplaceIds` only extends discovery grouping, and
+`managedMarketplacePrefix` excludes managed native source copies from personal
+discovery. These fields never grant download or resource access. The catalog
+server owns visibility and returns an actor-scoped projection; native retains
+installed/enabled truth. With no assembly, the two native segments are unchanged.
+
 **Featured（精选）**:
 公开分段顶部的策展区，名单由官方 CDN 目录的 `featured` 字段远程控制。仅存在于公开分段。
 _Avoid_: 与 Recommended 混用

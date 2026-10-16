@@ -1,6 +1,9 @@
 /* eslint-disable max-lines -- 插件商店容器统一编排列表/详情、市场源对话框、卸载确认、试用跳转与技能刷新收尾，集中维护保证交互一致。 */
 import { ApplicationPageContent } from "@/root/ApplicationPages.js";
-import { useApplicationPluginStoreSection } from "@/root/ApplicationPluginStoreSection.js";
+import {
+  useApplicationPluginStoreSection,
+  type ApplicationPluginStoreRender,
+} from "@/root/ApplicationPluginStoreSection.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import { logger } from "@/logger.js";
 import { PluginAddMenu } from "@/settings/PluginAddMenu.js";
@@ -533,6 +536,32 @@ export function PluginStorePage({
 
   const detailUpdatePending = canUpdatePluginItem(detailItem);
 
+  function renderCatalog(render: ApplicationPluginStoreRender | undefined) {
+    if (!render) return undefined;
+    return (
+      <ScopedErrorBoundary scope="application-plugin-store">
+        <ApplicationPageContent
+          render={(context) =>
+            render({
+              ...context,
+              query,
+              onInstalled: async () => {
+                if (!workspacePath) return;
+                await initialize({
+                  workspacePath,
+                  workspaceIdentity,
+                  configScope: "user",
+                  pluginService: pluginManagementService,
+                });
+                await refreshAfterPluginChange();
+              },
+            })
+          }
+        />
+      </ScopedErrorBoundary>
+    );
+  }
+
   return (
     <div
       ref={rootRef}
@@ -736,27 +765,11 @@ export function PluginStorePage({
               ? {
                   label: applicationSection.label,
                   marketplaceIds: applicationSection.marketplaceIds,
-                  content: (
-                    <ScopedErrorBoundary scope="application-plugin-store">
-                      <ApplicationPageContent
-                        render={(context) =>
-                          applicationSection.render({
-                            ...context,
-                            query,
-                            onInstalled: async () => {
-                              await initialize({
-                                workspacePath: workspacePath ?? undefined,
-                                workspaceIdentity,
-                                configScope: "user",
-                                pluginService: pluginManagementService,
-                              });
-                              await refreshAfterPluginChange();
-                            },
-                          })
-                        }
-                      />
-                    </ScopedErrorBoundary>
-                  ),
+                  publicMarketplaceIds: applicationSection.publicMarketplaceIds,
+                  managedMarketplacePrefix: applicationSection.managedMarketplacePrefix,
+                  publicContent: renderCatalog(applicationSection.renderPublic),
+                  personalContent: renderCatalog(applicationSection.renderPersonal),
+                  content: renderCatalog(applicationSection.render),
                 }
               : undefined
           }

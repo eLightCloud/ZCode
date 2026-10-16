@@ -56,6 +56,10 @@ export function PluginStoreListView({
     label: string;
     marketplaceIds: readonly string[];
     content: ReactNode;
+    publicContent?: ReactNode;
+    personalContent?: ReactNode;
+    publicMarketplaceIds?: readonly string[];
+    managedMarketplacePrefix?: string;
   };
   items: StorePluginItem[];
   order?: PluginStoreOrder | null;
@@ -91,17 +95,32 @@ export function PluginStoreListView({
     [items, locale],
   );
   const publicItems = useMemo(
-    () => items.filter((item) => isPublicStoreMarketplaceId(item.marketplace)),
-    [items],
+    () =>
+      items.filter(
+        (item) =>
+          isPublicStoreMarketplaceId(item.marketplace) ||
+          applicationSection?.publicMarketplaceIds?.includes(item.marketplace),
+      ),
+    [items, applicationSection?.publicMarketplaceIds],
   );
   const personalItems = useMemo(
     () =>
       items.filter(
         (item) =>
           !isPublicStoreMarketplaceId(item.marketplace) &&
+          !applicationSection?.publicMarketplaceIds?.includes(item.marketplace) &&
+          !(
+            applicationSection?.managedMarketplacePrefix &&
+            item.marketplace.startsWith(applicationSection.managedMarketplacePrefix)
+          ) &&
           !applicationSection?.marketplaceIds.includes(item.marketplace),
       ),
-    [items, applicationSection?.marketplaceIds],
+    [
+      items,
+      applicationSection?.marketplaceIds,
+      applicationSection?.publicMarketplaceIds,
+      applicationSection?.managedMarketplacePrefix,
+    ],
   );
 
   const resolveCategoryLabel = useMemo(() => {
@@ -297,6 +316,8 @@ export function PluginStoreListView({
         )}
       </div>
 
+      {segment === "public" && applicationSection?.publicContent}
+      {segment === "personal" && applicationSection?.personalContent}
       {segment === "application" && applicationSection ? (
         applicationSection.content
       ) : keyword ? (

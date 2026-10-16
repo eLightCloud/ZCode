@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement, type ReactNode } from "react";
+import { createElement, type ComponentProps, type ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
@@ -28,7 +28,12 @@ const item = (name: string, marketplace: string, installed = false) =>
     installed,
     restorable: false,
   }) as StorePluginItem;
-function element(segment: PluginStoreSegment, query = "", content?: ReactNode) {
+function element(
+  segment: PluginStoreSegment,
+  query = "",
+  content?: ReactNode,
+  options?: Partial<NonNullable<ComponentProps<typeof PluginStoreListView>["applicationSection"]>>,
+) {
   return createElement(ZCodeIntlProvider, {
     initialLocale: "zh-CN",
     children: createElement(TooltipProvider, {
@@ -36,6 +41,7 @@ function element(segment: PluginStoreSegment, query = "", content?: ReactNode) {
         items: [
           item("native-personal", "personal-source"),
           item("tenant-scene", "tenant-source", true),
+          ...(options ? [item("managed-private", "vantage-hosted-test"), item("public-extra", "public-extra-source")] : []),
         ],
         marketplaces: [],
         actions: {
@@ -53,7 +59,7 @@ function element(segment: PluginStoreSegment, query = "", content?: ReactNode) {
         onSegmentChange: vi.fn(),
         onOpenManage: vi.fn(),
         applicationSection: content
-          ? { label: "企业", marketplaceIds: ["tenant-source"], content }
+          ? { label: "企业", marketplaceIds: ["tenant-source"], content, ...options }
           : undefined,
       }),
     }),
@@ -99,4 +105,28 @@ it("keeps application results visible when its search query matches no native pl
   ).toBe("true");
   expect(screen.queryByText("没有找到匹配的插件")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "公开", exact: true }));
+});
+it("renders authorized public projection alongside build-owned public sources", () => {
+  render(element("public", "", createElement("p", null, "tenant-only"), {
+    publicMarketplaceIds: ["public-extra-source"],
+    publicContent: createElement("p", null, "public-authorized"),
+    personalContent: createElement("p", null, "personal-authorized"),
+    managedMarketplacePrefix: "vantage-hosted-",
+  }));
+  expect(screen.getByText("public-authorized")).toBeTruthy();
+  expect(screen.getByText("public-extra")).toBeTruthy();
+  expect(screen.queryByText("personal-authorized")).toBeNull();
+  expect(screen.queryByText("managed-private")).toBeNull();
+});
+it("excludes managed and public sources from personal discovery while rendering its authorized projection", () => {
+  render(element("personal", "", createElement("p", null, "tenant-only"), {
+    publicMarketplaceIds: ["public-extra-source"],
+    personalContent: createElement("p", null, "personal-authorized"),
+    managedMarketplacePrefix: "vantage-hosted-",
+  }));
+  expect(screen.getByText("personal-authorized")).toBeTruthy();
+  expect(screen.getByText("native-personal")).toBeTruthy();
+  expect(screen.queryByText("public-extra")).toBeNull();
+  expect(screen.queryByText("managed-private")).toBeNull();
+  expect(screen.getByRole("button", { name: "Tenant Scene" })).toBeTruthy();
 });

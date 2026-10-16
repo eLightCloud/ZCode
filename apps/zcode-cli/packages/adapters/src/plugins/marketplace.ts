@@ -20,6 +20,7 @@ import {
 import { enumeratePluginComponents, type PluginComponentGroup } from "./plugin-components.js";
 import { applyNetworkEgressEnv } from "../network/subprocess-env.js";
 import { createNodeWebFetchHttpClientAdapter } from "../http/index.js";
+import { planGitCheckout } from "./git-checkout-plan.js";
 import { writeCdnOfficialMarketplacePartitionSync } from "./official-marketplace.js";
 import {
   isZipPluginUrlSource,
@@ -1620,13 +1621,10 @@ async function clonePluginSource(
   signal?: AbortSignal,
 ): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "zcode-plugin-src-"));
-  const args = ["clone"];
-  if (!sha) args.push("--depth", "1");
-  if (ref) args.push("--branch", ref);
-  args.push(url, dir);
+  const plan = planGitCheckout({ url, directory: dir, ref, sha });
   try {
-    await execGitCloneWithRetry(args, dir, signal);
-    if (sha) await execGitCommand(["-C", dir, "checkout", sha], signal);
+    await execGitCloneWithRetry(plan.clone, dir, signal);
+    for (const command of plan.afterClone) await execGitCommand(command, signal);
     return dir;
   } catch (error) {
     const cleanupError = await cleanupPluginSourceBestEffort(async () => {
@@ -1849,15 +1847,10 @@ async function cloneMarketplaceSource(
   signal?: AbortSignal,
 ): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "zcode-marketplace-src-"));
-  const args = ["clone", "--depth", "1"];
-  if (ref) args.push("--branch", ref);
-  if (sparsePaths?.length) args.push("--filter=blob:none", "--sparse");
-  args.push(url, dir);
+  const plan = planGitCheckout({ url, directory: dir, ref, sparsePaths });
   try {
-    await execGitCloneWithRetry(args, dir, signal);
-    if (sparsePaths?.length) {
-      await execGitCommand(["-C", dir, "sparse-checkout", "set", ...sparsePaths], signal);
-    }
+    await execGitCloneWithRetry(plan.clone, dir, signal);
+    for (const command of plan.afterClone) await execGitCommand(command, signal);
     return dir;
   } catch (error) {
     await rm(dir, { force: true, recursive: true });

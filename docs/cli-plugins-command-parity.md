@@ -41,6 +41,12 @@
 `dryRun` 仅解析来源字符串，返回占位身份 `dry-run`，不提供 manifest 身份预览。
 真实名称和插件清单以成功注册及 describe 的结果为准。
 
+Git 市场的 `ref` 和独立 Git 插件来源的 `ref` / `sha` 支持完整 40 位提交号。
+系统 Git 路径使用显式 fetch 及 detached checkout 获取该提交，不能把提交号当分支名，
+也不能在提交不存在时回退默认分支。分支、标签、既有短 sha 及 sparse checkout 语义保留；
+执行继续使用原有网络环境、取消、超时和失败清理。回归见 adapters 的
+`git-plugin-source.test.ts`，覆盖旧提交、插件提交、分支 / 标签、稀疏读取及失败时来源不变。
+
 | 项 | zcode 行为 | 原因 |
 |---|---|---|
 | scope 取值 | `user` / `project`（project 映射内部 `workspace`）；`local` 直接报错 | zcode 没有 local settings 层 |

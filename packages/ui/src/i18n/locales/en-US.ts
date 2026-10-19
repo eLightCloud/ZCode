@@ -59,6 +59,19 @@ const enUS: Record<string, string> = {
   "occupationOnboarding.heroDescription":
     "Tackle complex goals with multiple agents.\nStay in control, wherever you are.",
   "occupationOnboarding.title": "What do you do?",
+  "occupationOnboarding.stepIntroduction": "Introduction",
+  "occupationOnboarding.introductionTitle": "Welcome to ZCode",
+  "occupationOnboarding.introductionDescription":
+    "Start with a conversation and let AI help with your everyday work.",
+  "occupationOnboarding.introductionChatTitle": "Work through conversations",
+  "occupationOnboarding.introductionChatDescription":
+    "Describe your goal, add context, and keep collaborating with AI.",
+  "occupationOnboarding.introductionFilesTitle": "Work with files and deliverables",
+  "occupationOnboarding.introductionFilesDescription":
+    "View, edit, and organize your work files and results.",
+  "occupationOnboarding.introductionSkillsTitle": "Use skills and plugins",
+  "occupationOnboarding.introductionSkillsDescription":
+    "Find methods suited to your task and reuse existing capabilities.",
   "occupationOnboarding.description": "Choose the closest match to your everyday work.",
   "occupationOnboarding.office": "Office professional",
   "occupationOnboarding.developer": "Software / Data / AI",

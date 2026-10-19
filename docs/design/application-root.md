@@ -22,6 +22,23 @@ retain ordinary native UI. Mobile uses the same page contract and accessible
 navigation, with no desktop-only service inferred. Business pages and permission
 checks remain in the trusted external assembly, outside the generic UI repository.
 
+## Optional application onboarding introduction
+
+`ApplicationBrand.onboardingIntroduction` may enable a leading introduction in
+the existing occupation onboarding. Unconfigured builds retain the original three
+steps. Configured builds show introduction, occupation, interface mode and
+preferences, with the same native layout, controls and completion record. Copy is
+supplied through `localizedMessages` under `occupationOnboarding.introduction*`
+and `occupationOnboarding.stepIntroduction`; no application or tenant policy is
+hardcoded in the shared UI. The introduction has no editable preference.
+
+Next or Skip on the introduction goes to occupation without saving or clearing an
+answer; Back on occupation returns to the introduction. Close and reopening use
+the existing onboarding owner and completion/dismissal rules. No second completion
+flag, storage schema or unconditional replay is introduced. Telemetry counts the
+displayed steps, reports introduction exposure once per opening, and does not
+report an unseen occupation as an answer when closing on the introduction.
+
 Full-page application navigation uses the selected page button as its visible title;
 the dialog retains an accessible title and focus target. Navigation must clear macOS
 traffic lights and reuse desktop overlay window controls on Windows and Linux.

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import zhCN from "@/i18n/locales/zh-CN.js";
 import enUS from "@/i18n/locales/en-US.js";
 import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
+import { ApplicationBrandProvider } from "@/application-brand.js";
 
 const mocks = vi.hoisted(() => ({
   report: vi.fn(async (_event: unknown) => {}),
@@ -62,9 +63,24 @@ function events(elementName: string) {
     )
     .filter((e) => e.elementName === elementName);
 }
-function mount() {
+function mount(introduction = false) {
+  const content = createElement(
+    StrictMode,
+    null,
+    createElement(OccupationOnboarding, { children: "Home" }),
+  );
   return render(
-    createElement(StrictMode, null, createElement(OccupationOnboarding, { children: "Home" })),
+    introduction
+      ? createElement(ApplicationBrandProvider, {
+          brand: {
+            name: "Example",
+            Mark: () => null,
+            Wordmark: () => null,
+            onboardingIntroduction: true,
+          },
+          children: content,
+        })
+      : content,
   );
 }
 function next() {
@@ -93,6 +109,77 @@ beforeEach(() => {
   };
 });
 afterEach(cleanup);
+describe("optional application introduction in the native onboarding", () => {
+  it.each(["zh", "en"] as const)(
+    "starts automatic onboarding at the introduction in %s",
+    (locale) => {
+      mocks.requested = false;
+      mocks.needs = true;
+      mocks.locale = locale;
+      mount(true);
+      expect(
+        screen.getByRole("heading", {
+          name: locale === "zh" ? "欢迎使用 ZCode" : "Welcome to ZCode",
+        }),
+      ).toBeTruthy();
+      expect(screen.getAllByRole("listitem")[0]?.getAttribute("aria-current")).toBe("step");
+      expect(mocks.update).not.toHaveBeenCalled();
+    },
+  );
+  it("adds a separate leading step and preserves answers while navigating back", () => {
+    mount(true);
+    expect(screen.getByRole("heading", { name: "欢迎使用 ZCode" })).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /软件开发/ })).toBeNull();
+    next();
+    expect(screen.getByRole("heading", { name: "你的主要工作方向是？" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "金融/财务/咨询" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    expect(screen.getByRole("heading", { name: "欢迎使用 ZCode" })).toBeTruthy();
+    next();
+    expect(
+      screen.getByRole("button", { name: "金融/财务/咨询" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(events("onboarding_introduction_expose")).toHaveLength(1);
+  });
+  it("skips only the introduction without clearing or saving a preference", () => {
+    mount(true);
+    fireEvent.click(screen.getByRole("button", { name: "跳过" }));
+    expect(screen.getByRole("heading", { name: "你的主要工作方向是？" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "软件开发/数据/AI" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(events("onboarding_end")).toHaveLength(0);
+  });
+  it("does not report unseen answers when closed on the introduction", () => {
+    mount(true);
+    fireEvent.click(screen.getByRole("button", { name: "退出引导" }));
+    expect(events("onboarding_end")[0]?.eventExtraDetail).toMatchObject({
+      exit_step: "1",
+      work_direction: "null",
+      ui_mode: "null",
+      workspace_memory_enabled: "null",
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("onboarding-page")).toBeNull();
+  });
+  it("finishes through the same save boundary on the fourth displayed step", async () => {
+    mount(true);
+    next();
+    preferences();
+    fireEvent.click(screen.getByRole("button", { name: "开始使用" }));
+    await waitFor(() => expect(events("onboarding_end")).toHaveLength(1));
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(events("onboarding_end")[0]?.eventExtraDetail).toMatchObject({
+      exit_step: "4",
+      work_direction: "software_data_ai",
+      ui_mode: "work",
+      exit_action: "start",
+    });
+  });
+});
 describe("onboarding telemetry through real component interactions", () => {
   it("does not report unseen preference resets when reselecting the same mode", () => {
     mount();

@@ -22,6 +22,8 @@ const workDirections: Record<OccupationValue, string> = {
 type ExitAction = "start" | "skip" | "close";
 type Exposure = {
   ended: boolean;
+  introductionVisited: boolean;
+  occupationVisited: boolean;
   modeVisited: boolean;
   preferencesVisited: boolean;
   mode: InterfaceMode | null;
@@ -33,6 +35,7 @@ export function useOnboardingTelemetry({
   platform,
   visible,
   step,
+  introduction = false,
   occupation,
   mode,
   memory,
@@ -41,7 +44,8 @@ export function useOnboardingTelemetry({
 }: {
   platform: Pick<IPlatformService, "reportTelemetryEvent">;
   visible: boolean;
-  step: 0 | 1 | 2;
+  step: -1 | 0 | 1 | 2;
+  introduction?: boolean;
   occupation: OccupationValue | null;
   mode: InterfaceMode | null;
   memory: boolean;
@@ -58,6 +62,8 @@ export function useOnboardingTelemetry({
     if (!exposure.current) {
       exposure.current = {
         ended: false,
+        introductionVisited: false,
+        occupationVisited: false,
         modeVisited: false,
         preferencesVisited: false,
         mode,
@@ -76,6 +82,21 @@ export function useOnboardingTelemetry({
       );
     }
     const current = exposure.current;
+    if (step === -1 && !current.introductionVisited) {
+      current.introductionVisited = true;
+      void reportAppTelemetryEvent(
+        platform,
+        {
+          elementName: "onboarding_introduction_expose",
+          eventRegion: "app.onboarding",
+          eventType: "expose",
+          eventText: "",
+          eventExtraDetail: {},
+        },
+        "onboardingTelemetry",
+      );
+    }
+    if (step === 0) current.occupationVisited = true;
     // 返回改模式后旧偏好不再代表用户看到的选项；切回原模式也必须重新展示第三页。
     if (current.mode !== mode || (step !== 2 && current.preferenceValues !== preferenceValues)) {
       current.preferencesVisited = false;
@@ -91,7 +112,8 @@ export function useOnboardingTelemetry({
     (action: ExitAction, eventText: string) => {
       const current = exposure.current;
       const detail = {
-        work_direction: occupation ? workDirections[occupation] : "null",
+        work_direction:
+          current?.occupationVisited && occupation ? workDirections[occupation] : "null",
         ui_mode: current?.modeVisited && mode ? (mode === "office" ? "work" : "code") : "null",
         proactive_task_recommendations_enabled:
           current?.preferencesVisited && mode === "office" ? String(suggestions) : "null",
@@ -100,7 +122,7 @@ export function useOnboardingTelemetry({
           ? String(migration)
           : "null",
         exit_action: action,
-        exit_step: String(step + 1),
+        exit_step: String(step + 1 + (introduction ? 1 : 0)),
       };
       // 点击时冻结文案与答案；仅保存成功后调用，不读被 skip 改写的 settings/record。
       return () => {
@@ -119,6 +141,6 @@ export function useOnboardingTelemetry({
         );
       };
     },
-    [platform, occupation, mode, memory, suggestions, migration, step],
+    [platform, occupation, mode, memory, suggestions, migration, step, introduction],
   );
 }

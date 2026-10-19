@@ -1,5 +1,8 @@
 import { useOnboardingTelemetry } from "@/onboarding/useOnboardingTelemetry.js";
 import { OnboardingHeader } from "@/onboarding/OnboardingHeader.js";
+import { OnboardingIntroduction } from "@/onboarding/OnboardingIntroduction.js";
+import { OnboardingPreferences } from "@/onboarding/OnboardingPreferences.js";
+import { useApplicationBrand } from "@/application-brand.js";
 import { OccupationOnboardingVisual } from "@/onboarding/OccupationOnboardingVisual.js";
 import { occupations, type OccupationValue } from "@/onboarding/occupationOptions.js";
 import { OnboardingModeSelector } from "@/onboarding/OnboardingModeSelector.js";
@@ -13,7 +16,6 @@ import { useEffectiveShortcutBindings } from "@/shortcuts/useShortcutBindings.js
 import { matchesShortcutBinding } from "@/shortcuts/bindings.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
-import { Checkbox } from "@/components/ui/checkbox.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import type { InterfaceMode } from "@/lib/interfaceMode.js";
 import { logger } from "@/logger.js";
@@ -48,6 +50,9 @@ export function OccupationOnboarding({
   isWindowsDesktop?: boolean;
 }) {
   const { settings, update } = useSettings();
+  const introduction = useApplicationBrand()?.onboardingIntroduction === true;
+  // 可选介绍占用独立步骤；保留原有三页编号及偏好写入边界。
+  const initialStep = introduction ? -1 : 0;
   const platform = usePlatform();
   const onboardingRecord = useOnboardingRecordService();
   const shortcutBindings = useEffectiveShortcutBindings();
@@ -62,7 +67,7 @@ export function OccupationOnboarding({
   const setInterfaceMode = useZCodeStore((state) => state.setInterfaceMode);
   // mode 为 null 表示模式页被"跳过"（跳过是显式答案，记录里保留 null 而非兜底值）。
   const [mode, setMode] = useState<InterfaceMode | null>(savedInterfaceMode);
-  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [step, setStep] = useState<-1 | 0 | 1 | 2>(initialStep);
   const preferences = step === 2;
   const requestOnboardingDialog = useZCodeStore((state) => state.requestOnboardingDialog);
   const [migration, setMigration] = useState(false);
@@ -89,6 +94,7 @@ export function OccupationOnboarding({
       onboardingVisible &&
       (requested || needsOnboarding !== null || Boolean(settings?.onboardingOccupation)),
     step,
+    introduction,
     occupation,
     mode,
     memory,
@@ -98,7 +104,7 @@ export function OccupationOnboarding({
   const closeOnboarding = useCallback(() => {
     if (savingRef.current) return;
     captureEnd("close", intl.formatMessage({ id: "occupationOnboarding.close" }))();
-    setStep(0);
+    setStep(initialStep);
     setDismissed(true);
     setRequested(false);
     if (onboardingRecord) {
@@ -106,7 +112,7 @@ export function OccupationOnboarding({
         logger.warn("[occupation-onboarding] 写入关闭决策失败", { error: String(cause) });
       });
     }
-  }, [captureEnd, intl, onboardingRecord, platform, setRequested]);
+  }, [captureEnd, intl, onboardingRecord, platform, setRequested, initialStep]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -185,7 +191,7 @@ export function OccupationOnboarding({
 
   const applyLatestEntry = () => {
     const entry = latestEntry;
-    setStep(0);
+    setStep(initialStep);
     setOccupation(
       entry?.occupation && (occupations as readonly string[]).includes(entry.occupation)
         ? (entry.occupation as OccupationValue)
@@ -235,7 +241,7 @@ export function OccupationOnboarding({
       });
       reportEnd();
       // 保存成功就是本次引导的终点；本地记录失败不应留下可再次上报的引导页面。
-      setStep(0);
+      setStep(initialStep);
       setDismissed(true);
       setRequested(false);
       if (!skip && migration) requestOnboardingDialog("migration");
@@ -269,7 +275,7 @@ export function OccupationOnboarding({
   };
   return (
     <main
-      aria-label={t("title")}
+      aria-label={t(introduction ? "introductionTitle" : "title")}
       data-testid="onboarding-page"
       className="relative flex h-dvh w-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
     >
@@ -284,9 +290,10 @@ export function OccupationOnboarding({
         <div className="flex min-h-0 flex-col pt-12 [@media(max-height:740px)]:pt-10">
           <OnboardingHeader
             step={step}
+            introduction={introduction}
             saving={saving}
             t={t}
-            onBack={() => setStep(step === 2 ? 1 : 0)}
+            onBack={() => setStep(step === 0 ? -1 : step === 2 ? 1 : 0)}
             onClose={closeOnboarding}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4 sm:px-10">
@@ -295,18 +302,30 @@ export function OccupationOnboarding({
               <section className="flex w-full flex-col">
                 <div className="w-full">
                   <h1 className="text-ui-xl font-semibold tracking-tight text-center">
-                    {t(preferences ? "preferences" : step === 1 ? "modeTitle" : "title")}
+                    {t(
+                      step === -1
+                        ? "introductionTitle"
+                        : preferences
+                          ? "preferences"
+                          : step === 1
+                            ? "modeTitle"
+                            : "title",
+                    )}
                   </h1>
                   <p className="mx-auto mt-3 max-w-md text-center text-ui-base leading-relaxed text-foreground-subtle">
                     {t(
-                      preferences
-                        ? "preferencesDescription"
-                        : step === 1
-                          ? "modeDescription"
-                          : "description",
+                      step === -1
+                        ? "introductionDescription"
+                        : preferences
+                          ? "preferencesDescription"
+                          : step === 1
+                            ? "modeDescription"
+                            : "description",
                     )}
                   </p>
-                  {step === 1 ? (
+                  {step === -1 ? (
+                    <OnboardingIntroduction t={t} />
+                  ) : step === 1 ? (
                     <OnboardingModeSelector
                       mode={mode}
                       saving={saving}
@@ -324,40 +343,21 @@ export function OccupationOnboarding({
                       formatLabel={(key) => t(key)}
                     />
                   ) : preferences ? (
-                    <div className="mt-8 space-y-3">
-                      {(["suggestions", "memory", "migration"] as const)
-                        .filter((key) => key !== "suggestions" || mode === "office")
-                        .map((key) => (
-                          <label
-                            key={key}
-                            className="grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 rounded-xl border border-card-border bg-card dark:bg-surface/40 p-5 text-ui-base transition-colors hover:bg-surface-hover"
-                          >
-                            <Checkbox
-                              checked={
-                                key === "migration"
-                                  ? migration
-                                  : key === "memory"
-                                    ? memory
-                                    : suggestions
-                              }
-                              disabled={saving}
-                              onCheckedChange={(checked) => {
-                                markUserEdited();
-                                if (key === "migration") setMigration(checked === true);
-                                else if (key === "memory") setMemory(checked === true);
-                                else {
-                                  suggestionsEditedRef.current = true;
-                                  setSuggestions(checked === true);
-                                }
-                              }}
-                            />
-                            <span className="font-medium">{t(key)}</span>
-                            <span className="col-start-2 text-ui-sm font-normal text-foreground-subtle">
-                              {t(`${key}Description`)}
-                            </span>
-                          </label>
-                        ))}
-                    </div>
+                    <OnboardingPreferences
+                      mode={mode}
+                      values={{ memory, suggestions, migration }}
+                      saving={saving}
+                      t={t}
+                      onChange={(key, value) => {
+                        markUserEdited();
+                        if (key === "migration") setMigration(value);
+                        else if (key === "memory") setMemory(value);
+                        else {
+                          suggestionsEditedRef.current = true;
+                          setSuggestions(value);
+                        }
+                      }}
+                    />
                   ) : (
                     <OnboardingOccupationGrid
                       occupation={occupation}
@@ -385,9 +385,12 @@ export function OccupationOnboarding({
                       markUserEdited();
                       if (preferences) void save(true);
                       else {
-                        if (step === 0) setOccupation(null);
-                        else setMode(null);
-                        setStep(step === 0 ? 1 : 2);
+                        if (step === -1) setStep(0);
+                        else {
+                          if (step === 0) setOccupation(null);
+                          else setMode(null);
+                          setStep(step === 0 ? 1 : 2);
+                        }
                       }
                     }}
                   >
@@ -398,7 +401,11 @@ export function OccupationOnboarding({
                       disabled={saving || (step === 0 && !occupation)}
                       className="h-11 flex-1 rounded-xl px-5 text-ui-base"
                       onClick={() => {
-                        if (!preferences) setStep(step === 0 ? 1 : 2);
+                        if (step === -1) {
+                          // 已进入下一页时，迟到的历史作答不能把用户重新送回介绍。
+                          markUserEdited();
+                          setStep(0);
+                        } else if (!preferences) setStep(step === 0 ? 1 : 2);
                         else void save();
                       }}
                     >

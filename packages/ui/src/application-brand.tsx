@@ -13,6 +13,8 @@ export interface ApplicationBrand {
   name: string;
   localizedNames?: Partial<Record<"zh-CN" | "en-US", string>>;
   attribution?: string;
+  /** Add a leading introduction to native onboarding; copy uses localizedMessages. */
+  onboardingIntroduction?: boolean;
   localizedMessages?: Partial<
     Record<"zh-CN" | "en-US", Record<string, string>>
   >;

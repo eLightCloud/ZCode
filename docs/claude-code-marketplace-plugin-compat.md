@@ -149,6 +149,20 @@ V1 必须识别 Claude Marketplace source schema，并按支持级别处理：
 `lastUpdated`。移除默认 marketplace 后，下次读取 marketplace 列表会再次恢复；永久隐藏
 默认市场不属于 V1。
 
+### 应用托管默认市场（application-managed defaults）
+
+受信应用装配可以在 `known_marketplaces.json` 顶层持久化 `applicationDefaults`
+（`{ version: 1, marketplaces: [...] }`，条目结构与默认 seed 相同）。存在该字段时：
+
+- `ensureDefaultPluginMarketplaces` 的补齐集合切换为 `applicationDefaults.marketplaces`；
+  内置 `DEFAULT_PLUGIN_MARKETPLACES` 不再参与补齐，被替换的内置来源不会被自动补回。
+- 用户自加来源、`addedAt`、刷新失败标记与已装插件记录一律保留；写入路径必须原样
+  保留 `applicationDefaults` 字段，不得因刷新或增删市场而丢失。
+- `applicationDefaults` 缺失、格式非法或 `marketplaces` 为空时回退内置默认行为；
+  非法条目忽略，不中断启动。
+- 写入方为受信的部署 / 装配初始化（同 provider 文件类受控投影）；本模块只消费，
+  不提供任何企业名、租户或远端地址硬编码。
+
 Plugin entry `source` 的 V1 支持范围：
 
 | plugin source | V1 行为 |

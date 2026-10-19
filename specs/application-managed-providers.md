@@ -57,11 +57,15 @@ across identity switches. This is transport delivery sequence, not model authori
 The application origin, cookie names, CSRF header and loopback broker port come
 from private deployment configuration, not Renderer input.
 
-When a managed provider is present, the native selector shows its models as a
-direct system-model list, followed by a separate direct custom-model list. Custom
-rows retain provider badges and exact encoded selection values. Without an
-application provider the existing native groups remain unchanged. Chinese and
-English section labels follow the native Intl context.
+The native selector always shows a direct system-model section followed by a
+direct custom-model section, including before configuration loads or when the
+Registry has no providers. Section visibility has no activation switch and must
+not depend on an executable managed provider. Configured managed models appear
+without an account-provisioning or budget-readiness display gate; authorization
+and credential checks remain at the application request boundary. Custom rows
+retain provider badges and exact encoded selection values. Other native provider
+groups retain their connection and selection behavior after the two sections.
+Chinese and English section labels follow the native Intl context.
 
 Both sections remain visible when empty. The custom section offers the existing
 provider settings action, including before a personal provider is configured;
@@ -72,6 +76,11 @@ release assigns each system model one stable supported protocol, rather than
 presenting protocol aliases as duplicate models; personal selections remain
 separate even when model names match. The menu scrolls within the available
 viewport and keeps its management actions reachable on mobile and desktop.
+
+Acceptance: an empty Registry and a not-yet-loaded selection view both retain the
+two sections and the custom-model settings action. Personal models remain visible
+without any managed provider. Missing-model feedback offers configuration without
+suggesting that enabling a subscription is required to display either section.
 
 Application workload credentials supplied by the interactive host are not
 Automation credentials. When this private application transport is configured,

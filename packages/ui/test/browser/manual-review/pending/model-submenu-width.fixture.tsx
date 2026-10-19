@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelConfigSelect } from "@/ModelConfigSelect.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import "@/styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -15,24 +16,53 @@ const name =
       : "GLM-5.3-Highspeed";
 function Fixture() {
   const [selected, setSelected] = useState("text");
+  const [settingsOpened, setSettingsOpened] = useState(false);
+  const catalog = params.get("catalog");
+  const applicationGroups = buildRegistryModelSelectGroups(
+    "glm",
+    catalog === "loading"
+      ? null
+      : {
+          revision: 1,
+          providers:
+            catalog === "system" || catalog === "personal"
+              ? [
+                  {
+                    providerId: catalog === "system" ? "application:fixture" : "personal:fixture",
+                    providerName: "Fixture",
+                    config: {
+                      group: catalog === "system" ? "application-managed" : "standard-personal",
+                      api: { type: "openai-chat-completions" },
+                    },
+                    models: [{ modelId: "configured-model", config: {} }],
+                  },
+                ]
+              : [],
+        },
+  );
   return (
-    <ZCodeIntlProvider initialLocale="en-US">
+    <ZCodeIntlProvider initialLocale={params.get("locale") === "zh-CN" ? "zh-CN" : "en-US"}>
       <div className="p-8">
         <ModelConfigSelect
-          modelGroups={[
-            {
-              key: "custom",
-              label: "Custom provider",
-              items: [
-                { key: "text", value: "text", name },
-                { key: "vision", value: "vision", name, supportsVisionInput: true },
-              ],
-            },
-          ]}
+          modelGroups={
+            catalog
+              ? applicationGroups
+              : [
+                  {
+                    key: "custom",
+                    label: "Custom provider",
+                    items: [
+                      { key: "text", value: "text", name },
+                      { key: "vision", value: "vision", name, supportsVisionInput: true },
+                    ],
+                  },
+                ]
+          }
           normalizedValue={selected}
           triggerLabel="Models"
           triggerAriaLabel="Models"
-          showManageModelsAction={false}
+          showManageModelsAction={Boolean(catalog)}
+          onManageModels={() => setSettingsOpened(true)}
           lockReasonMessage=""
           isItemLocked={() => false}
           onValueChange={setSelected}
@@ -44,6 +74,7 @@ function Fixture() {
           }
         />
         <output data-testid="selected">{selected}</output>
+        <output data-testid="settings-opened">{String(settingsOpened)}</output>
       </div>
     </ZCodeIntlProvider>
   );

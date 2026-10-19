@@ -798,7 +798,6 @@ function V4ComposerModelControlsImpl({
   }, [draftMode, effectiveConfig, modelSelectionView?.revision]);
 
   const modelSelectGroups = useMemo<ModelSelectGroup[]>(() => {
-    if (!modelSelectionView) return [];
     return buildRegistryModelSelectGroups(displayProvider, modelSelectionView, {
       apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
       apiKeyBadgeLabel: intl.formatMessage({
@@ -824,6 +823,14 @@ function V4ComposerModelControlsImpl({
       }),
     });
   }, [displayProvider, intl, modelSelectionView]);
+
+  useEffect(() => {
+    logger.debug("[v4-toolbar] model menu projected", {
+      modelSelectionRevision: modelSelectionView?.revision ?? null,
+      systemModelCount: modelSelectGroups[0]?.items.length ?? 0,
+      customModelCount: modelSelectGroups[1]?.items.length ?? 0,
+    });
+  }, [modelSelectGroups, modelSelectionView?.revision]);
 
   // 修复：恢复「管理模型」入口（老版 onManageModels = 打开设置页并定位模型供应商区）。
   const handleOpenModelProviderSettings = useCallback(() => {

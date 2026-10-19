@@ -19,6 +19,23 @@ const mockPlatform = {
 } as unknown as IPlatformService;
 
 describe("ChatErrorBanner Hook errors", () => {
+  it.each(["zh-CN", "en-US"] as const)(
+    "missing models offer settings without activation in %s",
+    (locale) => {
+      const html = renderToStaticMarkup(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: locale },
+          createElement(ChatErrorBanner, {
+            error: { code: "model_config_missing", message: "missing" },
+          }),
+        ),
+      );
+      expect(html).toContain(locale === "zh-CN" ? "添加自定义模型" : "add a custom model");
+      expect(html).toContain(locale === "zh-CN" ? "配置" : "Set");
+      expect(html).not.toMatch(/开通|升级|Upgrade/);
+    },
+  );
   it("renders the Hook icon and details action for a blocked Hook error", () => {
     const html = renderToStaticMarkup(
       createElement(

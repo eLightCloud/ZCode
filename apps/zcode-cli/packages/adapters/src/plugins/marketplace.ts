@@ -6,7 +6,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { PluginDiagnostic, PluginManifest, PluginStoreListing } from "@zcode/contracts";
 import { isOfficialMarketplaceId, ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
-import { DEFAULT_PLUGIN_MARKETPLACES, sanitizeZCodeRuntimeEnv } from "@zcode/shared";
+import { type DefaultPluginMarketplace, sanitizeZCodeRuntimeEnv } from "@zcode/shared";
+import {
+  effectiveDefaultMarketplaces,
+  parseApplicationDefaults,
+} from "./application-managed-defaults.js";
 import { loadPluginMcpServerDefinitions, resolvePluginMcpServers } from "./mcp.js";
 import {
   appendPluginSourceCleanupError,
@@ -349,23 +353,33 @@ export function loadKnownMarketplacesSync(storageRoot: string): KnownMarketplace
   return [];
 }
 
+export function loadApplicationDefaultsSync(
+  storageRoot: string,
+): DefaultPluginMarketplace[] | null {
+  const parsed = readJsonFileSync(join(storageRoot, KNOWN_MARKETPLACES_FILE));
+  if (!isRecord(parsed)) return null;
+  return parseApplicationDefaults(parsed.applicationDefaults);
+}
+
 export function ensureDefaultPluginMarketplaces(storageRoot: string): KnownMarketplaceRecord[] {
   const known = loadKnownMarketplacesSync(storageRoot);
   const existingIds = new Set(known.map((record) => record.id));
   const now = new Date().toISOString();
-  const missing = DEFAULT_PLUGIN_MARKETPLACES.filter(
-    (marketplace) => !existingIds.has(marketplace.id),
-  ).map(
-    (marketplace): KnownMarketplaceRecord => ({
-      id: marketplace.id,
-      source: defaultMarketplaceSourceFromString(marketplace.source),
-      name: marketplace.name,
-      description: marketplace.description,
-      addedAt: now,
-      ...(marketplace.lastUpdated ? { lastUpdated: marketplace.lastUpdated } : {}),
-      pluginCount: marketplace.pluginCount,
-    }),
-  );
+  // 受信应用托管的默认集合整体替换内置 seed；被替换的内置来源不再自动补回。
+  const managed = loadApplicationDefaultsSync(storageRoot);
+  const missing = effectiveDefaultMarketplaces(managed)
+    .filter((marketplace) => !existingIds.has(marketplace.id))
+    .map(
+      (marketplace): KnownMarketplaceRecord => ({
+        id: marketplace.id,
+        source: defaultMarketplaceSourceFromString(marketplace.source),
+        name: marketplace.name,
+        description: marketplace.description,
+        addedAt: now,
+        ...(marketplace.lastUpdated ? { lastUpdated: marketplace.lastUpdated } : {}),
+        pluginCount: marketplace.pluginCount,
+      }),
+    );
   if (missing.length === 0) return known;
   const next = [...known, ...missing];
   writeKnownMarketplacesSync(storageRoot, next);
@@ -2079,7 +2093,14 @@ async function writeKnownMarketplaces(
   await writeJsonFile(join(storageRoot, KNOWN_MARKETPLACES_FILE), {
     version: 1,
     marketplaces,
+    ...applicationDefaultsField(storageRoot),
   });
+}
+
+function applicationDefaultsField(storageRoot: string): Record<string, unknown> {
+  const parsed = readJsonFileSync(join(storageRoot, KNOWN_MARKETPLACES_FILE));
+  if (!isRecord(parsed) || !("applicationDefaults" in parsed)) return {};
+  return { applicationDefaults: parsed.applicationDefaults };
 }
 
 function writeKnownMarketplacesSync(
@@ -2094,6 +2115,7 @@ function writeKnownMarketplacesSync(
       {
         version: 1,
         marketplaces,
+        ...applicationDefaultsField(storageRoot),
       },
       null,
       2,
@@ -2104,11 +2126,20 @@ function writeKnownMarketplacesSync(
 
 function defaultMarketplaceSourceFromString(source: string): MarketplaceSource {
   const trimmed = source.trim();
+  // scp 风格 SSH（git@host:path[#ref]）是受控私有源的常规寻址；#fragment 为固定提交。
+  if (isGitSshUrl(trimmed)) {
+    const { ref, url } = splitRef(trimmed);
+    return ref ? { source: "git", url, ref } : { source: "git", url };
+  }
   if (/^[^/]+\/[^/]+(?:[#@].+)?$/u.test(trimmed) && !trimmed.includes(":")) {
     const { ref, url } = splitGitHubShorthand(trimmed);
     return ref ? { source: "github", repo: url, ref } : { source: "github", repo: url };
   }
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    const { ref, url } = splitRef(trimmed);
+    if (url.endsWith(".git") || url.includes("/_git/")) {
+      return ref ? { source: "git", url, ref } : { source: "git", url };
+    }
     return { source: "url", url: trimmed };
   }
   return { source: "url", url: trimmed };

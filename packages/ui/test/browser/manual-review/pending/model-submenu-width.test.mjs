@@ -59,6 +59,52 @@ after(async () => {
 const artifacts = join(tmpdir(), "zcode-model-submenu-width");
 for (const width of [390, 1200]) {
   for (const theme of ["light", "dark"]) {
+    for (const catalog of ["loading", "empty", "system", "personal"]) {
+      test(`model sections ${width}/${theme}/${catalog}`, async () => {
+        const page = await browser.newPage({ viewport: { width, height: 700 } });
+        const locale = width === 390 ? "zh-CN" : "en-US";
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        try {
+          await page.goto(`${origin}fixture?${new URLSearchParams({ theme, locale, catalog })}`);
+          await page.getByRole("button", { name: "Models", exact: true }).click();
+          await page.locator('[data-model-provider-key="application-models:system"]').waitFor();
+          await page.locator('[data-model-provider-key="application-models:personal"]').waitFor();
+          assert.equal(
+            await page.getByRole("status").count(),
+            catalog === "system" || catalog === "personal" ? 1 : 2,
+          );
+          if (catalog === "system" || catalog === "personal") {
+            await page.getByRole("menuitemradio", { name: /configured-model/ }).waitFor();
+          }
+          const menu = page.locator('[data-slot="dropdown-menu-content"]');
+          await menu.evaluate(async (element) => {
+            await Promise.allSettled(
+              element.getAnimations().map((animation) => animation.finished),
+            );
+          });
+          const bounds = await menu.boundingBox();
+          assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+          await mkdir(artifacts, { recursive: true });
+          await page.screenshot({
+            path: join(artifacts, `sections-${width}-${theme}-${catalog}.png`),
+          });
+          await page
+            .getByRole("menuitem", {
+              name: locale === "zh-CN" ? "添加自定义模型" : "Add custom model",
+            })
+            .click();
+          await page.getByTestId("settings-opened").filter({ hasText: "true" }).waitFor();
+          assert.deepEqual(errors, []);
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  }
+}
+for (const width of [390, 1200]) {
+  for (const theme of ["light", "dark"]) {
     for (const name of ["short", "long", "extreme"]) {
       test(`model submenu ${width}/${theme}/${name}`, async () => {
         const page = await browser.newPage({ viewport: { width, height: 700 } });

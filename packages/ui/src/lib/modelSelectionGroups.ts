@@ -32,10 +32,11 @@ function supportsRegistryApiFormat(
 
 export function buildRegistryModelSelectGroups(
   selectedProvider: ZCodeProvider,
-  view: ModelSelectionView,
+  view: ModelSelectionView | null | undefined,
   labels: ModelProviderGroupLabelOptions = {},
 ): ModelSelectGroup[] {
-  const groups = view.providers.flatMap((provider) => {
+  const providers = view?.providers ?? [];
+  const groups = providers.flatMap((provider) => {
     if (!supportsRegistryApiFormat(selectedProvider, provider.config.api?.type)) {
       return [];
     }
@@ -76,8 +77,7 @@ export function buildRegistryModelSelectGroups(
       },
     ];
   });
-  if (!view.providers.some((provider) => provider.config.group === "application-managed"))
-    return groups;
+  // 没有可执行 Provider 时 Registry 会移除它，不能据此隐藏系统 / 自定义分区。
   const system: ModelSelectGroup = {
     key: "application-models:system",
     label: "System models",
@@ -92,7 +92,7 @@ export function buildRegistryModelSelectGroups(
   };
   const other: ModelSelectGroup[] = [];
   for (const group of groups) {
-    const provider = view.providers.find(
+    const provider = providers.find(
       (candidate) => `registry-provider:${candidate.providerId}` === group.key,
     )!;
     if (provider.config.group === "application-managed") system.items.push(...group.items);

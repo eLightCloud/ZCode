@@ -18,6 +18,7 @@ import {
   type ModelSelectGroup,
 } from "@/ModelConfigSelect.js";
 import { shouldRestoreChatInputFocusAfterPickerClose } from "@/lib/pickerFocus.js";
+import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 
 function createGroup(key: string): ModelSelectGroup {
   return {
@@ -56,6 +57,48 @@ function renderInteractive(element: ReactElement, locale: Locale) {
 afterEach(() => cleanup());
 
 describe("ModelConfigSelect menu hierarchy", () => {
+  it("renders both empty sections and keeps custom-model settings reachable without providers", () => {
+    const manage = vi.fn();
+    renderInteractive(
+      createElement(ModelConfigSelect, {
+        modelGroups: buildRegistryModelSelectGroups("glm", { revision: 1, providers: [] }),
+        normalizedValue: "",
+        triggerLabel: "Models",
+        showManageModelsAction: true,
+        lockReasonMessage: "",
+        isItemLocked: () => false,
+        onValueChange: vi.fn(),
+        onManageModels: manage,
+        open: true,
+      }),
+      "zh-CN",
+    );
+    expect(screen.getByText("系统模型")).toBeTruthy();
+    expect(screen.getByText("自定义模型")).toBeTruthy();
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加自定义模型" }));
+    expect(manage).toHaveBeenCalledOnce();
+  });
+  it("flat presentation includes configured models after empty sections", () => {
+    renderInteractive(
+      createElement(ModelConfigSelect, {
+        modelGroups: [
+          { key: "application-models:system", label: "System models", items: [] },
+          createGroup("Personal"),
+        ],
+        normalizedValue: "",
+        triggerLabel: "Models",
+        showManageModelsAction: false,
+        showProviderLevel: false,
+        lockReasonMessage: "",
+        isItemLocked: () => false,
+        onValueChange: vi.fn(),
+        open: true,
+      }),
+      "en-US",
+    );
+    expect(screen.getByRole("menuitemradio", { name: "Model" })).toBeTruthy();
+  });
   it.each([
     ["zh-CN", "自定义模型", "尚未添加自定义模型", "添加自定义模型"],
     ["en-US", "Custom models", "No custom models yet", "Add custom model"],

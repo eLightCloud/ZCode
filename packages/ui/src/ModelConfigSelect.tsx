@@ -693,7 +693,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
                 );
               })
             : hasSelectableModel
-              ? renderModelItems(modelGroups[0]?.items ?? [])
+              ? renderModelItems(modelGroups.flatMap((group) => group.items))
               : null}
           {renderedFooterActions.length > 0 ? (
             <div className="sticky bottom-0 z-10 bg-menu after:absolute after:left-0 after:top-full after:h-1 after:w-full after:bg-menu after:content-['']">

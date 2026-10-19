@@ -49,7 +49,7 @@ import { TabStoreProvider, useTabStore, useTabStoreApi } from "@/store/TabStoreP
 import { isSettingsTab, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { logger } from "@/logger.js";
 import { RootShell } from "@/root/RootShell.js";
-import { ApplicationPluginStoreProvider } from "@/root/ApplicationPluginStoreSection.js";
+import { ApplicationPluginLocationEffect, ApplicationPluginStoreProvider } from "@/root/ApplicationPluginStoreSection.js";
 import { ApplicationPages } from "@/root/ApplicationPages.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
@@ -265,6 +265,7 @@ export function Root(props: RootProps) {
                           <MarketingTouchProvider desktop={props.isDesktop === true}>
                             <ApplicationPluginStoreProvider section={props.applicationPluginStoreSection}>
                             <ApplicationPages pages={props.applicationPages ?? []}>
+                              <ApplicationPluginLocationEffect />
                               <RootInner {...props} />
                             </ApplicationPages>
                             </ApplicationPluginStoreProvider>

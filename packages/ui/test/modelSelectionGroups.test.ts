@@ -2,8 +2,72 @@ import { describe, expect, it } from "vitest";
 import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/services";
 import { buildRegistryModelSelectGroups } from "../src/lib/modelSelectionGroups.js";
+import {
+  ModelConfigRules,
+  ProviderConfigMap,
+  ProviderConfigResolver,
+  parseZCodeBuiltinModelConfigRules,
+  parseZCodeBuiltinProviderConfigRules,
+} from "@zcode/provider";
+import builtinRelease from "../../../config/provider/zcode-builtin.json";
 
 describe("model selection groups", () => {
+  it.each([null, undefined, { revision: 1, providers: [] }])(
+    "keeps both sections without any provider, including before loading: %j",
+    (view) => {
+      expect(buildRegistryModelSelectGroups("glm", view)).toMatchObject([
+        { key: "application-models:system", directItems: true, items: [] },
+        { key: "application-models:personal", directItems: true, items: [] },
+      ]);
+    },
+  );
+  it("keeps both sections after the real resolver removes an empty managed provider", () => {
+    const result = new ProviderConfigResolver().resolve({
+      zcodeBuiltinProviders: parseZCodeBuiltinProviderConfigRules({
+        templateRules: [],
+        providerRules: [
+          {
+            providerId: "application:empty",
+            enabled: true,
+            config: {
+              group: "application-managed",
+              access: { type: "api-key", apiKey: "application-managed" },
+              api: { type: "openai-chat-completions", baseUrl: "https://example.test/v1" },
+              builtinModelIds: [],
+            },
+          },
+        ],
+      }).providers,
+      zcodeBuiltinModelRules: parseZCodeBuiltinModelConfigRules(
+        builtinRelease.config.modelConfigRules,
+      ),
+      personalProviders: new ProviderConfigMap(),
+      accountProviders: new ProviderConfigMap(),
+      personalModels: new ModelConfigRules(),
+    });
+    expect(result.registryProviders).toEqual([]);
+    expect(
+      buildRegistryModelSelectGroups("glm", {
+        revision: 1,
+        providers: result.registryProviders,
+      }).map((group) => group.key),
+    ).toEqual(["application-models:system", "application-models:personal"]);
+  });
+  it("shows personal models without a managed provider", () => {
+    const groups = buildRegistryModelSelectGroups("glm", {
+      revision: 1,
+      providers: [
+        {
+          providerId: "personal",
+          providerName: "My provider",
+          config: { group: "standard-personal", api: { type: "openai-chat-completions" } },
+          models: [{ modelId: "personal-model", config: {} }],
+        },
+      ],
+    });
+    expect(groups[0]!.items).toEqual([]);
+    expect(groups[1]!.items).toMatchObject([{ name: "personal-model", badgeLabel: "My provider" }]);
+  });
   it("keeps both application sections before a personal provider or any system model is available", () => {
     const view: ModelSelectionView = {
       revision: 1,
@@ -74,7 +138,9 @@ describe("model selection groups", () => {
         },
       ],
     };
-    const items = buildRegistryModelSelectGroups("glm", view)[0]!.items;
+    const items = buildRegistryModelSelectGroups("glm", view).find(
+      (group) => group.key === "registry-provider:fixture",
+    )!.items;
     expect(items[0]!.supportsVisionInput === true).toBe(expected);
     expect(items[1]!.supportsVisionInput).toBe(true);
     expect(items[2]!.supportsVisionInput).toBe(true);
@@ -92,7 +158,11 @@ describe("model selection groups", () => {
         },
       ],
     };
-    expect(buildRegistryModelSelectGroups("glm", view)[0]?.items).toEqual([
+    expect(
+      buildRegistryModelSelectGroups("glm", view).find(
+        (group) => group.key === "registry-provider:aggregator",
+      )?.items,
+    ).toEqual([
       {
         key: `registry-provider:aggregator:${modelId}`,
         value: "custom:aggregator:upstream%2Ffamily%2Fvision-preview",
@@ -101,9 +171,11 @@ describe("model selection groups", () => {
       },
     ]);
     view.providers[0]!.models[0]!.config = {};
-    expect(buildRegistryModelSelectGroups("glm", view)[0]?.items[0]).not.toHaveProperty(
-      "supportsVisionInput",
-    );
+    expect(
+      buildRegistryModelSelectGroups("glm", view).find(
+        (group) => group.key === "registry-provider:aggregator",
+      )?.items[0],
+    ).not.toHaveProperty("supportsVisionInput");
   });
   it("直接把 Registry API Provider 投影为有序模型组", () => {
     const selectionView: ModelSelectionView = {
@@ -145,6 +217,8 @@ describe("model selection groups", () => {
     };
 
     expect(buildRegistryModelSelectGroups("glm", selectionView)).toEqual([
+      { key: "application-models:system", label: "System models", directItems: true, items: [] },
+      { key: "application-models:personal", label: "Custom models", directItems: true, items: [] },
       {
         key: "registry-provider:anthropic-api",
         label: "Anthropic API",
@@ -203,6 +277,8 @@ describe("model selection groups", () => {
     };
 
     expect(buildRegistryModelSelectGroups("glm", selectionView)).toEqual([
+      { key: "application-models:system", label: "System models", directItems: true, items: [] },
+      { key: "application-models:personal", label: "Custom models", directItems: true, items: [] },
       {
         key: `registry-provider:${providerId}`,
         label: "BigModel",

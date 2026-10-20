@@ -82,6 +82,11 @@ two sections and the custom-model settings action. Personal models remain visibl
 without any managed provider. Missing-model feedback offers configuration without
 suggesting that enabling a subscription is required to display either section.
 
+Section presence expresses navigation, not model availability. Workflow subagent
+settings count selectable items rather than section headers: a ready Registry
+with no model items retains the existing no-catalog feedback and concurrency
+controls described in `docs/dynamic-workflow/presentation.md`.
+
 Application workload credentials supplied by the interactive host are not
 Automation credentials. When this private application transport is configured,
 Automation must reject a fixed or newly resolved `application:` model selection

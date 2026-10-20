@@ -24,6 +24,16 @@ before(async () => {
       tailwindcss(),
       {
         name: "responsive-fixture",
+        // Only the Registry read boundary is synthetic; the choices hook and popover are real.
+        resolveId(id) {
+          if (id === "\0fixture-model-view") return id;
+        },
+        load(id) {
+          if (id === "\0fixture-model-view")
+            return `export const useModelSelectionView = () => ({
+            state: { status: 'ready', view: { revision: 1, providers: [] } }, reload() {}
+          });`;
+        },
         configureServer(vite) {
           vite.middlewares.use(async (req, res, next) => {
             if (!req.url?.startsWith("/fixture?")) return next();
@@ -31,14 +41,19 @@ before(async () => {
             res.end(
               await vite.transformIndexHtml(
                 req.url,
-                `<html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body><div id="root"></div><script type="module" src="${entry}"></script></body></html>`,
+                `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body><div id="root"></div><script type="module" src="${entry}"></script></body></html>`,
               ),
             );
           });
         },
       },
     ],
-    resolve: { alias: { "@": `${root}packages/ui/src` } },
+    resolve: {
+      alias: {
+        "@/hooks/useModelSelectionView.js": "\0fixture-model-view",
+        "@": `${root}packages/ui/src`,
+      },
+    },
     optimizeDeps: { entries: [entry.slice(1)] },
     server: { host: "127.0.0.1", port: 0 },
   });
@@ -57,6 +72,38 @@ after(async () => {
 });
 
 const artifacts = join(tmpdir(), "zcode-model-submenu-width");
+for (const width of [390, 1200]) {
+  for (const theme of ["light", "dark"]) {
+    test(`empty workflow catalog ${width}/${theme}`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 700 } });
+      try {
+        await page.goto(`${origin}fixture?workflow=1&theme=${theme}`);
+        await page.getByRole("button", { name: "Workflow settings" }).click();
+        await page
+          .getByTestId("workflow-run-settings-model")
+          .filter({
+            hasText: "This agent has no model catalog; subagents stay on the session model.",
+          })
+          .waitFor();
+        assert.equal(await page.getByTestId("workflow-run-settings-model-trigger").count(), 0);
+        await page.getByTestId("workflow-run-settings-bound-decrease").click();
+        await mkdir(artifacts, { recursive: true });
+        await page.screenshot({ path: join(artifacts, `workflow-${width}-${theme}.png`) });
+        await page.getByTestId("workflow-run-settings-apply").click();
+        await page
+          .getByTestId("workflow-applied")
+          .filter({ hasText: '"maxConcurrency":3' })
+          .waitFor();
+        assert.equal(
+          JSON.parse(await page.getByTestId("workflow-applied").textContent()).subagentModel,
+          undefined,
+        );
+      } finally {
+        await page.close();
+      }
+    });
+  }
+}
 for (const width of [390, 1200]) {
   for (const theme of ["light", "dark"]) {
     for (const catalog of ["loading", "empty", "system", "personal"]) {

@@ -83,6 +83,9 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
     [view],
   );
 
+  // 主选择器会保留空的系统 / 自定义分区；分区标题不代表存在可选模型。
+  const hasCatalog = groups.some((group) => group.items.length > 0);
+
   const sessionModel = scope.sessionModel;
   const sessionModelName =
     sessionModel === undefined
@@ -113,7 +116,7 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
       const listed = groups.some((group) => group.items.some((item) => item.value === value));
       // 清单读好了、却找不到这个模型：它已被删或停用。下游等用户换一个——沿用它只会让 agent 回
       // model_unavailable（同工具「沿用的模型已不可用」那条失败，在点下去之前就说出来）。
-      const unavailable = model.kind === "model" && view !== null && groups.length > 0 && !listed;
+      const unavailable = model.kind === "model" && view !== null && hasCatalog && !listed;
       const canonical = workflowRunSettingsModelCanonical(model);
       const triggerLabel =
         model.kind === "session" || canonical === undefined
@@ -133,7 +136,7 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
           : null;
       return { value, triggerLabel, unavailable, thoughtOption };
     },
-    [groups, intl, providerName, sessionModelName, view],
+    [groups, hasCatalog, intl, providerName, sessionModelName, view],
   );
 
   /** 菜单选中一项 → 新的模型选择。换模型即取它在注册表里的默认思考档；同一个模型保留当前档。 */
@@ -164,7 +167,7 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
     /** 清单还没读好（读好之前字段禁用）。 */
     loading: view === null,
     /** 清单读好了却一个模型都没有：模型那一格退成一句话。 */
-    noCatalog: view !== null && groups.length === 0,
+    noCatalog: view !== null && !hasCatalog,
     groups,
     providerName,
     sessionBadge,

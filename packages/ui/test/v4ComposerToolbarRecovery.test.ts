@@ -912,11 +912,14 @@ describe("V4ComposerModelControls recovery", () => {
     expect(props.startPlanBalance).toBeUndefined();
   });
 
-  it("Registry 尚未发布时不从旧 Provider Snapshot 构造模型菜单", () => {
+  it("Registry 尚未发布时保留空分区，不从旧 Provider Snapshot 生成模型项", () => {
     mocks.modelSelectionView = null;
     renderToolbarMarkup();
 
-    expect(captured.modelSelectProps).toBeNull();
+    expect(captured.modelSelectProps?.modelGroups).toEqual([
+      expect.objectContaining({ key: "application-models:system", items: [] }),
+      expect.objectContaining({ key: "application-models:personal", items: [] }),
+    ]);
   });
 
   it("passes Coding Plan usage only when the current connection is the selected OAuth Coding Plan", () => {
@@ -1277,7 +1280,10 @@ describe("V4ComposerModelControls recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(captured.modelSelectProps).toBeNull();
+    expect(captured.modelSelectProps?.modelGroups).toEqual([
+      expect.objectContaining({ key: "application-models:system", items: [] }),
+      expect.objectContaining({ key: "application-models:personal", items: [] }),
+    ]);
     expect(mocks.recoverCustomModelSelection).not.toHaveBeenCalled();
     expect(mocks.selectModel).not.toHaveBeenCalled();
 

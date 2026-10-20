@@ -41,6 +41,7 @@ import {
 } from "./model-provider-section/constants.js";
 import { ModelProviderSectionDetail } from "./model-provider-section/Detail.js";
 import { ModelProviderSectionLayout } from "./model-provider-section/SectionLayout.js";
+import { useApplicationSettings } from "@/root/ApplicationSettings.js";
 import { ProviderTemplatePicker } from "./model-provider-section/ProviderTemplatePicker.js";
 import type { CodingPlanLoginOptions } from "./model-provider-section/codingPlanPricingCards.js";
 import { useModelProviderNavigation } from "./model-provider-section/useModelProviderNavigation.js";
@@ -250,6 +251,12 @@ export function ModelProviderSection({
 } = {}) {
   const { intl, locale } = useZCodeIntl();
   const peripherals = useApplicationPeripherals();
+  const applicationSettings = useApplicationSettings();
+  const selectApplicationModelEntry = applicationSettings?.selectModelEntry;
+  useEffect(() => {
+    // 原生供应商精确跳转优先于注入模型项，避免已有管理模型入口被系统模型遮住。
+    if (pendingModelProviderTarget) selectApplicationModelEntry?.(null);
+  }, [pendingModelProviderTarget, selectApplicationModelEntry]);
   const nativeCloudEnabled = peripherals?.nativeCloudEnabled !== false;
   const confirmDialog = useConfirmDialog();
   const platform = usePlatform();
@@ -1089,7 +1096,7 @@ export function ModelProviderSection({
   const presetLoading = loading || modelProvidersRefreshing;
   const customLoading = loading || modelProvidersRefreshing;
 
-  if (loadError) {
+  if (loadError && !applicationSettings?.modelEntries.length) {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-ui-base">
         <p className="text-destructive">{loadError.message}</p>
@@ -1124,6 +1131,14 @@ export function ModelProviderSection({
       onReorderProviderIds={handleReorderProviderIds}
       reorderableProviderIds={reorderableProviderIds}
     >
+      {loadError ? (
+        <p role="alert" className="text-ui-base text-destructive">
+          {loadError.message}
+          <Button variant="outline" onClick={reload}>
+            {intl.formatMessage({ id: "common.retry" })}
+          </Button>
+        </p>
+      ) : null}
       {(invalidProviderTarget || navigationUnavailable) && !templatePickerOpen ? (
         <p role="alert" className="mb-3 text-ui-base text-destructive">
           {intl.formatMessage({

@@ -1,0 +1,53 @@
+{
+  "description": "Unmodified upstream plugin artwork, retained for local distribution. Existing bundled artwork is unchanged.",
+  "assets": [
+    {
+      "file": "android-emulator.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/android-emulator/icon.png",
+      "sha256": "cc41354277f925c7510ce1c3b0b545287919a83c5283d8b45f1f2baf150976f6",
+      "bytes": 94459
+    },
+    {
+      "file": "browser-use.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/browser-use/icon.png",
+      "sha256": "e44d33d59b17a79312a77f388dc69720b6ebe8d533439be794b2a572b07e502c",
+      "bytes": 47877
+    },
+    {
+      "file": "document-skills.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/document-skills/icon.png",
+      "sha256": "f75e45a5aab06df80aca5cf33a3426f2fbd609c4739f75e65960072b310582df",
+      "bytes": 10291
+    },
+    {
+      "file": "ios-simulator.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/ios-simulator/icon.png",
+      "sha256": "99a1ee03ab1000b521d9b69ceb11b95f7e9c094b6faa8aa85f2fdfa1c63291b2",
+      "bytes": 126208
+    },
+    {
+      "file": "restore-legacy-sessions.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/restore-legacy-sessions/icon.png",
+      "sha256": "38a017710307cc70fbee1d0fe38d581b62959e928c63034418571354da19699e",
+      "bytes": 52973
+    },
+    {
+      "file": "skill-creator.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/skill-creator/icon.png",
+      "sha256": "cf2825818b76010aa32e56ff42ea58315c99f9d41f13dabae29167ff51801d22",
+      "bytes": 36787
+    },
+    {
+      "file": "zcode-guide.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/zcode-guide/icon.png",
+      "sha256": "bcfdc509989ba216bd0aa5fa63694a6b5e20fe5a9cb90792c4d7d3bceed1f0a1",
+      "bytes": 18215
+    },
+    {
+      "file": "computer-use.png",
+      "source": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/zcode-cua/icon.png",
+      "sha256": "5aa641b353e9a199685baf93682af345a43edd73199608ea51f88f055ab47ecc",
+      "bytes": 63742
+    }
+  ]
+}

@@ -56,6 +56,7 @@ import {
   ApplicationPluginStoreProvider,
 } from "@/root/ApplicationPluginStoreSection.js";
 import { ApplicationPages } from "@/root/ApplicationPages.js";
+import { ApplicationSettingsProvider } from "@/root/ApplicationSettings.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
 import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
@@ -241,7 +242,9 @@ function WebRemoteControlTaskSync({
 export function Root(props: RootProps) {
   return (
     <ApplicationPeripheralsProvider value={props.applicationPeripherals}>
-      <NativeRoot {...props} />
+      <ApplicationSettingsProvider settings={props.applicationSettings}>
+        <NativeRoot {...props} />
+      </ApplicationSettingsProvider>
     </ApplicationPeripheralsProvider>
   );
 }
@@ -302,7 +305,10 @@ function NativeRoot(props: RootProps) {
                         <ApplicationPluginStoreProvider
                           section={props.applicationPluginStoreSection}
                         >
-                          <ApplicationPages pages={props.applicationPages ?? []}>
+                          <ApplicationPages
+                            pages={props.applicationPages ?? []}
+                            headerPageId={props.applicationHeaderPageId}
+                          >
                             <ApplicationPluginLocationEffect />
                             <RootInner {...props} />
                           </ApplicationPages>

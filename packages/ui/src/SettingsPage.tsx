@@ -1,5 +1,5 @@
 /* oxlint-disable eslint(max-lines) */
-import { ArrowLeft, Rocket, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Rocket } from "lucide-react";
 import { useStore } from "zustand";
 import {
   marketingNavigation,
@@ -12,6 +12,7 @@ import {
   useMemo,
   useState,
   type ButtonHTMLAttributes,
+  type ComponentType,
   type ReactNode,
 } from "react";
 import type {
@@ -62,6 +63,11 @@ import {
 } from "@/lib/accountProviderAccess.js";
 import { buildUsageEntitlementCacheKey } from "@/lib/usageEntitlementCache.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
+import {
+  ApplicationSettingsContent,
+  useApplicationSettings,
+  type ApplicationSettingsSection,
+} from "@/root/ApplicationSettings.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useEnterpriseCodingPlanProducts } from "@/settings/model-provider-section/useEnterpriseCodingPlanProducts.js";
 import { UsageStatsSection, type UsageStatsSectionTab } from "@/settings/UsageStatsSection.js";
@@ -242,7 +248,7 @@ function SettingsSidebarButton({
   className,
   ...buttonProps
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   active?: boolean;
   children?: ReactNode;
@@ -304,6 +310,9 @@ export function SettingsPage({
   user?: UserInfo | null;
 }) {
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
+  const applicationSettings = useApplicationSettings();
+  const applicationSection = applicationSettings?.section;
+  const clearApplicationSection = applicationSettings?.selectSection;
   const { settingsSectionGroups, settingsSections } = useMemo(
     () =>
       createSettingsPageConfig({
@@ -645,11 +654,12 @@ export function SettingsPage({
   const requestOnboardingDialog = () => setNewUserOnboardingOpen(true);
   const setActiveSettingsSection = useCallback(
     (section: SettingsSectionId, fallbackSection: SettingsSectionId = activeSection) => {
+      clearApplicationSection?.(null);
       const resolvedSection = resolveSettingsSection(section, fallbackSection);
       setActiveSection(resolvedSection);
       writeLastSettingsSectionPreference(resolvedSection);
     },
-    [activeSection],
+    [activeSection, clearApplicationSection],
   );
   const handleOpenCodingPlanUpgradeSettings = useCallback(
     (
@@ -1395,21 +1405,51 @@ export function SettingsPage({
     return null;
   }
 
-  const activeSectionLabel = intl.formatMessage({
-    id: activeSectionMeta.contentTitleId ?? activeSectionMeta.titleId,
-  });
+  const activeSectionLabel =
+    applicationSection?.label ??
+    intl.formatMessage({
+      id: activeSectionMeta.contentTitleId ?? activeSectionMeta.titleId,
+    });
   const settingsBreadcrumbSectionLabel =
     activeSection === "plugin" && pluginNavigationOrigin === "plugin-store"
       ? intl.formatMessage({ id: "workspace.openPluginsSettings" })
       : activeSectionLabel;
   const visibleSettingsBreadcrumbItems =
-    settingsBreadcrumbItems[0]?.label === settingsBreadcrumbSectionLabel
+    !applicationSection && settingsBreadcrumbItems[0]?.label === settingsBreadcrumbSectionLabel
       ? settingsBreadcrumbItems
       : [];
   const hasVisibleSettingsBreadcrumb = visibleSettingsBreadcrumbItems.length >= 2;
   const showActiveSectionTitle =
     !hasVisibleSettingsBreadcrumb ||
     (activeSection === "plugin" && pluginNavigationOrigin === "plugin-store");
+  const renderApplicationSection = (section: ApplicationSettingsSection) => (
+    <SettingsSidebarButton
+      key={section.id}
+      icon={section.Icon}
+      label={section.label}
+      active={applicationSection?.id === section.id}
+      aria-current={applicationSection?.id === section.id ? "page" : undefined}
+      onClick={() => {
+        setSettingsBreadcrumbItems([]);
+        applicationSettings?.selectSection(section.id);
+      }}
+    >
+      <span className="truncate text-ui-base text-foreground">{section.label}</span>
+    </SettingsSidebarButton>
+  );
+  const applicationGroups = new Map<
+    string,
+    { label: string; sections: ApplicationSettingsSection[] }
+  >();
+  for (const section of applicationSettings?.sections ?? []) {
+    if (section.group === "basics") continue;
+    const group = applicationGroups.get(section.group.id) ?? {
+      label: section.group.label,
+      sections: [],
+    };
+    group.sections.push(section);
+    applicationGroups.set(section.group.id, group);
+  }
 
   return (
     <>
@@ -1421,7 +1461,7 @@ export function SettingsPage({
       >
         <div
           data-testid={TID_SETTINGS_PAGE}
-          data-active-section={activeSection}
+          data-active-section={applicationSection?.id ?? activeSection}
           // 隐式 auto 行会按 Memory viewer 的内容高度撑出窗口，随后被 DesktopWindowFrame 裁切且没有滚动条。
           // 固定为单个 minmax(0, 1fr) 行，让普通设置页和内部滚动 viewer 都以窗口剩余高度为边界。
           className="relative grid h-screen min-h-full w-full grid-cols-[68px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] lg:grid-cols-[268px_minmax(0,1fr)]"
@@ -1521,7 +1561,7 @@ export function SettingsPage({
                           {groupLabel}
                         </div>
                         {group.sections.map(({ id, icon: Icon, titleId }) => {
-                          const isActive = activeSection === id;
+                          const isActive = !applicationSection && activeSection === id;
                           const label = intl.formatMessage({ id: titleId });
 
                           return (
@@ -1553,9 +1593,22 @@ export function SettingsPage({
                             </SettingsSidebarButton>
                           );
                         })}
+                        {group.id === "basics"
+                          ? applicationSettings?.sections
+                              .filter((section) => section.group === "basics")
+                              .map(renderApplicationSection)
+                          : null}
                       </div>
                     );
                   })}
+                  {[...applicationGroups].map(([id, group]) => (
+                    <div key={id} role="group" aria-label={group.label} className="space-y-1">
+                      <div className="px-2.5 pb-1 text-ui-sm font-medium text-foreground-subtlest max-lg:sr-only">
+                        {group.label}
+                      </div>
+                      {group.sections.map(renderApplicationSection)}
+                    </div>
+                  ))}
                 </div>
 
                 <SettingsSidebarButton
@@ -1682,14 +1735,16 @@ export function SettingsPage({
                                 {activeSectionLabel}
                               </h2>
                             ) : null}
-                            {!hasVisibleSettingsBreadcrumb && activeSectionMeta.titleBadgeId ? (
+                            {!applicationSection &&
+                            !hasVisibleSettingsBreadcrumb &&
+                            activeSectionMeta.titleBadgeId ? (
                               <span className="inline-flex h-6 items-center rounded-full border border-sky-500 px-2 text-ui-xs font-semibold tracking-normal text-sky-500 dark:border-sky-400 dark:text-sky-400">
                                 {intl.formatMessage({
                                   id: activeSectionMeta.titleBadgeId,
                                 })}
                               </span>
                             ) : null}
-                            {activeSection === "usage" ? (
+                            {!applicationSection && activeSection === "usage" ? (
                               <SettingsUsageProviderTabs
                                 activeTab={usageActiveTab}
                                 codingPlanSources={usageCodingPlanSources}
@@ -1698,12 +1753,14 @@ export function SettingsPage({
                             ) : null}
                           </div>
                         </div>
-                        {activeSection === "general" ? (
+                        {!applicationSection && activeSection === "general" ? (
                           <GeneralSectionHeader localePreference={localePreference} />
                         ) : null}
                       </div>
                       <div className="space-y-8">
-                        {activeSection === "general" ? (
+                        {applicationSection ? (
+                          <ApplicationSettingsContent />
+                        ) : activeSection === "general" ? (
                           <GeneralSectionContent
                             localePreference={localePreference}
                             interfaceMode={interfaceMode}

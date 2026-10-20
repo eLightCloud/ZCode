@@ -71,6 +71,7 @@ export function formatApplicationBrandMessage(
     .replace(/ZCode(?!\s+(?:Agent|MCP|CDN)|\s*官方插件)/g, () => name);
 }
 
+/** Product artwork only; plugin icons and content images retain their own identity. */
 export function ApplicationBrandImage({
   className,
   alt,

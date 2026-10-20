@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PluginStoreAvatar } from "../src/settings/PluginStoreAvatar.js";
+import { ApplicationBrandProvider } from "../src/application-brand.js";
 
 describe("PluginStoreAvatar", () => {
   it.each([
@@ -72,4 +73,53 @@ describe("PluginStoreAvatar", () => {
     expect(html).not.toContain("dark:invert");
     expect(html).not.toContain("lucide-blocks");
   });
+});
+
+it("preserves plugin artwork in a branded application", () => {
+  const html = renderToStaticMarkup(
+    createElement(ApplicationBrandProvider, {
+      brand: {
+        name: "Vantage",
+        Mark: () => createElement("svg", { "data-product-mark": true }),
+        Wordmark: () => null,
+      },
+      children: createElement(PluginStoreAvatar, {
+        item: { id: "documents@zcode-plugins-official", name: "documents" },
+      }),
+    }),
+  );
+  expect(html).toContain("documents.png");
+  expect(html).toContain("<img");
+  expect(html).not.toContain("data-product-mark");
+});
+
+it("uses packaged originals for application builtin identities and known remote artwork", async () => {
+  const { vi } = await import("vitest");
+  vi.stubEnv("ZCODE_APPLICATION_PLUGIN_MARKETPLACE_ID", "vantage-native");
+  vi.resetModules();
+  try {
+    const { resolvePluginIconSource } = await import("../src/lib/pluginIconSource.js");
+    expect(resolvePluginIconSource("documents@vantage-native")).toContain("documents.png");
+    expect(
+      resolvePluginIconSource(
+        "computer-use@vantage-native",
+        "https://cdn-zcode.z.ai/zcode/official-plugin/assets/zcode-cua/icon.png",
+      ),
+    ).toContain("computer-use.png");
+    expect(
+      resolvePluginIconSource(
+        undefined,
+        "https://cdn-zcode.z.ai/zcode/official-plugin/assets/browser-use/icon.png",
+      ),
+    ).toContain("browser-use.png");
+    expect(resolvePluginIconSource("documents@personal", "https://example.test/custom.png")).toBe(
+      "https://example.test/custom.png",
+    );
+    expect(
+      resolvePluginIconSource("documents@personal", "file:///private/icon.png"),
+    ).toBeUndefined();
+  } finally {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  }
 });

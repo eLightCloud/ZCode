@@ -38,6 +38,18 @@ export type { TestActions } from "./test-actions.js";
 export { StoreProvider, useZCodeStore } from "./store/StoreProvider.js";
 export type { ApplicationPluginStoreSection } from "./root/ApplicationPluginStoreSection.js";
 export type { ApplicationPage, ApplicationPageContext } from "./root/ApplicationPages.js";
+export { useApplicationPageNavigation } from "./root/ApplicationPages.js";
+export type {
+  ApplicationSettings,
+  ApplicationSettingsSection,
+  ApplicationModelEntry,
+  ApplicationSettingsNavigation,
+} from "./root/ApplicationSettings.js";
+export {
+  Package as SettingsModelIcon,
+  ShieldCheck as SettingsAccountIcon,
+  Users as SettingsMembersIcon,
+} from "lucide-react";
 export type { ZCodeState } from "./store/index.js";
 export {
   bindRemoteWorkspacePath,

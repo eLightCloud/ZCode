@@ -1,4 +1,4 @@
-import { ApplicationBrandImage } from "@/application-brand.js";
+import { resolvePluginIconSource } from "@/lib/pluginIconSource.js";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -259,8 +259,8 @@ export function ConversationDraftSuggestedPrompts({
                     className="flex w-full items-center gap-3 rounded-xl p-3 text-left text-ui-base text-foreground hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused disabled:opacity-50"
                   >
                     <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface p-px">
-                      <ApplicationBrandImage
-                        src={item.iconUrl}
+                      <img
+                        src={resolvePluginIconSource(undefined, item.iconUrl)}
                         alt=""
                         draggable={false}
                         className={cn(

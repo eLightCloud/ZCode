@@ -1,8 +1,8 @@
-import { ApplicationBrandImage } from "@/application-brand.js";
 import { useState, type ReactNode } from "react";
 import { Blocks } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
 import { resolvePluginIconSource } from "@/lib/pluginIconSource.js";
+import { logger } from "@/logger.js";
 
 /** Plugin 原始图标；支持官方内置图标与 HTTPS，缺失或失败时使用调用方兜底，默认回退 Blocks。 */
 export function PluginIcon({
@@ -18,9 +18,9 @@ export function PluginIcon({
   iconClassName?: string;
   fallbackIcon?: ReactNode;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string>();
   const resolvedSrc = resolvePluginIconSource(pluginId, src);
-  const showImage = Boolean(resolvedSrc) && !imageFailed;
+  const showImage = Boolean(resolvedSrc) && failedSrc !== resolvedSrc;
   return (
     <span
       aria-hidden="true"
@@ -31,12 +31,15 @@ export function PluginIcon({
       )}
     >
       {showImage ? (
-        <ApplicationBrandImage
+        <img
           src={resolvedSrc}
           alt=""
           draggable={false}
           className="h-2/3 w-2/3 object-contain"
-          onError={() => setImageFailed(true)}
+          onError={() => {
+            setFailedSrc(resolvedSrc);
+            logger.warn("plugin.icon.load", { outcome: "failed", reasonCode: "image_load_failed" });
+          }}
         />
       ) : fallbackIcon ? (
         fallbackIcon

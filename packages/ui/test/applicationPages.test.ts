@@ -20,18 +20,43 @@ vi.mock("@/DesktopOverlayWindowControls.js", () => ({
   DesktopOverlayWindowControls: () => null,
 }));
 afterEach(cleanup);
-function element(pages: ApplicationPage[]) {
+function element(pages: ApplicationPage[], headerPageId?: string) {
   return createElement(ZCodeIntlProvider, {
     initialLocale: "zh-CN",
     children: createElement(TooltipProvider, {
       children: createElement(ApplicationPages, {
         pages,
+        headerPageId,
         children: createElement(ApplicationPageHeaderAction),
       }),
     }),
   });
 }
 describe("trusted application page lifecycle", () => {
+  it("opens an explicit standalone header target and preserves the underlying draft", () => {
+    const pages: ApplicationPage[] = [
+      { id: "admin", label: "Admin", render: () => createElement("p", null, "admin content") },
+      {
+        id: "notices",
+        label: "Notifications",
+        standalone: true,
+        render: () => createElement("p", null, "my notifications"),
+      },
+    ];
+    render(
+      createElement(
+        "div",
+        null,
+        createElement("input", { "aria-label": "draft", defaultValue: "unsent" }),
+        element(pages, "notices"),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(screen.getByText("my notifications")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "返回工作台" }));
+    expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent");
+  });
   it("leaves an unconfigured shell unchanged", () => {
     const result = render(element([]));
     expect(result.container.textContent).toBe("");

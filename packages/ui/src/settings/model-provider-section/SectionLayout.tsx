@@ -1,4 +1,9 @@
 import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
+import { useApplicationSettings } from "@/root/ApplicationSettings.js";
+import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
+import { Button } from "@/components/ui/button.js";
+import { ControlHintTooltip } from "@/ControlHintTooltip.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ReactNode } from "react";
 import { TID_MODEL_PROVIDER_ADD_PROVIDER_BUTTON } from "@zcode/shared";
 import type { ModelProviderNavGroup } from "@/settings/model-provider-section/constants.js";
@@ -47,6 +52,19 @@ export function ModelProviderSectionLayout({
   children,
 }: ModelProviderSectionLayoutProps) {
   const peripherals = useApplicationPeripherals();
+  const { intl } = useZCodeIntl();
+  const settings = useApplicationSettings();
+  const visibleGroups =
+    settings?.modelEntries.length && !navigationGroups.some((group) => group.id === "custom")
+      ? [
+          ...navigationGroups,
+          {
+            id: "custom" as const,
+            title: intl.formatMessage({ id: "chat.toolbar.model.customModels" }),
+            items: [],
+          },
+        ]
+      : navigationGroups;
   const refreshButtonLoading = shouldShowModelProviderRefreshLoading({
     presetLoading,
     customLoading,
@@ -54,12 +72,15 @@ export function ModelProviderSectionLayout({
 
   return (
     <div className="space-y-4">
-      {peripherals?.renderModelPlans()}
+      {!settings?.modelEntries.length ? peripherals?.renderModelPlans() : null}
       <div className="flex items-start justify-between gap-3">
         <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
         <SettingsResourceHeaderActions
           onRefresh={onRefresh}
-          onNew={onAddProvider}
+          onNew={() => {
+            settings?.selectModelEntry(null);
+            onAddProvider();
+          }}
           refreshing={refreshButtonLoading}
           refreshLabel={refreshButtonLoading ? loadingLabel : refreshLabel}
           newLabel={addProviderLabel}
@@ -76,12 +97,30 @@ export function ModelProviderSectionLayout({
             className="min-w-0 border-r border-border"
             data-model-provider-navigation-scroll="true"
           >
+            {settings?.modelEntries.map(({ id, label, Icon }) => (
+              <ControlHintTooltip key={id} title={label} side="right">
+                <Button
+                  variant="ghost"
+                  aria-label={label}
+                  aria-pressed={settings.modelEntry?.id === id}
+                  className="m-2 max-w-full text-ui-base aria-pressed:bg-selected max-md:mx-1 max-md:min-h-11 max-md:min-w-11"
+                  onClick={() => settings.selectModelEntry(id)}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden={true} />
+                  <span className="max-md:sr-only">{label}</span>
+                </Button>
+              </ControlHintTooltip>
+            ))}
             <ModelProviderSectionNavigation
-              navigationGroups={navigationGroups}
-              selectedNodeKey={selectedNodeKey}
+              navigationGroups={visibleGroups}
+              showEmptyCustomGroup={Boolean(settings?.modelEntries.length)}
+              selectedNodeKey={settings?.modelEntry ? null : selectedNodeKey}
               presetLoading={presetLoading}
               customLoading={customLoading}
-              onSelectNavItem={onSelectNavItem}
+              onSelectNavItem={(item) => {
+                settings?.selectModelEntry(null);
+                onSelectNavItem(item);
+              }}
               onReorderProviderIds={onReorderProviderIds}
               reorderableProviderIds={reorderableProviderIds}
             />
@@ -90,12 +129,21 @@ export function ModelProviderSectionLayout({
             className="relative min-w-0 p-4 pb-20 sm:p-6 sm:pb-24"
             data-model-provider-detail-scroll="true"
           >
-            <ProviderDetailFeedbackBoundary key={selectedNodeKey ?? "unselected-provider"}>
-              {children}
+            <ProviderDetailFeedbackBoundary
+              key={settings?.modelEntry?.id ?? selectedNodeKey ?? "unselected-provider"}
+            >
+              {settings?.modelEntry ? (
+                <ScopedErrorBoundary scope={`application-model:${settings.modelEntry.id}`}>
+                  {settings.modelEntry.render()}
+                </ScopedErrorBoundary>
+              ) : (
+                children
+              )}
             </ProviderDetailFeedbackBoundary>
           </div>
         </div>
       </div>
+      {settings?.modelEntries.length ? peripherals?.renderModelPlans() : null}
     </div>
   );
 }

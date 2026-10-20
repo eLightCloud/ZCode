@@ -43,6 +43,8 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
 }
 
 export interface RootProps {
+  applicationSettings?: import("./ApplicationSettings.js").ApplicationSettings;
+  applicationHeaderPageId?: string;
   applicationPeripherals?: import("./ApplicationPeripherals.js").ApplicationPeripherals;
   /** Optional trusted catalog segment after the native Public / Personal segments. */
   applicationPluginStoreSection?: import("./ApplicationPluginStoreSection.js").ApplicationPluginStoreSection;

@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "../plugin-marketplaces.js";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "../builtinPluginIdentity.js";
 
 export interface OfficialPluginCacheRoot {
   /** 缓存目录名，即官方插件 name。 */

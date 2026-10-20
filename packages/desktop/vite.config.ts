@@ -185,7 +185,12 @@ export default defineConfig(({ mode }) => {
     applicationBrandPlugin(env),
     ...(e2eCoverageEnabled ? [createE2EUIRendererCoveragePlugin(repoRoot)] : []),
     pdfJsCMapsPlugin(),
-    react(),
+    react({
+      // 主入口创建 React root、启动计时器与 MessagePort 监听，不能作为 Fast Refresh 边界。
+      // 否则入口被重新执行时旧 root / 监听仍存活，导致 removeChild 崩溃及双层全屏布局。
+      // 排除入口后由 Vite 整页重载，普通组件仍可热更新，preload 沿既有链路重新交接端口。
+      exclude: [/\/node_modules\//, /\/src\/renderer\/src\/main\.tsx$/],
+    }),
     tailwindcss(),
   ];
 

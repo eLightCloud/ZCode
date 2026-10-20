@@ -1,3 +1,4 @@
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import type { ReactNode } from "react";
 import { TID_MODEL_PROVIDER_ADD_PROVIDER_BUTTON } from "@zcode/shared";
 import type { ModelProviderNavGroup } from "@/settings/model-provider-section/constants.js";
@@ -45,6 +46,7 @@ export function ModelProviderSectionLayout({
   reorderableProviderIds,
   children,
 }: ModelProviderSectionLayoutProps) {
+  const peripherals = useApplicationPeripherals();
   const refreshButtonLoading = shouldShowModelProviderRefreshLoading({
     presetLoading,
     customLoading,
@@ -52,6 +54,7 @@ export function ModelProviderSectionLayout({
 
   return (
     <div className="space-y-4">
+      {peripherals?.renderModelPlans()}
       <div className="flex items-start justify-between gap-3">
         <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
         <SettingsResourceHeaderActions

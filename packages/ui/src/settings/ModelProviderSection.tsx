@@ -22,6 +22,7 @@ import {
   resolveProviderFamilyDomainFromOAuthProvider,
   ZAI_PROVIDER_ID,
 } from "@zcode/shared";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
@@ -248,6 +249,8 @@ export function ModelProviderSection({
   onConsumePendingModelProviderTarget?: () => void;
 } = {}) {
   const { intl, locale } = useZCodeIntl();
+  const peripherals = useApplicationPeripherals();
+  const nativeCloudEnabled = peripherals?.nativeCloudEnabled !== false;
   const confirmDialog = useConfirmDialog();
   const platform = usePlatform();
   const { modelSelectionService, oauthService, credentialService } = useServices();
@@ -455,7 +458,7 @@ export function ModelProviderSection({
     resolveProviderFamilyDomainFromOAuthProvider(activeOAuthProvider);
   const { entitlements: codingPlanEntitlements, refresh: refreshCodingPlanEntitlements } =
     useCodingPlanEntitlements({
-      providerSettingsView,
+      providerSettingsView: nativeCloudEnabled ? providerSettingsView : null,
       connectionSelections: effectiveConnectionSelections,
       suppressProviderFingerprintAutoRefresh: codingPlanStatusSyncProviderId !== null,
     });
@@ -597,6 +600,7 @@ export function ModelProviderSection({
   );
 
   useEffect(() => {
+    if (!nativeCloudEnabled) return;
     let disposed = false;
 
     void refreshCodingPlanPurchaseTokenState({
@@ -606,17 +610,19 @@ export function ModelProviderSection({
     return () => {
       disposed = true;
     };
-  }, [providerConnectionRefreshSignal, refreshCodingPlanPurchaseTokenState]);
+  }, [nativeCloudEnabled, providerConnectionRefreshSignal, refreshCodingPlanPurchaseTokenState]);
 
   const presetProviders = useMemo(
     () =>
-      PRESET_PROVIDER_SPECS.filter((preset) =>
-        shouldShowPresetProviderForActiveOAuth(preset.id, effectiveProviderFamilyDomain),
+      PRESET_PROVIDER_SPECS.filter(
+        (preset) =>
+          nativeCloudEnabled &&
+          shouldShowPresetProviderForActiveOAuth(preset.id, effectiveProviderFamilyDomain),
       ).map((preset) => ({
         ...preset,
         provider: modelProviders.find((provider) => provider.providerId === preset.id) ?? null,
       })),
-    [effectiveProviderFamilyDomain, modelProviders],
+    [effectiveProviderFamilyDomain, modelProviders, nativeCloudEnabled],
   );
 
   useEffect(() => {
@@ -1129,7 +1135,14 @@ export function ModelProviderSection({
       ) : null}
       {templatePickerOpen ? (
         <ProviderTemplatePicker
-          templates={providerTemplates}
+          templates={
+            nativeCloudEnabled
+              ? providerTemplates
+              : providerTemplates.filter(
+                  (template) =>
+                    template.templateId !== "bigmodel-api" && template.templateId !== "zai-api",
+                )
+          }
           creating={creatingProvider}
           onBack={() => setTemplatePickerOpen(false)}
           onCreateFromTemplate={(templateId) => {
@@ -1139,6 +1152,10 @@ export function ModelProviderSection({
             return handleCreateProvider({ providerName: label });
           }}
         />
+      ) : !nativeCloudEnabled && !loading && navigationItems.length === 0 ? (
+        <p className="text-ui-base text-foreground-subtle">
+          {intl.formatMessage({ id: "settings.modelProvider.empty" })}
+        </p>
       ) : (
         <ModelProviderSectionDetail
           connectionSelections={effectiveConnectionSelections}

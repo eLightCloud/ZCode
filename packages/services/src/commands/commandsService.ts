@@ -1,3 +1,5 @@
+import { builtinPluginStateIds } from "@zcode/shared";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 /* eslint-disable max-lines -- commandsService 需要集中处理目录来源优先级、读写和命令解析，拆分会削弱读取顺序的一致性 */
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -44,7 +46,7 @@ const DEFAULT_COMMAND_AGENT_SOURCE: CommandAgentSource = ZCODE_COMMAND_AGENT_SOU
 const COMMAND_AGENT_SOURCE_ORDER: readonly CommandAgentSource[] = ZCODE_COMMAND_AGENT_SOURCES;
 const ENABLE_OVERRIDE_KEY = "enable";
 const HOME_PREFIX = "~/";
-const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = "zcode-plugins-official";
+const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = BUNDLED_PLUGIN_MARKETPLACE_ID;
 const ZCODE_INLINE_PLUGIN_MARKETPLACE = "inline";
 const ZCODE_PLUGIN_MANIFEST_PATH = join(".zcode-plugin", "plugin.json");
 const CLAUDE_PLUGIN_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
@@ -373,6 +375,11 @@ async function resolvePluginCommandRootDescriptors(): Promise<PluginCommandRootD
   const seenPluginIds = new Set<string>();
 
   for (const candidate of candidates) {
+    if (
+      ZCODE_OFFICIAL_PLUGIN_MARKETPLACE !== "zcode-plugins-official" &&
+      candidate.marketplace === "zcode-plugins-official"
+    )
+      continue;
     const manifest = await readPluginManifest(candidate.rootPath);
     if (!manifest) {
       continue;
@@ -383,7 +390,7 @@ async function resolvePluginCommandRootDescriptors(): Promise<PluginCommandRootD
     // 仍会从 cache 贡献命令。
     if (
       candidate.marketplace === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE &&
-      config.suppressedBuiltins.includes(pluginId)
+      builtinPluginStateIds(pluginId).some((id) => config.suppressedBuiltins.includes(id))
     ) {
       continue;
     }
@@ -393,7 +400,10 @@ async function resolvePluginCommandRootDescriptors(): Promise<PluginCommandRootD
     seenPluginIds.add(pluginId);
     const defaultEnabled =
       candidate.defaultEnabled || DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(pluginId);
-    const enabled = config.enabledPlugins[pluginId] ?? defaultEnabled;
+    const enabled =
+      builtinPluginStateIds(pluginId)
+        .map((id) => config.enabledPlugins[id])
+        .find((value) => value !== undefined) ?? defaultEnabled;
     if (!enabled) {
       continue;
     }

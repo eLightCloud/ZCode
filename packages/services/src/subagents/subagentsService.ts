@@ -1,3 +1,4 @@
+import { builtinPluginStateIds } from "@zcode/shared";
 /* eslint-disable max-lines */
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -6,7 +7,7 @@ import {
   createPluginAgentStateId,
   parsePluginSubagentModelSelectionOverrides,
   DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+  BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
   modelSelectionSchema,
   type SubagentRuntimeConfig,
   type AgentCreateParams,
@@ -436,6 +437,8 @@ async function readEnabledPluginRecords(
   const installed = await readInstalledPluginRecords(pluginStorageRoot);
   const records = installed.filter(
     (record) =>
+      (ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID === "zcode-plugins-official" ||
+        !record.id.endsWith("@zcode-plugins-official")) &&
       config.enabledPlugins[record.id] === true &&
       // 卸载抑制优先于遗留的安装/启用记录，不能只在缓存兜底时检查而复活官方插件。
       !(
@@ -446,8 +449,15 @@ async function readEnabledPluginRecords(
   const seenIds = new Set(installed.map((record) => record.id));
   for (const cacheRoot of await scanOfficialPluginCacheRoots(pluginStorageRoot)) {
     const id = `${cacheRoot.name}@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID}`;
-    if (seenIds.has(id) || config.suppressedBuiltins.includes(id)) continue;
-    const enabled = config.enabledPlugins[id] ?? DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(id);
+    if (
+      seenIds.has(id) ||
+      builtinPluginStateIds(id).some((key) => config.suppressedBuiltins.includes(key))
+    )
+      continue;
+    const enabled =
+      builtinPluginStateIds(id)
+        .map((key) => config.enabledPlugins[key])
+        .find((value) => value !== undefined) ?? DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(id);
     if (!enabled) continue;
     for (const versionRoot of cacheRoot.versionRoots) {
       const manifest = await readPluginManifest(versionRoot);

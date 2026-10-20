@@ -1,3 +1,5 @@
+import { builtinPluginStateIds } from "@zcode/shared";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 /* eslint-disable max-lines -- skill 发现 + 校验 + 状态 + 通用目录管理在同一服务里聚合，分层后跳转成本更高 */
 import {
   access,
@@ -52,7 +54,7 @@ const SKILL_CLI_SETTINGS_DIR = join(resolveUserHomeDir(), ".zcode", "cli");
 const SKILL_CLI_CONFIG_FILE = join(SKILL_CLI_SETTINGS_DIR, "config.json");
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
-const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = "zcode-plugins-official";
+const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = BUNDLED_PLUGIN_MARKETPLACE_ID;
 const ZCODE_INLINE_PLUGIN_MARKETPLACE = "inline";
 const ZCODE_PLUGIN_MANIFEST_PATH = join(".zcode-plugin", "plugin.json");
 const CLAUDE_PLUGIN_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
@@ -256,7 +258,7 @@ function collectMentionedSkillNames(prompt: string): Set<string> {
 function escapeXmlAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
@@ -457,7 +459,7 @@ function hasYamlUnsafeLooseInlineField(frontmatterText: string): boolean {
     const rawValue = line.slice(colonIndex + 1).trim();
     if (
       rawValue.length === 0 ||
-      rawValue.startsWith("\"") ||
+      rawValue.startsWith('"') ||
       rawValue.startsWith("'") ||
       rawValue.startsWith("|") ||
       rawValue.startsWith(">")
@@ -799,6 +801,11 @@ async function resolvePluginSkillRootDescriptors(): Promise<SkillRootDescriptor[
   const seenPluginIds = new Set<string>();
 
   for (const candidate of candidates) {
+    if (
+      ZCODE_OFFICIAL_PLUGIN_MARKETPLACE !== "zcode-plugins-official" &&
+      candidate.marketplace === "zcode-plugins-official"
+    )
+      continue;
     const manifest = await readPluginManifest(candidate.rootPath);
     if (!manifest) {
       continue;
@@ -809,7 +816,7 @@ async function resolvePluginSkillRootDescriptors(): Promise<SkillRootDescriptor[
     // 仍会从 cache 贡献技能。
     if (
       candidate.marketplace === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE &&
-      config.suppressedBuiltins.includes(pluginId)
+      builtinPluginStateIds(pluginId).some((id) => config.suppressedBuiltins.includes(id))
     ) {
       continue;
     }
@@ -819,7 +826,10 @@ async function resolvePluginSkillRootDescriptors(): Promise<SkillRootDescriptor[
     seenPluginIds.add(pluginId);
     const defaultEnabled =
       candidate.defaultEnabled || DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(pluginId);
-    const enabled = config.enabledPlugins[pluginId] ?? defaultEnabled;
+    const enabled =
+      builtinPluginStateIds(pluginId)
+        .map((id) => config.enabledPlugins[id])
+        .find((value) => value !== undefined) ?? defaultEnabled;
     if (!enabled) {
       continue;
     }
@@ -845,9 +855,7 @@ async function discoverSkills(params: {
   includeUserSkills: boolean;
   provider: ZCodeProvider;
 }): Promise<DiscoverResult> {
-  const workspaceRoots = dedupeRoots(
-    await resolveAncestorWorkspaceRoots(params.workspacePath),
-  );
+  const workspaceRoots = dedupeRoots(await resolveAncestorWorkspaceRoots(params.workspacePath));
   const roots: SkillRootDescriptor[] = workspaceRoots.map((rootPath) => ({
     scope: "workspace" as const,
     rootPath,
@@ -910,10 +918,7 @@ async function discoverSkills(params: {
         diagnostics.push({
           code: "skill_read_failed",
           severity: "warning",
-          message:
-            error instanceof Error
-              ? error.message
-              : `Failed to read skill: ${skillPath}`,
+          message: error instanceof Error ? error.message : `Failed to read skill: ${skillPath}`,
           path: skillPath,
         });
         continue;
@@ -1001,10 +1006,7 @@ async function collectSkillMarkdownPaths(
       diagnostics.push({
         code: "skill_scan_failed",
         severity: "warning",
-        message:
-          error instanceof Error
-            ? error.message
-            : `Failed to scan skill directory: ${path}`,
+        message: error instanceof Error ? error.message : `Failed to scan skill directory: ${path}`,
         path,
       });
     },
@@ -1015,8 +1017,7 @@ async function collectSkillMarkdownPaths(
 }
 
 function resolveCapabilities(options?: SkillsServiceOptions): SkillsCapability {
-  const isDesktopRuntime =
-    options?.isDesktopRuntime ?? Boolean(process.env.ZCODE_PROCESS_LABEL);
+  const isDesktopRuntime = options?.isDesktopRuntime ?? Boolean(process.env.ZCODE_PROCESS_LABEL);
   if (isDesktopRuntime) {
     return { userScopeAvailable: true };
   }
@@ -1227,10 +1228,7 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
         const canonicalRoot = await realpath(root).catch(() => root);
         const relativePath = relative(canonicalRoot, canonicalParent);
         // 父目录等于根（叶子直接位于根下）也是合法的常见场景，故允许 "".
-        if (
-          relativePath === "" ||
-          (!relativePath.startsWith("..") && !isAbsolute(relativePath))
-        ) {
+        if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
           contained = true;
           break;
         }

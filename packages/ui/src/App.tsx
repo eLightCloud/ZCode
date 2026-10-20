@@ -36,6 +36,7 @@ import {
 } from "@/quickpick/taskFindNavigationState.js";
 import { createQuickPickCommands } from "@/quickpick/quickPickCommands.js";
 import { CommandCenterDialog } from "@/command-center/CommandCenterDialog.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { FeedbackHost } from "@/feedback/FeedbackHost.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import {
@@ -682,31 +683,39 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
+  const peripherals = useApplicationPeripherals();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const openFeedbackTickets = useFeedbackStore((state) => state.openTickets);
   const isLoggedIn = Boolean(user);
   const handleOpenFeedback = useCallback(() => {
-    void platform.openFeedback();
-  }, [platform]);
+    if (peripherals) peripherals.openFeedback();
+    else void platform.openFeedback();
+  }, [platform, peripherals]);
 
   useEffect(() => {
     // 内置反馈中心合并了"提交反馈 / 我的反馈"两个 Tab，
     // 老的 OpenTicketsPanel IPC 仍然兼容（直接打开列表），未来如果还需要单独入口可以复用。
     const disposeFeedbackDialog = platform.onOpenFeedbackDialog?.(() => {
-      openFeedbackSubmit();
+      if (peripherals) peripherals.openFeedback();
+      else openFeedbackSubmit();
     });
     const disposeTicketsPanel = platform.onOpenTicketsPanel?.(() => {
-      openFeedbackTickets();
+      if (peripherals) peripherals.openFeedback();
+      else openFeedbackTickets();
     });
     return () => {
       disposeFeedbackDialog?.();
       disposeTicketsPanel?.();
     };
-  }, [openFeedbackSubmit, openFeedbackTickets, platform]);
-  const handleOpenCommunity = useCallback(() => platform.openCommunity(), [platform]);
+  }, [openFeedbackSubmit, openFeedbackTickets, platform, peripherals]);
+  const handleOpenCommunity = useCallback(
+    () => (peripherals ? peripherals.openHelp() : platform.openCommunity()),
+    [platform, peripherals],
+  );
   const handleOpenProductDocs = useCallback(() => {
-    platform.openExternal(ZCODE_PRODUCT_DOCS_URL);
-  }, [platform]);
+    if (peripherals) peripherals.openHelp();
+    else void platform.openExternal(ZCODE_PRODUCT_DOCS_URL);
+  }, [platform, peripherals]);
   const themeTarget = resolveTheme(theme) === "dark" ? "light" : "dark";
   const handleSwitchTheme = useCallback(() => {
     setTheme(themeTarget);
@@ -1189,7 +1198,7 @@ export function App({
       />
       {/* Bugfix: 反馈是应用级能力，必须固定走本机 base host；SSH session 连接中或断开时，
           workspace-scoped services 会切成断连代理，不能让反馈提交跟随远程 session 失效。 */}
-      <FeedbackHost feedbackService={baseFeedbackService} platform={platform} />
+      {!peripherals && <FeedbackHost feedbackService={baseFeedbackService} platform={platform} />}
       <PluginUiWorkspaceProvider onOpenSidePane={handleOpenPluginUi}>
         <WorkspaceShellLayout
           services={services}

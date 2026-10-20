@@ -173,6 +173,8 @@ describe("ZCode plugins", () => {
         }),
       ).toBeUndefined();
 
+      // HTTP 源凭据边界是异步的；先确认请求已发起，再返回模拟响应。
+      await vi.waitFor(() => expect(resolveFetch).toBeTypeOf("function"));
       resolveFetch(
         new Response(
           JSON.stringify([{ name: "figma", icon: "figma/icon.png", mimeType: "image/png" }]),

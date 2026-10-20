@@ -1,3 +1,4 @@
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "./builtinPluginIdentity.js";
 export interface DefaultPluginMarketplace {
   id: string;
   source: string;
@@ -17,22 +18,22 @@ export const CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID = "claude-plugins-official";
 
 /** Settings 三类资源发现共用；Bootstrap 单测与官方 definition 的 defaultEnabled 机械对照。 */
 export const DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS: ReadonlySet<string> = new Set([
-  "browser-use@zcode-plugins-official",
-  "image-search@zcode-plugins-official",
-  "documents@zcode-plugins-official",
-  "pdf@zcode-plugins-official",
-  "presentations@zcode-plugins-official",
-  "spreadsheets@zcode-plugins-official",
+  `browser-use@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `image-search@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `documents@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `pdf@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `presentations@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `spreadsheets@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
   // node_repl 宿主：不进市场、不对用户露出，也不贡献任何 skill/command/subagent，但必须
   // 始终可用 —— node_repl 的注册门禁是「Browser Use 或 Computer Use 任一启用」，宿主自己
   // 不参与那个判断。Browser Use 默认开着，宿主若默认关就等于它上来就没有宿主。
-  "node-repl-host@zcode-plugins-official",
-  "skill-creator@zcode-plugins-official",
-  "plugin-creator@zcode-plugins-official",
-  "zcode-guide@zcode-plugins-official",
+  `node-repl-host@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `skill-creator@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `plugin-creator@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
+  `zcode-guide@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
   // visualize（交互视图）随 UI 插件合入时 CLI 定义已标 defaultEnabled，但这里漏加，
   // Settings 会把它当成默认关闭，与 CLI 实际启用状态不一致。
-  "visualize@zcode-plugins-official",
+  `visualize@${BUNDLED_PLUGIN_MARKETPLACE_ID}`,
   // 电脑控制回退为默认关闭，故 computer-use 不在此名单内。
   // 该集合必须与 official-plugin-definitions.ts 里标了 defaultEnabled 的插件逐一对应，
   // bootstrap 的「Settings 默认启用集合与 CLI 的官方插件声明一致」单测机械对照两者。

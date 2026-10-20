@@ -15,16 +15,12 @@ export interface ApplicationBrand {
   attribution?: string;
   /** Add a leading introduction to native onboarding; copy uses localizedMessages. */
   onboardingIntroduction?: boolean;
-  localizedMessages?: Partial<
-    Record<"zh-CN" | "en-US", Record<string, string>>
-  >;
+  localizedMessages?: Partial<Record<"zh-CN" | "en-US", Record<string, string>>>;
   Mark: ComponentType<{ className?: string }>;
   Wordmark: ComponentType<{ className?: string }>;
 }
 
-const ApplicationBrandContext = createContext<ApplicationBrand | undefined>(
-  undefined,
-);
+const ApplicationBrandContext = createContext<ApplicationBrand | undefined>(undefined);
 
 /** Static product metadata; owns no account, tenant, theme or execution state. */
 export function ApplicationBrandProvider({
@@ -45,9 +41,7 @@ export function ApplicationBrandProvider({
       has_attribution: Boolean(brand.attribution),
     });
   }, [brand, correlationId]);
-  return (
-    <ApplicationBrandContext value={brand}>{children}</ApplicationBrandContext>
-  );
+  return <ApplicationBrandContext value={brand}>{children}</ApplicationBrandContext>;
 }
 
 export function useApplicationBrand() {
@@ -69,10 +63,12 @@ export function formatApplicationBrandMessage(
     id.startsWith("globalNotice.highspeed.") ||
     id.startsWith("settings.modelProvider.startPlan.");
   if (sourceOwned) return message;
-  return message.replace(
-    /ZCode(?!\s+(?:Agent|MCP|CDN)|\s*官方插件)/g,
-    () => name,
-  );
+  const chinese = /[\u3400-\u9fff]/.test(message);
+  return message
+    .replaceAll("ZCode Agent", chinese ? "原生执行引擎" : "Native Agent")
+    .replaceAll("ZCode MCP", chinese ? "工具服务" : "Tool Service")
+    .replaceAll("ZCode 官方插件", "产品内置插件")
+    .replace(/ZCode(?!\s+(?:Agent|MCP|CDN)|\s*官方插件)/g, () => name);
 }
 
 export function ApplicationBrandImage({
@@ -82,17 +78,9 @@ export function ApplicationBrandImage({
   ...imageProps
 }: ImgHTMLAttributes<HTMLImageElement>) {
   const brand = useApplicationBrand();
-  if (!brand)
-    return (
-      <img {...imageProps} alt={alt} className={className} style={style} />
-    );
+  if (!brand) return <img {...imageProps} alt={alt} className={className} style={style} />;
   return (
-    <span
-      className={className}
-      style={style}
-      role="img"
-      aria-label={brand.name}
-    >
+    <span className={className} style={style} role="img" aria-label={brand.name}>
       <brand.Mark className="size-full" />
     </span>
   );

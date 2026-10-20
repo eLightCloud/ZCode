@@ -124,3 +124,9 @@ export {
   type ApplicationBrand,
 } from "./application-brand.js";
 export { logger } from "./logger.js";
+
+export type {
+  ApplicationPeripherals,
+  ApplicationShareCandidate,
+} from "./root/ApplicationPeripherals.js";
+export { ApplicationDialog } from "./root/ApplicationDialog.js";

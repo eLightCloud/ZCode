@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+  BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
   ZCODE_PLUGIN_HOST_COMMAND,
   type McpServerConfig,
 } from "@zcode/contracts";

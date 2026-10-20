@@ -1,3 +1,4 @@
+import { ApplicationBrandImage } from "@/application-brand.js";
 import { useState, type ReactNode } from "react";
 import { Blocks } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
@@ -30,7 +31,7 @@ export function PluginIcon({
       )}
     >
       {showImage ? (
-        <img
+        <ApplicationBrandImage
           src={resolvedSrc}
           alt=""
           draggable={false}

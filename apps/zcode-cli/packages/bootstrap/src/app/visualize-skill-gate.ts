@@ -1,4 +1,4 @@
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type SkillRoot } from "@zcode/contracts";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type SkillRoot } from "@zcode/contracts";
 
 const VISUALIZE_PLUGIN_ID = `visualize@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE}`;
 

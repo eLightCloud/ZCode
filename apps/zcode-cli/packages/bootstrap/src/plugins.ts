@@ -1,3 +1,4 @@
+import { builtinPluginStateIds } from "@zcode/shared";
 import { rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -49,7 +50,7 @@ import type {
   PluginMetadata,
   PluginStoreListing,
 } from "@zcode/contracts";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, isOfficialMarketplaceId } from "@zcode/contracts";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, isOfficialMarketplaceId } from "@zcode/contracts";
 import { ZCODE_CUA_OFFICIAL_PLUGIN_ID, isZCodeCuaInternalFeatureEnabled } from "@zcode/shared";
 import { resolveOfficialPluginRoots } from "./app/bundled-plugins.js";
 import {
@@ -289,7 +290,7 @@ export function getZCodePluginsOverview(
     known,
     workingDirectory,
   });
-  const installed = listInstalledPluginRecords(pluginStorageRoot);
+  const installed = listInstalledPluginRecords(pluginStorageRoot).filter((record) => ZCODE_OFFICIAL_PLUGIN_MARKETPLACE === "zcode-plugins-official" || record.marketplace !== "zcode-plugins-official");
   const installedIds = new Set(installed.map((record) => record.id));
 
   // 每个市场的 manifest 只读一次：同时取 entries（目录条目）与 featured（策展名单）。
@@ -340,7 +341,7 @@ export function getZCodePluginsOverview(
   // 被抑制（uninstall）的内置（官方）插件可一键恢复：从 OFFICIAL_PLUGIN_DEFINITIONS
   // 里挑出 id 落在 suppressedBuiltins 集合内的，映射成 available 形态供 UI 的「恢复」入口使用。
   // 完整 Catalog/cache 仍然保留，restorable 只是 Runtime 抑制态的投影，商店信息直接取定义里的 listing seed。
-  const suppressed = new Set(configResult.config.plugins.suppressedBuiltins);
+  const suppressed = new Set(configResult.config.plugins.suppressedBuiltins.map((id) => builtinPluginStateIds(id)[0]!));
   const restorableBuiltins: ZCodeAvailablePluginData[] = OFFICIAL_PLUGIN_DEFINITIONS.filter(
     (def) =>
       suppressed.has(`${def.name}@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE}`) &&
@@ -913,7 +914,7 @@ async function restoreBuiltinPluginCore(options: RestoreBuiltinPluginOptions): P
     throw new Error("computer-use built-in plugin requires ZCODE_CUA_PRODUCT_HELPER to be enabled");
   }
   const { configResult } = resolvePluginContext(options);
-  await removeSuppressedBuiltinInFileConfig(configResult.sources.user.path, options.pluginId);
+  for (const id of builtinPluginStateIds(options.pluginId)) await removeSuppressedBuiltinInFileConfig(configResult.sources.user.path, id);
   // 重读磁盘上的最新 config（patch 后），确保抑制集合不再包含刚恢复的 id；
   // 不能复用 patch 前可能被传入的 configResult。
   const fresh = resolvePluginContext({ ...options, configResult: undefined });

@@ -1,3 +1,4 @@
+import { builtinPluginStateIds } from "@zcode/shared";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -10,7 +11,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { writeBundledOfficialMarketplacePartitionSync } from "@zcode/adapters";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type Logger } from "@zcode/contracts";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type Logger } from "@zcode/contracts";
 import { isZCodeCuaInternalFeatureEnabled, ZCODE_CUA_OFFICIAL_PLUGIN_ID } from "@zcode/shared";
 import {
   createOfficialPluginCacheRetryBudget,
@@ -231,7 +232,7 @@ export function resolveOfficialPluginRoots(input: {
   storageRoot: string;
   suppressedBuiltins?: ReadonlySet<string>;
 }): string[] {
-  const suppressedBuiltins = new Set(input.suppressedBuiltins ?? []);
+  const suppressedBuiltins = new Set([...(input.suppressedBuiltins ?? [])].map((id) => builtinPluginStateIds(id)[0]!));
   // zcode-cua 内置 plugin 默认不启用，由 feature flag 控制加载。在 seed/discovery 层门控
   // （而非只隐藏某个 UI 面），这样开关关闭时用户无法经 plugin 列表/marketplace/MCP 设置/CLI 命令看到它。
   if (!isZCodeCuaInternalFeatureEnabled(input.env ?? process.env)) {
@@ -269,7 +270,7 @@ function resolveSeaSeedSource(): OfficialPluginSeedSource | undefined {
   const plugins = OFFICIAL_PLUGIN_DEFINITIONS.flatMap((definition) => {
     const plugin = manifest.plugins.find(
       (item) =>
-        item.marketplace === OFFICIAL_PLUGIN_MARKETPLACE &&
+        item.marketplace === "zcode-plugins-official" &&
         item.name === definition.name &&
         item.version === definition.version,
     );
@@ -401,7 +402,7 @@ function readSeedFileBytes(
   if (!sea?.isSea()) throw new Error("SEA plugin asset is unavailable outside SEA runtime.");
   return Buffer.from(
     sea.getRawAsset(
-      `${SEA_PLUGIN_ASSET_PREFIX}${OFFICIAL_PLUGIN_MARKETPLACE}/${plugin.definition.name}/${plugin.definition.version}/${file.path}`,
+      `${SEA_PLUGIN_ASSET_PREFIX}zcode-plugins-official/${plugin.definition.name}/${plugin.definition.version}/${file.path}`,
     ),
   );
 }

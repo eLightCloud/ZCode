@@ -1,5 +1,25 @@
 # 进入 ZCode 前统一准备数据库
 
+## 开发态 renderer 更新边界
+
+Desktop 主入口在每个 document 中只创建一个 React root，并登记一组启动 / MessagePort 监听。主窗口及共用该入口的更新状态窗口不作为 React Fast Refresh 自接纳边界；入口及传播至入口的依赖更新由 Vite 整页重载，避免旧 root、旧启动状态和端口监听与新实例争用同一容器。普通 UI 组件仍使用 Fast Refresh。重载沿现有 preload / Main 快照与同代端口交接恢复，不重新执行已完成的数据库准备，不建立全局 root 缓存或第二启动账本。
+
+```mermaid
+sequenceDiagram
+  participant Vite
+  participant Document as Renderer document
+  participant Main
+  participant Host
+  Vite->>Document: 主入口变更：整页重载
+  Document->>Document: 新 document 创建唯一 root / 监听
+  Document->>Main: 请求启动快照
+  Main->>Host: 沿现有绑定取得状态 / 端口
+  Main->>Document: 同代 ready 快照与服务端口
+  Document->>Document: 原 root.render：启动页切换工作台
+```
+
+回归须使用真实 Vite 转换验证主入口不自接纳、普通组件仍自接纳、连续入口更新发送整页重载；Mac 实际窗口验证冷启动、刷新、普通组件更新及连续入口更新后只有一棵全高应用树，且无重复 root / 删除节点异常。原有启动失败页与同代准入规则不变。
+
 状态：2026-09-14 已实现，完成代码复审；自动化验证和平台限制见 [实施复审](./database-startup-implementation-review.md)。执行与验收清单见 [Todo 145](../working-memory/provider-refactor/steps/todo-145-global-database-startup-loading.md)。
 
 ## 目标和冻结边界

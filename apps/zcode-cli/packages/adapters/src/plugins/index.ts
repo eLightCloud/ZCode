@@ -1,3 +1,4 @@
+import { builtinPluginStateIds } from "@zcode/shared";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
@@ -22,7 +23,7 @@ import {
   HookEventName as HookEventNameValue,
   HookMatcherConfigSchema,
   ZCODE_INLINE_PLUGIN_MARKETPLACE,
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+  BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
 } from "@zcode/contracts";
 import {
   directoryExists,
@@ -152,11 +153,12 @@ export class NodePluginAdapter implements PluginPort {
       throwIfAborted(options);
       const loaded = loadPlugin(candidate, diagnostics);
       if (!loaded) continue;
+      if (ZCODE_OFFICIAL_PLUGIN_MARKETPLACE !== "zcode-plugins-official" && loaded.marketplace === "zcode-plugins-official") continue;
       // 内置（官方）插件被「卸载」后只在 user config 写 suppressedBuiltins 标记。这里在发现层
       // 用插件的权威 id（manifest 名 @ marketplace）过滤，不依赖缓存文件是否已被物理删除——
       // 这样即便 app 升级遗留了旧版本缓存目录、或会话内 facade 持有过时配置，被卸载的内置插件
       // 也不会被重新发现。仅作用于 official 源，inline/cache（市场安装）不受影响。
-      if (loaded.source === "official" && request.config.suppressedBuiltins.includes(loaded.id)) {
+      if (loaded.source === "official" && builtinPluginStateIds(loaded.id).some((id) => request.config.suppressedBuiltins.includes(id))) {
         continue;
       }
       if (seen.has(loaded.id)) {
@@ -995,5 +997,5 @@ function emptyComponents(hookDetails: PluginHookDetail[] = []): PluginComponents
 }
 
 function resolveEnabled(config: PluginConfig, id: string, defaultEnabled: boolean): boolean {
-  return config.enabledPlugins[id] ?? defaultEnabled;
+  return builtinPluginStateIds(id).map((key) => config.enabledPlugins[key]).find((value) => value !== undefined) ?? defaultEnabled;
 }

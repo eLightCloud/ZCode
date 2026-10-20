@@ -1,7 +1,8 @@
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { PluginDiagnostic, PluginManifest, PluginStoreListing } from "@zcode/contracts";
@@ -348,17 +349,22 @@ export function loadKnownMarketplacesSync(storageRoot: string): KnownMarketplace
   const parsed = readJsonFileSync(join(storageRoot, KNOWN_MARKETPLACES_FILE));
   if (!isRecord(parsed)) return [];
   const value = parsed.marketplaces;
-  if (Array.isArray(value)) return value.filter(isKnownMarketplaceRecord);
-  if (isRecord(value)) return Object.values(value).filter(isKnownMarketplaceRecord);
-  return [];
+  const records = Array.isArray(value) ? value : isRecord(value) ? Object.values(value) : [];
+  return records.filter(isKnownMarketplaceRecord).filter((item) =>
+    BUNDLED_PLUGIN_MARKETPLACE_ID === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE || item.id !== ZCODE_OFFICIAL_PLUGIN_MARKETPLACE);
 }
 
 export function loadApplicationDefaultsSync(
   storageRoot: string,
 ): DefaultPluginMarketplace[] | null {
   const parsed = readJsonFileSync(join(storageRoot, KNOWN_MARKETPLACES_FILE));
-  if (!isRecord(parsed)) return null;
-  return parseApplicationDefaults(parsed.applicationDefaults);
+  const configured = isRecord(parsed) ? parseApplicationDefaults(parsed.applicationDefaults) : null;
+  if (BUNDLED_PLUGIN_MARKETPLACE_ID === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE) return configured;
+  // 应用发行身份与本地 bundled 分片一致，退出官方 CDN 的默认补回路径。
+  return [{ id: BUNDLED_PLUGIN_MARKETPLACE_ID,
+    source: join(storageRoot, "marketplaces", BUNDLED_PLUGIN_MARKETPLACE_ID, "marketplace.json"),
+    name: BUNDLED_PLUGIN_MARKETPLACE_ID, description: "Application bundled plugins", pluginCount: 0 },
+    ...(configured ?? []).filter((item) => item.id !== ZCODE_OFFICIAL_PLUGIN_MARKETPLACE && item.id !== BUNDLED_PLUGIN_MARKETPLACE_ID)];
 }
 
 export function ensureDefaultPluginMarketplaces(storageRoot: string): KnownMarketplaceRecord[] {
@@ -628,6 +634,7 @@ async function loadClaudePluginIconSources(
   storageRoot: string,
   operationSignal?: AbortSignal,
 ): Promise<Map<string, string>> {
+  if (BUNDLED_PLUGIN_MARKETPLACE_ID !== ZCODE_OFFICIAL_PLUGIN_MARKETPLACE) return new Map();
   const cachePath = join(storageRoot, PLUGIN_ICON_SOURCES_FILE);
   const cached = (): Map<string, string> => parsePluginIconSources(readJsonFileSync(cachePath));
   const controller = new AbortController();
@@ -2126,6 +2133,7 @@ function writeKnownMarketplacesSync(
 
 function defaultMarketplaceSourceFromString(source: string): MarketplaceSource {
   const trimmed = source.trim();
+  if (isAbsolute(trimmed)) return { source: "file", path: trimmed };
   // scp 风格 SSH（git@host:path[#ref]）是受控私有源的常规寻址；#fragment 为固定提交。
   if (isGitSshUrl(trimmed)) {
     const { ref, url } = splitRef(trimmed);

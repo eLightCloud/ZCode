@@ -1,5 +1,14 @@
 # Tool Change Chain Spec
 
+## 应用发行内置插件身份（2026-10-20）
+
+应用发行可以通过受信启动元数据与构建定义提供内置市场身份，规范见
+[发行身份](../application-builtin-identity.md)。同一共享值贯穿 seed、cache、Host MCP 注入、
+技能 / 命令 / 子智能体发现及恢复；工具 schema、权限匹配与原生执行所有者不变。
+只有原生宿主写入的身份可以标记内置 MCP，修改市场标识不扩大企业资源资格。
+SEA 物理资源名保留；新发行不恢复官方 CDN 默认。验证原生默认回归、应用身份下的
+Host / cache 一致性、个人停用保留，以及 Desktop / Web 共享显示，不建立第二执行器。
+
 ## 工具内部模型请求的会话归因（2026-09-30）
 
 WebSearch、WebFetch processing、ReadSessionContext 的内部模型请求继承发起工具的宿主

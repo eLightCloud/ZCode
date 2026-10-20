@@ -16,16 +16,10 @@ const Mark = ({ className }: { className?: string }) =>
 const brand = { name: "Example Application", Mark, Wordmark: Mark };
 describe("application branding boundary", () => {
   it("keeps unconfigured native artwork and titles", () => {
-    expect(renderToStaticMarkup(createElement(ZCodeAboutLogo))).toContain(
-      'viewBox="0 0 256 218"',
+    expect(renderToStaticMarkup(createElement(ZCodeAboutLogo))).toContain('viewBox="0 0 256 218"');
+    expect(formatApplicationBrandMessage(undefined, "login.title", "Welcome to ZCode")).toBe(
+      "Welcome to ZCode",
     );
-    expect(
-      formatApplicationBrandMessage(
-        undefined,
-        "login.title",
-        "Welcome to ZCode",
-      ),
-    ).toBe("Welcome to ZCode");
   });
   it("substitutes product artwork including collapsed image consumers", () => {
     const html = renderToStaticMarkup(
@@ -46,23 +40,13 @@ describe("application branding boundary", () => {
     expect(html).not.toContain("/native.svg");
   });
   it("brands app titles while preserving actual provider and runtime identities", () => {
+    expect(formatApplicationBrandMessage(brand.name, "application.name", "ZCode")).toBe(brand.name);
     expect(
-      formatApplicationBrandMessage(brand.name, "application.name", "ZCode"),
-    ).toBe(brand.name);
-    expect(
-      formatApplicationBrandMessage(
-        brand.name,
-        "titleBar.menu.help.about",
-        "About ZCode",
-      ),
+      formatApplicationBrandMessage(brand.name, "titleBar.menu.help.about", "About ZCode"),
     ).toBe("About Example Application");
     expect(
-      formatApplicationBrandMessage(
-        brand.name,
-        "settings.mcp.description",
-        "ZCode Agent MCP",
-      ),
-    ).toBe("ZCode Agent MCP");
+      formatApplicationBrandMessage(brand.name, "settings.mcp.description", "ZCode Agent MCP"),
+    ).toBe("Native Agent MCP");
   });
   it("substitutes everyday product copy and preserves mixed runtime labels", () => {
     for (const messages of [zh, en]) {
@@ -74,9 +58,7 @@ describe("application branding boundary", () => {
         "cuaPermission.modal.relaunchAppButton",
         "bots.description",
       ]) {
-        expect(
-          formatApplicationBrandMessage(brand.name, id, messages[id]),
-        ).toContain(brand.name);
+        expect(formatApplicationBrandMessage(brand.name, id, messages[id])).toContain(brand.name);
       }
     }
     expect(
@@ -85,23 +67,15 @@ describe("application branding boundary", () => {
         "settings.mcp.refresh",
         "ZCode Agent needs a refresh. Restart ZCode.",
       ),
-    ).toBe("ZCode Agent needs a refresh. Restart Example Application.");
-    expect(
-      formatApplicationBrandMessage(
-        brand.name,
-        "source",
-        "ZCode MCP / ZCode CDN",
-      ),
-    ).toBe("ZCode MCP / ZCode CDN");
+    ).toBe("Native Agent needs a refresh. Restart Example Application.");
+    expect(formatApplicationBrandMessage(brand.name, "source", "ZCode MCP / ZCode CDN")).toBe(
+      "Tool Service / ZCode CDN",
+    );
   });
   it("exposes the localized brand to Intl when the shell wraps the entire tree", () => {
     function Copy() {
       const { intl } = useZCodeIntl();
-      return createElement(
-        "p",
-        null,
-        intl.formatMessage({ id: "chat.placeholder.newTask" }),
-      );
+      return createElement("p", null, intl.formatMessage({ id: "chat.placeholder.newTask" }));
     }
     const html = renderToStaticMarkup(
       createElement(ApplicationBrandProvider, {

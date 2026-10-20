@@ -2,7 +2,7 @@
 // 与 plugins.ts（安装/市场/启停等管理面）分文件：本查询是会话/草稿 Picker 的只读投影，
 // 且 plugins.ts 已接近 max-lines 门禁。
 import {
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+  BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
   zcodeProtocolNotifications,
   zcodePluginsReferenceCatalogParamsSchema,
   zcodePluginsResolveSuggestedReferenceParamsSchema,

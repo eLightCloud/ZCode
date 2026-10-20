@@ -43,6 +43,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { useOpenRewards } from "@/rewards/RewardsProvider.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
@@ -133,6 +134,7 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   const { intl } = useZCodeIntl();
   const platform = usePlatform();
   const openRewards = useOpenRewards();
+  const peripherals = useApplicationPeripherals();
   const interfaceMode = useZCodeStore((state) => state.interfaceMode);
   const setInterfaceMode = useZCodeStore((state) => state.setInterfaceMode);
   const zoomInShortcutLabel = useShortcutCommandLabel("zoomIn");
@@ -433,7 +435,7 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
               onUsageClick={usageButtonClick}
               onUpgradeClick={onUpgradeClick}
             />
-            {user ? (
+            {user && peripherals?.nativeCloudEnabled !== false ? (
               <DropdownMenuItem onSelect={() => openRewards?.()} data-testid="rewards-menu-item">
                 <Gift className="size-4" />
                 {intl.formatMessage({ id: "rewards.menuTitle" })}

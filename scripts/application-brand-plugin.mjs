@@ -51,6 +51,12 @@ export async function applicationBrandPlugin(env) {
     value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
   return {
     name: "application-brand",
+    config() {
+      const id = metadata.builtinMarketplaceId ?? "zcode-plugins-official";
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id))
+        throw new Error("application-brand.invalid-marketplace");
+      return { define: { __ZCODE_APPLICATION_PLUGIN_MARKETPLACE_ID__: JSON.stringify(id) } };
+    },
     configResolved(config) {
       base = config.base;
     },

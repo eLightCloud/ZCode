@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Model Provider 导航需要集中计算分组、选中项与 Coding Plan 权益态，后续拆分时再收敛。 */
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { useEffect, useMemo } from "react";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
 import { getProviderFormLabel } from "@/lib/providerSettingsFormTypes.js";
@@ -81,6 +82,7 @@ export function useModelProviderNavigation({
   setSelectedNodeKey,
   intl,
 }: UseModelProviderNavigationOptions) {
+  const nativeCloudEnabled = useApplicationPeripherals()?.nativeCloudEnabled !== false;
   const customProviders = useMemo(() => {
     const allCustomProviders = modelProviders.filter(
       (provider) => provider.config.group === "standard-personal",
@@ -91,8 +93,10 @@ export function useModelProviderNavigation({
 
   const codingPlanItems = useMemo(
     () =>
-      CODING_PLAN_PROVIDER_SPECS.filter((spec) =>
-        shouldShowCodingPlanForProviderFamilyDomain(spec.oauthProviderId, providerFamilyDomain),
+      CODING_PLAN_PROVIDER_SPECS.filter(
+        (spec) =>
+          nativeCloudEnabled &&
+          shouldShowCodingPlanForProviderFamilyDomain(spec.oauthProviderId, providerFamilyDomain),
       ).map((spec) => {
         const provider = modelProviders.find((item) => item.providerId === spec.id) ?? null;
         const accountEntitled = entitledAccountProviderIds.has(spec.id);
@@ -142,6 +146,7 @@ export function useModelProviderNavigation({
         };
       }),
     [
+      nativeCloudEnabled,
       entitledAccountProviderIds,
       codingPlanEntitlements,
       intl,
@@ -223,7 +228,7 @@ export function useModelProviderNavigation({
       },
     ];
 
-    return groups;
+    return groups.filter((group) => group.items.length > 0);
   }, [
     customProviders,
     codingPlanItems,

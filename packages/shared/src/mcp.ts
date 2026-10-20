@@ -1,3 +1,4 @@
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "./builtinPluginIdentity.js";
 /**
  * MCP (Model Context Protocol) types for ZCode
  * Based on the original Tauri implementation
@@ -7,7 +8,7 @@ import type { SettingsDirectoryLocation } from "./settings-source.js";
 import type { McpServerFailureKind } from "./zcode-protocol/index.js";
 
 // CUA official plugin 身份常量（port 自 feat；UI 设置面板 + bootstrap 复用以避免字面量漂移）。
-export const ZCODE_CUA_OFFICIAL_PLUGIN_ID = "computer-use@zcode-plugins-official";
+export const ZCODE_CUA_OFFICIAL_PLUGIN_ID = `computer-use@${BUNDLED_PLUGIN_MARKETPLACE_ID}`;
 // CUA server 身份串（port 自 feat mcp.ts）：server key = 模型可见工具前缀段（刻意不带 zcode-）；
 // namespace name = official plugin 运行时命名空间 plugin:<pluginId>:<serverKey>。
 export const ZCODE_CUA_OFFICIAL_MCP_NAMESPACE_NAME = "plugin:computer-use:computer-use";

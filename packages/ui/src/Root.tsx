@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   RequestSecurityHost,
   RequestSecurityWorkspaceBridge,
@@ -28,6 +29,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import { SettingsPage } from "@/SettingsPage.js";
 import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDialogProvider.js";
+import { ApplicationPeripheralsProvider } from "@/root/ApplicationPeripherals.js";
 import { RewardsProvider } from "@/rewards/RewardsProvider.js";
 import { WelcomeScreen, type LoginCompleteReason } from "@/WelcomeScreen.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
@@ -49,7 +51,10 @@ import { TabStoreProvider, useTabStore, useTabStoreApi } from "@/store/TabStoreP
 import { isSettingsTab, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { logger } from "@/logger.js";
 import { RootShell } from "@/root/RootShell.js";
-import { ApplicationPluginLocationEffect, ApplicationPluginStoreProvider } from "@/root/ApplicationPluginStoreSection.js";
+import {
+  ApplicationPluginLocationEffect,
+  ApplicationPluginStoreProvider,
+} from "@/root/ApplicationPluginStoreSection.js";
 import { ApplicationPages } from "@/root/ApplicationPages.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
@@ -235,6 +240,37 @@ function WebRemoteControlTaskSync({
  */
 export function Root(props: RootProps) {
   return (
+    <ApplicationPeripheralsProvider value={props.applicationPeripherals}>
+      <NativeRoot {...props} />
+    </ApplicationPeripheralsProvider>
+  );
+}
+
+function NativeCloudProviders({
+  enabled,
+  desktop,
+  children,
+}: {
+  enabled: boolean;
+  desktop: boolean;
+  children: ReactNode;
+}) {
+  if (!enabled)
+    return (
+      <CodingPlanUpgradeDialogProvider enabled={false}>{children}</CodingPlanUpgradeDialogProvider>
+    );
+  return (
+    <CodingPlanUpgradeDialogProvider>
+      <RewardsProvider desktop={desktop}>
+        <RequestSecurityHost />
+        <MarketingTouchProvider desktop={desktop}>{children}</MarketingTouchProvider>
+      </RewardsProvider>
+    </CodingPlanUpgradeDialogProvider>
+  );
+}
+
+function NativeRoot(props: RootProps) {
+  return (
     <LucideProvider strokeWidth={DEFAULT_LUCIDE_STROKE_WIDTH}>
       {/*
        * 之前通过 lucide.tsx 包装每个图标，把默认 strokeWidth 固定成 1.5。
@@ -259,19 +295,19 @@ export function Root(props: RootProps) {
                     <AssistantCodeCommentFeatureProvider
                       enabled={props.assistantCodeCommentCardsEnabled}
                     >
-                      <CodingPlanUpgradeDialogProvider>
-                        <RewardsProvider desktop={props.isDesktop === true}>
-                          <RequestSecurityHost />
-                          <MarketingTouchProvider desktop={props.isDesktop === true}>
-                            <ApplicationPluginStoreProvider section={props.applicationPluginStoreSection}>
-                            <ApplicationPages pages={props.applicationPages ?? []}>
-                              <ApplicationPluginLocationEffect />
-                              <RootInner {...props} />
-                            </ApplicationPages>
-                            </ApplicationPluginStoreProvider>
-                          </MarketingTouchProvider>
-                        </RewardsProvider>
-                      </CodingPlanUpgradeDialogProvider>
+                      <NativeCloudProviders
+                        enabled={props.applicationPeripherals?.nativeCloudEnabled !== false}
+                        desktop={props.isDesktop === true}
+                      >
+                        <ApplicationPluginStoreProvider
+                          section={props.applicationPluginStoreSection}
+                        >
+                          <ApplicationPages pages={props.applicationPages ?? []}>
+                            <ApplicationPluginLocationEffect />
+                            <RootInner {...props} />
+                          </ApplicationPages>
+                        </ApplicationPluginStoreProvider>
+                      </NativeCloudProviders>
                     </AssistantCodeCommentFeatureProvider>
                   </WebRemoteControlFeatureProvider>
                 </DiffsWorkerPoolProvider>

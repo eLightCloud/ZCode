@@ -158,8 +158,8 @@ initializeDesktopUserActionTrace({
  * 所以 preload 用 window.postMessage + transfer 把 port 原样传递到 renderer。
  * 本地窗口的 port 来自 utilityProcess，远程窗口也一样，renderer 无需区分。
  */
-// 之前用匿名函数注册 addEventListener("message")，reload/HMR 时会重复注册，
-// 导致多次 createRoot 在同一 DOM 节点上挂载。用 flag 防止重复初始化。
+// 此副作用入口在 vite.config 中退出 Fast Refresh；入口更新必须整页重载，
+// 保证每个 document 只有一个 root / 启动监听。appInitialized 只守卫当前启动交接。
 // 窗口 hidden 时禁用 CSS 动画，避免 DocumentTimeline 持有已卸载的 DOM 子树。
 installDocumentHiddenMotionPause();
 let appInitialized = false;

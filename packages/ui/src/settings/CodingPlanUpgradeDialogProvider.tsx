@@ -32,7 +32,28 @@ const CodingPlanUpgradeDialogContext = createContext<CodingPlanUpgradeDialogCont
   null,
 );
 
-export function CodingPlanUpgradeDialogProvider({ children }: { children: ReactNode }) {
+const DISABLED_CLOUD_INVENTORY: CodingPlanUpgradeDialogContextValue = {
+  inventory: { entryPlanList: "", status: "ready", retry: () => {} },
+  openCodingPlanUpgrade: () => false,
+};
+
+export function CodingPlanUpgradeDialogProvider({
+  children,
+  enabled = true,
+}: {
+  children: ReactNode;
+  enabled?: boolean;
+}) {
+  if (!enabled)
+    return (
+      <CodingPlanUpgradeDialogContext value={DISABLED_CLOUD_INVENTORY}>
+        {children}
+      </CodingPlanUpgradeDialogContext>
+    );
+  return <NativeCodingPlanUpgradeDialogProvider>{children}</NativeCodingPlanUpgradeDialogProvider>;
+}
+
+function NativeCodingPlanUpgradeDialogProvider({ children }: { children: ReactNode }) {
   const platform = usePlatform();
   const inventory = useCodingPlanEntryPlanList();
   const inventoryRef = useRef(inventory);

@@ -1,6 +1,6 @@
 import type { ConfigResult } from "@zcode/adapters/config";
 import type { PluginLoadOutcome } from "@zcode/contracts";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
 import {
   listZCodePlugins,
   setZCodePluginEnabled,

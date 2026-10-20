@@ -9,7 +9,7 @@ import type {
   PluginManifest,
   PluginOptionValues,
 } from "@zcode/contracts";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
 import { ZCODE_PLUGIN_ID_ENV_KEY } from "@zcode/shared";
 import type { LoadedPlugin } from "./types.js";
 import { isNotFoundError, isPluginOptionValue, isRecord, resolveInside } from "./helpers.js";

@@ -54,6 +54,10 @@ import {
   resolveConversationSharePublishErrorMessageId,
   sanitizeConversationShareWarnings,
 } from "@/lib/conversationShareError.js";
+import {
+  useApplicationPeripherals,
+  applicationShareCandidate,
+} from "@/root/ApplicationPeripherals.js";
 import { localizeConversationShareUrl } from "@zcode/shared";
 import type {
   ConversationShareAllowedArtifact,
@@ -667,6 +671,7 @@ export function SessionPane({
   const state = useConversationProjection(lease);
   const snapshot = state.snapshot;
   const newlyCreatedSessionIdRef = useRef<string | null>(null);
+  const peripherals = useApplicationPeripherals();
   const shareDraft = useConversationShareSelectionStore((storeState) =>
     sessionId ? storeState.drafts[sessionId] : undefined,
   );
@@ -683,7 +688,7 @@ export function SessionPane({
   const publishedShareUrl = shareDock.publishedShareUrl;
   const shareError = shareDock.error;
   const shareWarnings = shareDock.warnings;
-  const shareActive = shareDraft?.scope === "partial";
+  const shareActive = !peripherals && shareDraft?.scope === "partial";
   const shareInSelectionStage = shareActive && (shareDraft?.stage ?? "selection") === "selection";
   // 遮罩、选择面板和背景滚动锁定必须共用同一裁决，否则面板收起后遮罩会残留。
   const shareSelectionPanelVisible = resolveConversationShareSelectionPanelVisible({
@@ -692,6 +697,11 @@ export function SessionPane({
     view: shareDraft?.view,
   });
   const finishShare = useConversationShareSelectionStore((value) => value.finishSelection);
+  useEffect(() => {
+    if (!peripherals || shareDraft?.scope !== "partial" || !sessionId || !snapshot) return;
+    peripherals.openShare(applicationShareCandidate(shareTitle, snapshot.rows.window));
+    finishShare(sessionId);
+  }, [peripherals, shareDraft?.scope, sessionId, snapshot, shareTitle, finishShare]);
   const updateShareDockState = useConversationShareSelectionStore((value) => value.updateDockState);
   const goToShareConfiguration = useConversationShareSelectionStore(
     (value) => value.goToConfiguration,

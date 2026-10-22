@@ -1,3 +1,4 @@
+import { openBrowserFileDownload } from "@zcode/client/browser-file-download";
 import { setApplicationDocumentTitle } from "./applicationBrandTitle.js";
 import {
   ApplicationRoot,
@@ -628,6 +629,7 @@ function createWebPlatform(options?: {
 
   return {
     canSelectFilePath: false,
+    openFileDownload: (name) => openBrowserFileDownload(name),
     // Web 端无法打开系统目录选择框
     selectDirectory: () => Promise.resolve(null),
     // Web 端无法打开系统文件选择框

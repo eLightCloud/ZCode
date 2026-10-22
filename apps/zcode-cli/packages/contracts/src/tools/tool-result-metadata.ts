@@ -1,3 +1,4 @@
+import { deliverFilesToolResultDisplayPayloadSchema } from "./deliver-files.js";
 import { z } from "zod";
 import { OFFICIAL_MCP_TOOL_ERROR_CODES } from "@zcode/shared";
 import {
@@ -281,6 +282,7 @@ const bashOutputDisplaySchema = z
   .strict();
 
 export const toolResultDisplayPayloadSchema = z.discriminatedUnion("kind", [
+  deliverFilesToolResultDisplayPayloadSchema,
   bashOutputDisplaySchema,
   fileDiffToolResultDisplayPayloadSchema,
   localAgentMessageToolResultDisplayPayloadSchema,

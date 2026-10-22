@@ -4075,7 +4075,39 @@ export const zcodeOffPeakListResultSchema = z
   .strict();
 export type ZCodeOffPeakListProtocolResult = z.infer<typeof zcodeOffPeakListResultSchema>;
 
+export const zcodeDeliverablesListParamsSchema = nativeDeliverablesListInputSchema
+  .omit({ workspaceKey: true })
+  .extend({
+    workspacePath: z.string().min(1).max(4096),
+    workspaceIdentity: z.string().min(1).max(4096).optional(),
+  })
+  .strict();
+export const zcodeDeliverableReadParamsSchema = nativeDeliverableReadSchema
+  .omit({ workspaceKey: true })
+  .extend({
+    workspacePath: z.string().min(1).max(4096),
+    workspaceIdentity: z.string().min(1).max(4096).optional(),
+  })
+  .strict();
+export const zcodeDeliverableReleaseParamsSchema = nativeDeliverableReleaseSchema
+  .omit({ workspaceKey: true })
+  .extend({
+    workspacePath: z.string().min(1).max(4096),
+    workspaceIdentity: z.string().min(1).max(4096).optional(),
+  })
+  .strict();
+export const zcodeDeliverableReleaseResultSchema = z.object({ released: z.literal(true) }).strict();
+export const zcodeDeliverableReadResultSchema = z
+  .object({
+    dataBase64: z.string().max(700000),
+  })
+  .strict();
+export { nativeDeliverablesListSchema as zcodeDeliverablesListResultSchema };
+
 export const zcodeProtocolMethods = {
+  deliverablesList: "deliverables/list",
+  deliverableRead: "deliverables/read",
+  deliverableRelease: "deliverables/release",
   runtimeCapabilities: "runtime/capabilities",
   computerUseOperationEvent: "computer-use/operation-event",
   sessionCreate: "session/create",
@@ -4341,3 +4373,9 @@ export {
   type BotTopicHistoryBatch,
   type BotTopicMessage,
 } from "../bots.js";
+import {
+  nativeDeliverablesListSchema,
+  nativeDeliverablesListInputSchema,
+  nativeDeliverableReadSchema,
+  nativeDeliverableReleaseSchema,
+} from "../deliverables.js";

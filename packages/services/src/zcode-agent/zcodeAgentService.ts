@@ -1,4 +1,7 @@
 import {
+  zcodeDeliverablesListResultSchema,
+  zcodeDeliverableReadResultSchema,
+  zcodeDeliverableReleaseResultSchema,
   requiresRequestVerification,
   allowRequestVerificationHeaders,
   requestVerificationInteractionAvailable,
@@ -3980,6 +3983,54 @@ export function createZCodeAgentService(
         });
         return snapshot;
       }
+    },
+
+    async listDeliverables(params) {
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.deliverablesList,
+        {
+          workspacePath: params.workspacePath,
+          ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+          after: params.after ?? 0,
+          limit: params.limit ?? 100,
+        },
+        zcodeDeliverablesListResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
+      );
+    },
+
+    async releaseDeliverable(params) {
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.deliverableRelease,
+        {
+          workspacePath: params.workspacePath,
+          workspaceIdentity: params.workspaceIdentity,
+          id: params.id,
+          version: params.version,
+          sha256: params.sha256,
+        },
+        zcodeDeliverableReleaseResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
+      );
+    },
+
+    async readDeliverable(params) {
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.deliverableRead,
+        {
+          workspacePath: params.workspacePath,
+          ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+          id: params.id,
+          version: params.version,
+          offset: params.offset,
+          length: params.length,
+        },
+        zcodeDeliverableReadResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
+      );
     },
 
     async listSessions(params: ZCodeAgentListSessionsParams) {

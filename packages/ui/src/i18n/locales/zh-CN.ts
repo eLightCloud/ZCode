@@ -1,6 +1,13 @@
 import { requestSecurityMessagesZhCN } from "@/request-security-edition/messages.js";
 /** 中文翻译 */
 const zhCN: Record<string, string> = {
+  "delivery.files": "交付文件",
+  "delivery.partialFailure": "部分文件未能保留交付快照，请查看工具详情。",
+  "delivery.downloadSource": "从来源下载",
+  "delivery.downloadFile": "下载文件",
+  "delivery.downloading": "正在下载…",
+  "delivery.downloadFailed": "来源暂不可达或文件已变化，请重试。",
+  "delivery.streamingRequired": "此文件需要支持流式保存的浏览器，请在电脑端使用 Chrome 或 Edge。",
   "applicationPages.navigation": "应用页面",
   "applicationPages.refresh": "刷新页面",
   "applicationPages.close": "返回工作台",

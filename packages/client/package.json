@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./globals": "./src/globals.d.ts"
+    "./globals": "./src/globals.d.ts",
+    "./browser-file-download": "./src/browserFileDownload.ts"
   },
   "scripts": {
     "lint": "oxlint",

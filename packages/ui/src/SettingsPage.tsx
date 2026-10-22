@@ -1407,9 +1407,7 @@ export function SettingsPage({
 
   const activeSectionLabel =
     applicationSection?.label ??
-    intl.formatMessage({
-      id: activeSectionMeta.contentTitleId ?? activeSectionMeta.titleId,
-    });
+    intl.formatMessage({ id: activeSectionMeta.contentTitleId ?? activeSectionMeta.titleId });
   const settingsBreadcrumbSectionLabel =
     activeSection === "plugin" && pluginNavigationOrigin === "plugin-store"
       ? intl.formatMessage({ id: "workspace.openPluginsSettings" })

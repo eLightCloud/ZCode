@@ -1,3 +1,4 @@
+import { DeliverFilesToolCallBlock } from "./renderers/deliver-files.js";
 // ============================================================
 // 工具卡 renderer 注册表：tool identity → 具体 renderer 组件
 // ============================================================
@@ -70,6 +71,11 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
   }
 
   const identity = resolveToolCallIdentity(context.toolCallNode.toolCall);
+  if (
+    (context.toolCallNode.toolCall.toolName ?? context.toolCallNode.toolCall.kind) ===
+    "DeliverFiles"
+  )
+    return DeliverFilesToolCallBlock;
 
   // 可复用工作流的两个工具按**工具名**先分流，刻意排在 family 之前。两个理由：
   // 它们今天不在 shared 的已知工具表里（identity 回 unknown，会掉进 raw JSON 兜底卡）；

@@ -1,3 +1,4 @@
+export { useFileDownload } from "./hooks/useFileDownload.js";
 export { App } from "./App.js";
 export { AppErrorBoundary, ScopedErrorBoundary } from "./ErrorBoundary.js";
 export type { ScopedErrorBoundaryVariant } from "./ErrorBoundary.js";

@@ -1,5 +1,12 @@
 # Optional application admission
 
+ApplicationDialog accepts an optional content className for application-sized forms;
+native focus trapping, Escape, accessible title and overlay behavior remain owned by the shared dialog.
+
+When application peripherals disable native cloud with `nativeCloudEnabled: false`,
+the shared settings/profile menu omits the native Coding Plan upgrade action.
+Usage statistics remain available. Unconfigured native builds retain the action.
+
 ## Trusted application pages
 
 Root may receive build-owned applicationPages (stable id, label, optional Icon, render callback).
@@ -98,3 +105,36 @@ section returns selection to Public. The application owns its authorized project
 loading / empty / error feedback and business install constraints, through public
 services. The generic shell never fetches tenant data or changes install authority.
 Unconfigured builds retain the existing two segments and cross-native search.
+
+## Optional application Host module
+
+A trusted Node launcher may set an absolute `ZCODE_APPLICATION_HOST_MODULE`. Its
+`createApplicationHost({ native, credentials, storageRoot })` factory supplies one
+application-owned `call(method, input)` facade and an awaited `dispose()` lifecycle.
+The generic `application-host` service transports bounded application requests.
+Unconfigured builds return an explicit unavailable error and never load a module.
+Only the startup environment selects code; RPC cannot select modules or paths.
+The module uses public native services and its own application storage directory;
+no native session, execution or queue tables are exposed. Shutdown first disposes
+application work, then native services. The channel logger records method/outcome
+only; arguments may carry short-lived admission capabilities and must stay private.
+
+## Application input preparation failure boundary
+
+Optional input preparation is bounded to five seconds, receives an AbortSignal and
+never edits the native envelope. Timeout, cancellation and extension failure leave
+the original native command available; no late callback may assign a new producer.
+Application observation may recover original intents under a newly verified context
+of the same stable owner; it never reassigns the original context or operation key.
+External source imports use the trusted application assembly resolver in both real
+Vite and tests. The application source directory participates in file watching.
+
+Native file download opens its destination through IPlatformService before reads.
+The platform owns streaming or bounded buffered transport, cancellation and the
+completed versus initiated outcome; shared UI only supplies authorized byte reads.
+
+A configured renderDeliverables supplies the complete delivery body, including
+source download while the copy is pending and accepted-copy actions afterwards.
+It replaces the default native delivery body; without the slot, native source
+download remains unchanged. This prevents presenting a released source snapshot
+as downloadable after a durable application copy has been accepted.

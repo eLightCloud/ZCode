@@ -1,3 +1,4 @@
+import { deliverFilesToolEntry } from "./deliver-files.js";
 import { replyToChannelToolEntry } from "./reply-to-channel.js";
 // ============================================================
 // Built-in Tool Handlers
@@ -76,6 +77,7 @@ import { createToolRuleNameSet } from "../tool-visibility.js";
 // 统一隐藏 Glob/Grep，并通过 Bash find/grep 接管搜索。
 
 export const builtInTools: ToolEntry[] = [
+  deliverFilesToolEntry,
   readToolEntry,
   writeToolEntry,
   editToolEntry,
@@ -177,6 +179,7 @@ interface RegisterBuiltInToolsOptions {
   includeSendMessage?: boolean;
   includeRespondToCoordinator?: boolean;
   includeSubmitResult?: boolean;
+  includeDeliverables?: boolean;
   /**
    * 在场时 submit_result 以 typed 声明注册（`{ result: <schema> }`，strict 资格），供 dwf mono
    * 子代理；缺席即通用声明。只在 includeSubmitResult 为真时有意义。
@@ -242,6 +245,7 @@ export function registerBuiltInTools(
     ) {
       continue;
     }
+    if (entry.metadata.name === "DeliverFiles" && options.includeDeliverables !== true) continue;
     if (entry.metadata.name === "submit_result" && options.includeSubmitResult !== true) {
       continue;
     }

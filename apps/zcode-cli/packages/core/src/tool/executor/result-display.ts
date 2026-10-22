@@ -1,4 +1,5 @@
 import {
+  DeliverFilesOutputSchema,
   RESPOND_TO_COORDINATOR_TOOL_NAME,
   RespondToCoordinatorOutputSchema,
   MCP_TOOL_DISPLAY_MAX_DESCRIPTION_CHARS,
@@ -180,6 +181,10 @@ export function createToolResultDisplay(
     mcp?: McpToolDisplayMetadata;
   },
 ): ToolResultDisplayPayload | undefined {
+  if (toolName === "DeliverFiles") {
+    const parsed = DeliverFilesOutputSchema.safeParse(output);
+    return parsed.success ? { kind: "deliver_files", result: parsed.data } : undefined;
+  }
   if (toolName === "Bash") return createBashResultDisplay(output);
 
   const cuaToolName = readCuaToolName(toolName);

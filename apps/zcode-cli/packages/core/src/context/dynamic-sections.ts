@@ -41,9 +41,17 @@ const CONTEXT_MANAGEMENT_PROMPTS = {
   ].join("\n"),
 } as const;
 
-export function buildSessionGuidanceSection(toolNames: readonly string[], hasSkills = false): ContextSection | null {
+export function buildSessionGuidanceSection(
+  toolNames: readonly string[],
+  hasSkills = false,
+): ContextSection | null {
   const tools = new Set(toolNames);
   const lines = ["# Session-specific guidance"];
+  if (tools.has("DeliverFiles")) {
+    lines.push(
+      "- When delivering files to the user, call DeliverFiles after the files are ready and before your final answer. Include every final file, including CSV, ZIP and images. Deliver only final user outputs, not inputs, logs, intermediate files or unreviewed child output. The immutable snapshot, rather than a working path or preview card, is the file delivery record. If delivery fails, report that failure and do not claim the file was delivered.",
+    );
+  }
 
   // 当前不输出 Agent 指导段。
   // if (tools.has("Agent")) {
@@ -58,7 +66,9 @@ export function buildSessionGuidanceSection(toolNames: readonly string[], hasSki
   // }
 
   if (tools.has("Skill") && hasSkills) {
-    lines.push("- When the user types `/<skill-name>`, invoke it via Skill. Only use skills listed in the user-invocable skills section \u2014 don't guess.");
+    lines.push(
+      "- When the user types `/<skill-name>`, invoke it via Skill. Only use skills listed in the user-invocable skills section \u2014 don't guess.",
+    );
   }
 
   // if (tools.has("AskUserQuestion")) {

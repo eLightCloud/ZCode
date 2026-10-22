@@ -1,6 +1,8 @@
+import { prepareApplicationInput } from "./applicationInputPreparation.js";
 import { IGenUiService } from "@zcode/services";
 import { ProxyChannel, type IChannelClient } from "@zcode/rpc";
 import {
+  IApplicationHostService,
   IFileService,
   IMediaPreviewService,
   IGitService,
@@ -57,6 +59,7 @@ import {
  * 新增服务只需在此添加一个 getter。
  */
 export class RemoteServiceAccess implements IServiceAccessor {
+  readonly applicationHostService: IApplicationHostService;
   readonly fileService: IFileService;
   readonly mediaPreviewService: IMediaPreviewService;
   readonly gitService: IGitService;
@@ -148,9 +151,22 @@ export class RemoteServiceAccess implements IServiceAccessor {
     this.windowControllerService = ProxyChannel.toService<IWindowControllerService>(
       channelClient.getChannel(IWindowControllerService.channelName),
     );
+    this.applicationHostService = ProxyChannel.toService<IApplicationHostService>(
+      channelClient.getChannel(IApplicationHostService.channelName),
+    );
     this.zcodeAgentService = ProxyChannel.toService<IZCodeAgentService>(
       channelClient.getChannel(IZCodeAgentService.channelName),
     );
+    const nativeAgent = this.zcodeAgentService;
+    this.zcodeAgentService = new Proxy(nativeAgent, {
+      get: (target, property) =>
+        property === "sendConversationCommandV4"
+          ? async (params: Parameters<IZCodeAgentService["sendConversationCommandV4"]>[0]) => {
+              await prepareApplicationInput(params, this.applicationHostService);
+              return target.sendConversationCommandV4(params);
+            }
+          : Reflect.get(target, property),
+    });
     this.zcodeSessionService = ProxyChannel.toService<IZCodeSessionService>(
       channelClient.getChannel(IZCodeSessionService.channelName),
     );

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createElement as h } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Package } from "lucide-react";
 import {
   ApplicationSettingsProvider,
@@ -12,17 +12,9 @@ import {
 import { ModelProviderSectionLayout } from "@/settings/model-provider-section/SectionLayout.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
-import { act } from "@testing-library/react";
 
 vi.mock("@/ControlHintTooltip.js", () => ({
   ControlHintTooltip: ({ children }: { children: unknown }) => children,
-}));
-vi.mock("@/settings/model-provider-section/Navigation.js", () => ({
-  ModelProviderSectionNavigation: ({
-    onSelectNavItem,
-  }: {
-    onSelectNavItem: (item: unknown) => void;
-  }) => h("button", { onClick: () => onSelectNavItem({ key: "custom" }) }, "existing provider"),
 }));
 afterEach(cleanup);
 const settings: ApplicationSettings = {
@@ -41,7 +33,14 @@ const settings: ApplicationSettings = {
       id: "managed",
       label: "Managed models",
       Icon: Package,
-      render: () => h("p", null, "managed budget"),
+      render: () => h("input", { "aria-label": "managed draft", defaultValue: "original" }),
+    },
+    {
+      id: "personal",
+      label: "Personal models",
+      Icon: Package,
+      render: ({ openCustomModels }) =>
+        h("button", { onClick: openCustomModels }, "Configure custom"),
     },
   ],
 };
@@ -51,7 +50,6 @@ function Probe() {
     "div",
     null,
     h("button", { onClick: () => context?.selectSection("account") }, "account"),
-    h("button", { onClick: () => context?.selectSection(null) }, "native section"),
     h("output", null, context?.section?.label ?? "native"),
     h(ApplicationSettingsContent),
     h(ModelProviderSectionLayout, {
@@ -66,7 +64,10 @@ function Probe() {
       navigationGroups: [],
       selectedNodeKey: "custom",
       onSelectNavItem: vi.fn(),
-      children: h("p", null, "existing API configuration"),
+      children: h("input", {
+        "aria-label": "native provider draft",
+        defaultValue: "native original",
+      }),
     }),
   );
 }
@@ -76,40 +77,74 @@ function element(config?: ApplicationSettings) {
     children: h(ApplicationSettingsProvider, { settings: config, children: h(Probe) }),
   });
 }
-it("leaves native provider content intact when no extension is configured", () => {
+function tab(name: string | RegExp) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0, ctrlKey: false });
+}
+
+it("leaves native configuration unchanged without application entries", () => {
   render(element());
-  expect(screen.getByText("existing API configuration")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Managed models" })).toBeNull();
+  expect(screen.getByRole("textbox", { name: "native provider draft" })).toBeTruthy();
+  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(screen.getByRole("button", { name: "add provider" })).toBeTruthy();
 });
-it("reuses the provider panel and switches from injected content to existing API configuration", () => {
+it("separates model sources with accessible tabs and exposes provider controls only on custom", () => {
   render(element(settings));
-  expect(screen.getByText("managed budget")).toBeTruthy();
-  expect(screen.queryByText("existing API configuration")).toBeNull();
-  fireEvent.click(screen.getByText("existing provider"));
-  expect(screen.getByText("existing API configuration")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Managed models" }));
-  expect(screen.getByText("managed budget")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "add provider" }));
-  expect(screen.getByText("existing API configuration")).toBeTruthy();
+  expect(screen.getAllByRole("tab")).toHaveLength(3);
+  expect(screen.getByRole("tab", { name: "Managed models" }).getAttribute("aria-selected")).toBe(
+    "true",
+  );
+  expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+    screen.getByRole("tab", { name: "Managed models" }).id,
+  );
+  expect(screen.queryByRole("button", { name: "add provider" })).toBeNull();
+  expect(screen.queryByText("Configure custom")).toBeNull();
+  tab(/custom models/i);
+  expect(screen.getByRole("button", { name: "add provider" })).toBeTruthy();
+  expect(screen.queryByRole("textbox", { name: "managed draft" })).toBeNull();
 });
-it("supports precise member-to-model navigation and drops removed content", () => {
+it("retains both application and native unsaved inputs across tab changes", () => {
+  render(element(settings));
+  fireEvent.change(screen.getByRole("textbox", { name: "managed draft" }), {
+    target: { value: "unsaved quota" },
+  });
+  tab(/custom models/i);
+  fireEvent.change(screen.getByRole("textbox", { name: "native provider draft" }), {
+    target: { value: "unsaved provider" },
+  });
+  tab("Managed models");
+  expect((screen.getByRole("textbox", { name: "managed draft" }) as HTMLInputElement).value).toBe(
+    "unsaved quota",
+  );
+  tab(/custom models/i);
+  expect(
+    (screen.getByRole("textbox", { name: "native provider draft" }) as HTMLInputElement).value,
+  ).toBe("unsaved provider");
+});
+it("lets a model panel navigate to real custom configuration and drops removed descriptors", () => {
   const view = render(element(settings));
-  fireEvent.click(screen.getByText("account"));
-  expect(screen.getByText("Account")).toBeTruthy();
-  fireEvent.click(screen.getByText("member budget"));
-  expect(screen.getByText("native")).toBeTruthy();
-  expect(screen.getByText("managed budget")).toBeTruthy();
-  fireEvent.click(screen.getByText("account"));
+  tab("Personal models");
+  fireEvent.click(screen.getByRole("button", { name: "Configure custom" }));
+  expect(screen.getByRole("textbox", { name: "native provider draft" })).toBeTruthy();
   view.rerender(element({ sections: [], modelEntries: [] }));
-  expect(screen.queryByText("member budget")).toBeNull();
-  expect(screen.queryByText("managed budget")).toBeNull();
-  expect(screen.getByText("existing API configuration")).toBeTruthy();
+  expect(screen.queryByText("Configure custom")).toBeNull();
+  expect(screen.queryByLabelText("managed draft")).toBeNull();
 });
-it("honors native settings intents while the application section remains selected", () => {
+it("supports precise member navigation and native provider overrides", () => {
   render(element(settings));
-  fireEvent.click(screen.getByText("account"));
-  expect(screen.getByText("member budget")).toBeTruthy();
+  tab(/custom models/i);
+  fireEvent.click(screen.getByRole("button", { name: "account" }));
+  fireEvent.click(screen.getByRole("button", { name: "member budget" }));
+  expect(screen.getByRole("textbox", { name: "managed draft" })).toBeTruthy();
+  expect(screen.getByText("native")).toBeTruthy();
   act(() => setPendingSettingsSectionIntent("modelProvider", { modelProviderId: "custom" }));
-  expect(screen.queryByText("member budget")).toBeNull();
-  expect(screen.getByText("existing API configuration")).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "native provider draft" })).toBeTruthy();
+  expect(screen.queryByRole("textbox", { name: "managed draft" })).toBeNull();
+});
+it("changes the selected source through keyboard focus", () => {
+  render(element(settings));
+  act(() => screen.getByRole("tab", { name: "Personal models" }).focus());
+  expect(screen.getByRole("tab", { name: "Personal models" }).getAttribute("aria-selected")).toBe(
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "Configure custom" })).toBeTruthy();
 });

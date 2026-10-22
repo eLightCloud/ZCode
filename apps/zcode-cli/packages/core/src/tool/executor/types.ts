@@ -1,3 +1,4 @@
+import type { DeliverableStorePort } from "@zcode/contracts";
 import type {
   AgentExecutionTelemetryPort,
   AgentTelemetryActorKind,
@@ -105,6 +106,8 @@ export interface ToolExecutorOptions {
   /** actor 的升级端口；存在即为该会话注册 escalate。 */
   workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
+  deliverableStore?: DeliverableStorePort;
+  getProducerContextRef?: () => string | undefined;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;
@@ -219,6 +222,8 @@ export interface ToolExecutorDeps {
   /** actor 的升级端口；存在即为该会话注册 escalate。 */
   workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
+  deliverableStore?: DeliverableStorePort;
+  getProducerContextRef?: () => string | undefined;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;

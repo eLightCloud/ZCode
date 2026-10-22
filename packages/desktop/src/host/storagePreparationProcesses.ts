@@ -75,14 +75,19 @@ export function prepareHostStorage(
       void worker.terminate();
     }, 30_000);
     const abort = () => {
-      failure = statusError("transport_closed");
+      failure = statusError("transport_closed", {systemCode:"WORKER_ABORTED"});
       void worker.terminate();
     };
     signal.addEventListener("abort", abort, { once: true });
     worker.on("message", (raw: unknown) => {
       const result = workerMessageSchema.safeParse(raw);
       if (!result.success) {
-        failure = statusError("transport_closed");
+        // 仅记录结构化原因，保留协议错误与进程异常退出的区别，不输出迁移正文。
+        failure = statusError("transport_closed", {systemCode:"WORKER_PROTOCOL_INVALID"});
+        console.warn("[storage-preparation] worker protocol rejected", {
+          reasonCode:"WORKER_PROTOCOL_INVALID", issueCodes:result.error.issues.map(issue=>issue.code),
+          hasPhase: Boolean(raw && typeof raw === "object" && "phase" in raw),
+        });
         void worker.terminate();
         return;
       }
@@ -100,7 +105,7 @@ export function prepareHostStorage(
       clearTimeout(firstStateTimer);
       signal.removeEventListener("abort", abort);
       if (done && code === 0 && !failure && firstState) resolve();
-      else reject(failure ?? statusError("transport_closed"));
+      else reject(failure ?? statusError("transport_closed", {systemCode:code === 0 ? "WORKER_NO_COMPLETION" : "WORKER_EXIT_NONZERO"}));
     });
     if (signal.aborted) abort();
   });
@@ -214,7 +219,7 @@ export async function prepareSessionStorage(options: {
       if (code === 0 && prepared && !failure) {
         if (preparedPath) options.preparedPaths?.add(preparedPath);
         resolve();
-      } else reject(failure ?? statusError("transport_closed"));
+      } else reject(failure ?? statusError("transport_closed", {systemCode:code === 0 ? "WORKER_NO_COMPLETION" : "WORKER_EXIT_NONZERO"}));
     });
     if (options.signal.aborted) abort();
   });

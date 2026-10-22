@@ -203,6 +203,7 @@ export type {
   MaterializeWorkflowArtifactFileResult,
   SaveFileRequest,
   SaveFileResult,
+  FileDownloadDestination,
   PrintPageToPdfResult,
   DesktopCloseToTrayCapability,
   DesktopCommandId,
@@ -365,3 +366,4 @@ export {
   resolveBuiltinPluginMarketplaceId,
   builtinPluginStateIds,
 } from "./builtinPluginIdentity.js";
+export * from "./deliverables.js";

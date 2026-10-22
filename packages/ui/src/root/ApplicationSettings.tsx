@@ -30,7 +30,7 @@ export interface ApplicationModelEntry {
   id: string;
   label: string;
   Icon: SettingsIcon;
-  render: () => ReactNode;
+  render: (navigation: { openCustomModels: () => void }) => ReactNode;
 }
 export interface ApplicationSettings {
   sections?: readonly ApplicationSettingsSection[];
@@ -122,7 +122,9 @@ export function ApplicationSettingsContent() {
       key={settings.section.id}
       scope={`application-settings:${settings.section.id}`}
     >
-      {settings.section.render({ openModelEntry: settings.openModelEntry })}
+      {settings.section.render({
+        openModelEntry: settings.openModelEntry,
+      })}
     </ScopedErrorBoundary>
   );
 }

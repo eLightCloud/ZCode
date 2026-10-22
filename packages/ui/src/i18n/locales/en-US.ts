@@ -1,6 +1,13 @@
 import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /** English translations */
 const enUS: Record<string, string> = {
+  "delivery.files": "Delivered files",
+  "delivery.partialFailure": "Some files could not be preserved. See tool details.",
+  "delivery.downloadSource": "Download from source",
+  "delivery.downloadFile": "Download file",
+  "delivery.downloading": "Downloading…",
+  "delivery.downloadFailed": "The source is unavailable or the file changed. Try again.",
+  "delivery.streamingRequired": "Use Chrome or Edge on a computer to stream this large file.",
   "applicationPages.navigation": "Application pages",
   "applicationPages.refresh": "Refresh page",
   "applicationPages.close": "Back to workspace",

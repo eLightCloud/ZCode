@@ -1,3 +1,5 @@
+import { IApplicationHostService } from "./application-host/contract.js";
+import { createApplicationHostService } from "./application-host/applicationHostService.js";
 import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 import { channelReplyHostRequestSchema, channelReplyResultSchema } from "@zcode/shared";
@@ -2715,6 +2717,14 @@ export function createLocalServices(options: {
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
   sharedSqliteRepos.set(services, sqliteReposToClose);
+  const applicationHost = createApplicationHostService({
+    native: zcodeAgentService,
+    credentials: credentialService,
+    storageRoot: resolveAppConfigDir(),
+    surface: options.agentTelemetry?.runtimeSurface,
+    modulePath: process.env["ZCODE_APPLICATION_HOST_MODULE"],
+  });
+  services.register(IApplicationHostService, applicationHost);
   return services;
 }
 
@@ -2797,6 +2807,10 @@ function readTelemetryOAuthUserId(rawUserInfo: string | null): string {
 }
 
 export function disposeServiceResources(services: ServiceCollection): void {
+  const application = services.getOptional(IApplicationHostService) as
+    | (IApplicationHostService & { dispose?(): Promise<void> })
+    | undefined;
+  void application?.dispose?.().catch(() => undefined);
   const content = services.getOptional(ICloudContentService);
   if (content && hasDisposeAllAndWait(content)) void content.disposeAllAndWait().catch(() => {});
   (
@@ -2838,6 +2852,10 @@ export function disposeServiceResources(services: ServiceCollection): void {
 }
 
 export async function disposeServiceResourcesAndWait(services: ServiceCollection): Promise<void> {
+  const application = services.getOptional(IApplicationHostService) as
+    | (IApplicationHostService & { dispose?(): Promise<void> })
+    | undefined;
+  await application?.dispose?.();
   (
     services.getOptional(IGenUiService) as (IGenUiService & { dispose?(): void }) | undefined
   )?.dispose?.();

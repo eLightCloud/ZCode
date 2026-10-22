@@ -1,4 +1,5 @@
 import type {
+  NativeDeliverable,
   BackgroundBashOutputResult,
   SessionDebugSnapshot,
   ZCodeSessionContentProfile,
@@ -636,6 +637,22 @@ export interface IZCodeAgentService {
   createSession(params: ZCodeAgentCreateSessionParams): Promise<ZCodeSessionStateSnapshot>;
   resumeSession(params: ZCodeAgentResumeSessionParams): Promise<ZCodeSessionStateSnapshot>;
   listSessions(params: ZCodeAgentListSessionsParams): Promise<ZCodeSessionInfo[]>;
+  listDeliverables(
+    params: ZCodeAgentWorkspaceTarget & { after?: number; limit?: number },
+  ): Promise<{ entries: NativeDeliverable[]; cursor: number }>;
+  readDeliverable(
+    params: ZCodeAgentWorkspaceTarget & {
+      id: string;
+      version: number;
+      offset: number;
+      length: number;
+    },
+  ): Promise<{ dataBase64: string }>;
+
+  releaseDeliverable(
+    params: ZCodeAgentWorkspaceTarget & { id: string; version: number; sha256: string },
+  ): Promise<{ released: true }>;
+
   listSessionSubagents(
     params: ZCodeAgentListSessionSubagentsParams,
   ): Promise<ZCodeSessionSubagentsResult>;

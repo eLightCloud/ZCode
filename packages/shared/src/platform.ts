@@ -291,6 +291,14 @@ export type SaveFileRequest =
       suggestedName: string;
     };
 
+/** Local platform destination; never serialized over the native RPC channel. */
+export interface FileDownloadDestination {
+  maxBytes?: number;
+  write(bytes: Uint8Array): Promise<void>;
+  close(): Promise<"completed" | "initiated">;
+  abort(): Promise<void>;
+}
+
 export interface SaveFileResult {
   canceled?: boolean;
   error?: string;
@@ -672,6 +680,9 @@ export interface IPlatformService {
 
   /** 使用宿主原生另存为对话框写入文件；普通 Web 端不实现 */
   saveFile?(payload: SaveFileRequest): Promise<SaveFileResult>;
+
+  /** Opens a user-selected destination before authorized bounded byte reads. */
+  openFileDownload?(name: string): Promise<FileDownloadDestination>;
 
   /**
    * 用 Chromium 打印引擎把当前 webContents 的 print 媒体版面输出为 PDF（矢量文本）。

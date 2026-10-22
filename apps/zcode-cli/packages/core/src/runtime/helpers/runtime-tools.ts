@@ -50,6 +50,10 @@ function registerRuntimeBuiltInTools(runtime: AgentRuntimeInternal, deps: AgentR
   registerBuiltInTools(runtime.registry, {
     bashTimeoutPolicy: runtime.config.bashTimeoutPolicy,
     includeSkill: Boolean(runtime.skillPort),
+    includeDeliverables:
+      Boolean(deps.deliverableStore) &&
+      runtime.config.taskType !== "subagent_child" &&
+      runtime.config.taskType !== "workflow_child",
     includeAgent: Boolean(runtime.subagentPort),
     includeSendMessage: runtime.subagentPort?.sendMessage !== undefined,
     includeRespondToCoordinator:
@@ -187,6 +191,8 @@ function createRuntimeToolExecutor(
     workflowSubmitPort: deps.workflowSubmitPort,
     workflowEscalatePort: deps.workflowEscalatePort,
     artifactStore: deps.artifactStore,
+    deliverableStore: deps.deliverableStore,
+    getProducerContextRef: () => runtime.activeTurn?.inputId,
     automationPort: deps.automationPort,
     offPeakPort: deps.offPeakPort,
     topicResourcePort: deps.topicResourcePort,

@@ -1,3 +1,4 @@
+import type { DeliverableStorePort } from "@zcode/contracts";
 import type { McpToolUiDescriptor } from "@zcode/shared/mcp-apps";
 // ============================================================
 // Tool Types - Core tool types for registry and executor
@@ -170,6 +171,8 @@ export interface ToolExecutionContext {
   /** 工作流 actor 升级阻塞问题并等待主代理作答的端口；仅在 workflow actor 会话注入。 */
   workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
+  deliverableStore?: DeliverableStorePort;
+  getProducerContextRef?: () => string | undefined;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;

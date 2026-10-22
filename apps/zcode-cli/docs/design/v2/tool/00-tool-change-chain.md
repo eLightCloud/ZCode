@@ -1,5 +1,16 @@
 # Tool Change Chain Spec
 
+## 明确文件交付（2026-10-21）
+
+新增通用 `DeliverFiles`：契约与运行时 schema → 内置工具注册 / 权限声明 → handler →
+原生文件交付存储 port / Node 适配 → 持久清单与不可变快照 → 公开协议 / Host 读取。
+完整合同见根目录 [final-deliverables](../../../../../../docs/final-deliverables.md)。
+只有明确最终文件才声明；普通 Write、Bash 和路径引用不触发交付，不改变 Agent 执行终态。
+每次调用沿原 trace / session / turn / toolCallId，文件 IO 有界、可取消，重复调用恢复原快照。
+源应用消费与企业保存位于原生之外；工具结果不携带存储签名或企业凭据。
+Desktop / Web / Server 共用公开描述符，UI 不以预览白名单代替完整清单。
+验收包括 schema、注册、权限、实际字节、越界、修订、重复及冷恢复；TUI / V4 使用真实工具结果。
+
 ## 应用发行内置插件身份（2026-10-20）
 
 应用发行可以通过受信启动元数据与构建定义提供内置市场身份，规范见

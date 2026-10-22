@@ -18,6 +18,7 @@ import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
 import { useUsageEntitlement } from "@/hooks/useUsageEntitlement.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useSettings } from "@/hooks/useSettingService.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import {
   resolveEntitledAccountProviderAccess,
   resolveEntitledAccountProviderAccessFingerprint,
@@ -433,6 +434,7 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
 }) {
   const { intl } = useZCodeIntl();
   const entryGate = useCodingPlanEntryGate();
+  const nativeCloudEnabled = useApplicationPeripherals()?.nativeCloudEnabled !== false;
   const { providerEntitlements, upgradeTargetProviderId } = state;
   const upgradeProviderSnapshot =
     providerEntitlements.find((item) => item.providerId === upgradeTargetProviderId)?.snapshot ??
@@ -454,33 +456,35 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
         <BarChart3Icon className="size-4" />
         {intl.formatMessage({ id: "sidebar.usage.plan.openStats" })}
       </DropdownMenuItem>
-      {/* 产品要求：升级入口始终显示；未解析出当前套餐时由当前 provider family 决定品牌。 */}
-      <DropdownMenuItem
-        data-testid={TID_SIDEBAR_CODING_PLAN_UPGRADE_BUTTON}
-        disabled={entryGate.status === "loading"}
-        aria-busy={entryGate.status === "loading"}
-        onSelect={() => {
-          if (entryGate.status !== "ready") {
-            entryGate.retry?.();
-            return;
-          }
-          onUpgradeClick?.(
-            upgradeTargetProviderId,
-            createCodingPlanFunnelContext({
-              providerId: upgradeTargetProviderId,
-              upgradeSource: "profile_menu",
-              eventRegion: "app.profile",
-              eventText: intl.formatMessage({ id: upgradeActionLabelId }),
-              entryPlanState: resolveCodingPlanEntryPlanState({
-                snapshot: upgradeProviderSnapshot,
+      {/* 应用禁用原生云时不展示套餐升级；原生构建继续按 provider family 决定品牌。 */}
+      {nativeCloudEnabled ? (
+        <DropdownMenuItem
+          data-testid={TID_SIDEBAR_CODING_PLAN_UPGRADE_BUTTON}
+          disabled={entryGate.status === "loading"}
+          aria-busy={entryGate.status === "loading"}
+          onSelect={() => {
+            if (entryGate.status !== "ready") {
+              entryGate.retry?.();
+              return;
+            }
+            onUpgradeClick?.(
+              upgradeTargetProviderId,
+              createCodingPlanFunnelContext({
+                providerId: upgradeTargetProviderId,
+                upgradeSource: "profile_menu",
+                eventRegion: "app.profile",
+                eventText: intl.formatMessage({ id: upgradeActionLabelId }),
+                entryPlanState: resolveCodingPlanEntryPlanState({
+                  snapshot: upgradeProviderSnapshot,
+                }),
               }),
-            }),
-          );
-        }}
-      >
-        <RocketIcon className="size-4" />
-        {entryGate.label ?? intl.formatMessage({ id: upgradeActionLabelId })}
-      </DropdownMenuItem>
+            );
+          }}
+        >
+          <RocketIcon className="size-4" />
+          {entryGate.label ?? intl.formatMessage({ id: upgradeActionLabelId })}
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }

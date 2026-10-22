@@ -436,6 +436,8 @@ async function executeToolCallImpl(
         workflowSubmitPort: deps.workflowSubmitPort,
         workflowEscalatePort: deps.workflowEscalatePort,
         artifactStore: deps.artifactStore,
+        deliverableStore: deps.deliverableStore,
+        getProducerContextRef: deps.getProducerContextRef,
         automationPort: deps.automationPort,
         offPeakPort: deps.offPeakPort,
         topicResourcePort: deps.topicResourcePort,

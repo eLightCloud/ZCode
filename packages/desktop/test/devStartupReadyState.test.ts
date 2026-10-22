@@ -26,6 +26,7 @@ describe("desktop dev startup ready state", () => {
   it("每个 tsup config 都应在自身成功后写入独立 ready 标记", () => {
     expect(getConfig("main").onSuccess).toBe('node scripts/write-dev-ready-marker.mjs main');
     expect(getConfig("host").onSuccess).toBe('node scripts/write-dev-ready-marker.mjs host');
+    expect(getConfig("scheduler").onSuccess).toBe('node scripts/write-dev-ready-marker.mjs scheduler');
     expect(getConfig("preload").onSuccess).toBe('node scripts/write-dev-ready-marker.mjs preload');
   });
 
@@ -34,6 +35,7 @@ describe("desktop dev startup ready state", () => {
     expect(devScriptSource).toContain('resolve(root, "out/.main-build-ready")');
     expect(devScriptSource).toContain('resolve(root, "out/.host-build-ready")');
     expect(devScriptSource).toContain('resolve(root, "out/.preload-build-ready")');
+    expect(devScriptSource).toContain('resolve(root, "out/.scheduler-build-ready")');
     expect(devScriptSource).not.toContain("while (!existsSync(mainBundle))");
   });
 });

@@ -1,3 +1,4 @@
+import { openBrowserFileDownload } from "@zcode/client/browser-file-download";
 import { recordArmsCustomEventForE2E } from "@zcode/ui";
 import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
 
@@ -9,6 +10,8 @@ export function createDesktopPlatform(options: {
 }): IPlatformService {
   return {
     canSelectFilePath: true,
+    openFileDownload: (name) =>
+      openBrowserFileDownload(name, desktopBrowserPlatformBridge.saveFile),
     pluginSandbox: createDesktopPluginSandboxPlatform(),
     createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
     isLocalDevelopmentRuntime: options.isLocalDevelopmentRuntime,

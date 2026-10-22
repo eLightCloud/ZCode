@@ -5770,6 +5770,7 @@ function toProtocolToolCallDisplay(
     case "eval_workflow_snippet":
     case "saved_workflow_list":
     case "list_models":
+    case "deliver_files":
     // ResumeWorkflowRun 的恢复卡。
     case "resume_workflow_run":
       return display;

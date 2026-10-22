@@ -1,3 +1,4 @@
+import { queryNativeDeliverables } from "./deliverables.js";
 import { querySessionDebug } from "./session-debug.js";
 import { createNodeNetworkCapture } from "@zcode/shared/node";
 import { networkCaptureControlSchema, zcodeProtocolNotifications } from "@zcode/shared";
@@ -511,6 +512,12 @@ export class ZCodeProtocolAgentServer {
 
   private async dispatchRequest(request: ZCodeProtocolRequest) {
     switch (request.method) {
+      case zcodeProtocolMethods.deliverablesList:
+        return await queryNativeDeliverables("list", request.params);
+      case zcodeProtocolMethods.deliverableRelease:
+        return await queryNativeDeliverables("release", request.params);
+      case zcodeProtocolMethods.deliverableRead:
+        return await queryNativeDeliverables("read", request.params);
       // ── v4 conversation 通道（竖切，与旧 session/* 并存）──
       case V4_METHODS.connectionFlow: {
         this.requireV4Gateway().setConnectionFlowState(request.params);

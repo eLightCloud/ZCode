@@ -1,3 +1,4 @@
+import type { DeliverableStorePort } from "@zcode/contracts";
 import type { AiSdkModelAdapter } from "@zcode/adapters/model";
 import type {
   AgentTelemetryRuntimeOwner,
@@ -184,6 +185,7 @@ export interface ZCodeAppOptions {
   imageProcessorPort?: ImageProcessorPort;
   pdfDocumentPort?: PdfDocumentPort;
   artifactStore?: ToolArtifactStorePort;
+  deliverableStore?: DeliverableStorePort;
   contextSourcePort?: ContextSourcePort;
   /** 仅协议宿主注入；普通 CLI 不加载内置 visualize 技能。 */
   includeVisualize?: boolean;

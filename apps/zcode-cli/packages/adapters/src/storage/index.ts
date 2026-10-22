@@ -1,5 +1,7 @@
 // Storage adapters - EventStore, ArtifactStore, MemoryStore implementations
 
+export { NodeDeliverableStore } from "./deliverable-store.js";
+
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

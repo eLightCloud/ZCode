@@ -1,3 +1,4 @@
+import { nativeDeliverFilesDisplaySchema, type NativeDeliverFilesDisplay } from "@zcode/shared";
 import {
   toolCallEvalWorkflowSnippetDisplaySchema,
   toolCallGetWorkflowRunDisplaySchema,
@@ -65,6 +66,7 @@ export interface CuaToolResultDisplay {
 }
 
 export type ToolResultDisplay =
+  | NativeDeliverFilesDisplay
   | LocalAgentMessageToolResultDisplay
   | TaskStopToolResultDisplay
   | TaskOutputToolResultDisplay
@@ -91,12 +93,12 @@ const WORKFLOW_DISPLAY_PARSERS_BY_KIND: Record<
   (value: Record<string, unknown>) => ToolResultDisplay | undefined
 > = {
   get_workflow_run: (value) => parseWorkflowDisplay(toolCallGetWorkflowRunDisplaySchema, value),
-  list_workflow_runs: (value) =>
-    parseWorkflowDisplay(toolCallListWorkflowRunsDisplaySchema, value),
+  list_workflow_runs: (value) => parseWorkflowDisplay(toolCallListWorkflowRunsDisplaySchema, value),
   eval_workflow_snippet: (value) =>
     parseWorkflowDisplay(toolCallEvalWorkflowSnippetDisplaySchema, value),
   saved_workflow_list: (value) =>
     parseWorkflowDisplay(toolCallSavedWorkflowListDisplaySchema, value),
+  deliver_files: (value) => parseWorkflowDisplay(nativeDeliverFilesDisplaySchema, value),
   list_models: (value) => parseWorkflowDisplay(toolCallListModelsDisplaySchema, value),
   resume_workflow_run: (value) =>
     parseWorkflowDisplay(toolCallResumeWorkflowRunDisplaySchema, value),

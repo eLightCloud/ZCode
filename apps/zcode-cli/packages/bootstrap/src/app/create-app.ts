@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import {
   createInMemorySessionEventStore,
   createNodeToolArtifactStore,
+  NodeDeliverableStore,
 } from "@zcode/adapters/storage";
 import { createNodeLoggerFactory } from "@zcode/adapters/logging";
 import { createConfig, resolvePath } from "@zcode/adapters/config";
@@ -383,6 +384,9 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         videoCacheRootDir: join(storageRoot, "cli", "video-cache"),
       });
     const imageProcessorPort = options.imageProcessorPort ?? createJimpImageProcessorAdapter();
+    const deliverableStore =
+      options.deliverableStore ??
+      new NodeDeliverableStore(join(getCliStorageRoot(storageRoot), "deliverables"), logger);
     const messageEnabled = isMessageEnabled(options.env ?? process.env);
     const sessionMailboxPort =
       options.sessionMailboxPort ??
@@ -842,6 +846,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       artifactStore,
       contextSourcePort:
         options.contextSourcePort ?? createNodeContextSourceAdapter({ env: options.env }),
+      deliverableStore,
       skillPort:
         configResult.config.features.skill && configResult.config.skills.enabled
           ? (options.skillPort ??
@@ -1251,6 +1256,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         try {
           await closeSession?.();
         } finally {
+          if (!options.deliverableStore) deliverableStore.close();
           try {
             providerModelRuntime?.dispose();
           } finally {

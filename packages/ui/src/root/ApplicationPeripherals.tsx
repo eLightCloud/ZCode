@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import type { NativeDeliverable } from "@zcode/shared";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 
 export interface ApplicationShareCandidate {
@@ -9,6 +10,7 @@ export interface ApplicationShareCandidate {
 /** Trusted optional assembly; owns no session, credential or publication facts. */
 export interface ApplicationPeripherals {
   nativeCloudEnabled: boolean;
+  renderDeliverables?: (files: readonly NativeDeliverable[], workspacePath: string) => ReactNode;
   openHelp: () => void;
   openFeedback: () => void;
   openShare: (candidate: ApplicationShareCandidate) => void;

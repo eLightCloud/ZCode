@@ -1,4 +1,5 @@
 import { TurnMachineImpl, createPartId } from "../deps.js";
+
 import type {
   MessageId,
   Model,
@@ -7,15 +8,20 @@ import type {
   ToolCallId,
   TraceContext,
 } from "../deps.js";
+
 import {
   emitStreamingToolLedgerUpdate,
   requireRuntimeToolCallName,
-  toRecordInput,
   throwIfTurnAborted,
+  toRecordInput,
 } from "../helpers/index.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
+
 import type { StreamedToolExecutionResult } from "../types.js";
+
 import { createSyntheticStreamedToolResult } from "./streaming-tool-synthetic-result.js";
+
 import {
   beginStreamRecoveryAttempt,
   emitStreamRecoveryRetryEvents,
@@ -23,19 +29,30 @@ import {
   hasStreamRecoveryBudget,
   recoverPartialAssistantOutputFailure,
 } from "./streaming-recovery.js";
+
 import { executeToolCallsForModelStep } from "./turn-tools.js";
+
 import { mcpToolPartMetadata } from "./tool-part-metadata.js";
+
 import { persistPendingToolPart } from "./tool-part-persistence.js";
+
 import {
   isAutomationMutationRestrictedTurn,
   isOffPeakCreateRestrictedTurn,
   recordModelHistoryRound,
   type RegularTurnLoopState,
 } from "./turn-loop-state.js";
+
 import { createRuntimeAssistantEntry } from "../../agent/message-history.js";
+
 import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
 
-const STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS = 250;
+import {
+  STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS,
+  collectCompletedResults,
+  raceWithTimeout,
+} from "./streaming-tool-settlement.js";
+
 const STREAMING_TOOL_EXECUTION_MODE = "readOnly";
 
 export function createStreamingToolCoordinator(
@@ -380,35 +397,4 @@ function shouldExecuteToolDuringStream(
     !requiresUserInteraction &&
     sideEffectScope === "none"
   );
-}
-
-async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<undefined>((resolve) => {
-        timeout = setTimeout(() => resolve(undefined), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-async function collectCompletedResults(
-  handles: Map<string, Promise<StreamedToolExecutionResult | undefined>>,
-  toolCalls: readonly ModelToolCall[],
-): Promise<StreamedToolExecutionResult[]> {
-  const settled = await Promise.all(
-    toolCalls.map((toolCall) => {
-      const handle = handles.get(toolCall.id);
-      if (!handle) return undefined;
-      return raceWithTimeout(
-        handle.catch(() => undefined),
-        STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS,
-      );
-    }),
-  );
-  return settled.filter((result): result is StreamedToolExecutionResult => result !== undefined);
 }

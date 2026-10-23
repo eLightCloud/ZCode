@@ -1,28 +1,37 @@
 import { beginLocalTurnPreparation } from "@zcode/contracts";
+
 import { runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
+
 import type { ModelReasoningContentBlock, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
+
 import {
   buildSuspiciousEmptyDiagnostics,
   finalizeSuspiciousEmptyModelResult,
   isContextExceededFinishReason,
   isSuspiciousEmptyModelResult,
-  logModelRequestMediaSummary,
   logMediaBudgetProjection,
   logMediaCapabilityProjection,
-  normalizeStreamError,
+  logModelRequestMediaSummary,
   normalizeModelToolCallsForRuntime,
-  projectMessagesWithMediaAttachmentPaths,
   projectMessagesForInputFormat,
   projectMessagesForMediaBudget,
+  projectMessagesWithMediaAttachmentPaths,
   readRawFinishReason,
 } from "../helpers/index.js";
+
 import type { RunModelTextRequestOptions, RuntimeModelTextResult } from "../types.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
+
 import { modelRequestTokenLimitLogContext } from "./model-token-limits.js";
+
 import { createModelStreamingEventQueue } from "./model-streaming-event-queue.js";
-import { getOrCreateReasoningBlock } from "./reasoning-stream.js";
+
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
+
 import { isOutputTokenLimitFinishReason } from "./turn-output-token-continuation.js";
+
+import { applyModelStreamEvent } from "./model-stream-events.js";
 
 const TOOL_INPUT_STREAM_DELTA_FALLBACK_FLUSH_CHARS = 4096;
 
@@ -154,16 +163,20 @@ export async function runModelTextRequest(
     };
   }
 
-  let text = "";
-  let finishReason = "unknown";
-  let usage: ModelUsage = {};
-  let providerMetadata: Record<string, unknown> | undefined;
+  const streamState: {
+    text: string;
+    finishReason: string;
+    usage: ModelUsage;
+    providerMetadata: Record<string, unknown> | undefined;
+  } = { text: "", finishReason: "unknown", usage: {}, providerMetadata: undefined };
+
   const reasoning: ModelReasoningContentBlock[] = [];
   const reasoningById = new Map<string, ModelReasoningContentBlock>();
   const toolCalls: ModelToolCall[] = [];
   const toolCallIds = new Set<string>();
   const toolInputDeltaBuffers = new Map<ToolCallId, string>();
-  const publishStreamSnapshot = () => options.onStreamSnapshot?.({ reasoning, text });
+  const publishStreamSnapshot = () =>
+    options.onStreamSnapshot?.({ reasoning, text: streamState.text });
   const streamingEventQueue = createModelStreamingEventQueue({
     events: options.events,
     runtime: this,
@@ -230,222 +243,24 @@ export async function runModelTextRequest(
   finishAssembly();
   try {
     for await (const event of modelStream) {
-      switch (event.type) {
-        case "start": {
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "start",
-          });
-          break;
-        }
-
-        case "text_start": {
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "text_start",
-          });
-          break;
-        }
-
-        case "text_delta": {
-          text += event.text;
-          options.onStreamTextDelta?.(event.text);
-          publishStreamSnapshot();
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: event.text,
-            done: false,
-            kind: "text_delta",
-          });
-          break;
-        }
-
-        case "text_end": {
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "text_end",
-          });
-          break;
-        }
-
-        case "reasoning_start": {
-          const block = getOrCreateReasoningBlock({
-            id: event.id,
-            providerMetadata: event.providerMetadata,
-            reasoning,
-            reasoningById,
-          });
-          if (event.providerMetadata) {
-            block.providerOptions = event.providerMetadata;
-          }
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "reasoning_start",
-          });
-          break;
-        }
-
-        case "reasoning_delta": {
-          const block = getOrCreateReasoningBlock({
-            id: event.id,
-            providerMetadata: event.providerMetadata,
-            reasoning,
-            reasoningById,
-          });
-          block.text += event.text;
-          options.onStreamReasoningDelta?.(event.text);
-          if (event.providerMetadata) block.providerOptions = event.providerMetadata;
-          publishStreamSnapshot();
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: event.text,
-            done: false,
-            kind: "reasoning_delta",
-          });
-          break;
-        }
-
-        case "reasoning_end": {
-          const block = reasoningById.get(event.id);
-          if (block && event.providerMetadata) {
-            block.providerOptions = event.providerMetadata;
-          }
-          reasoningById.delete(event.id);
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "reasoning_end",
-          });
-          break;
-        }
-
-        case "tool_input_start": {
-          const toolCallId = event.id as ToolCallId;
-          toolInputDeltaBuffers.delete(toolCallId);
-          this.logger?.debug("Model streaming tool input started", {
-            ...traceContextToLogContext(options.traceContext),
-            event: "model.streaming.tool_input_start",
-            module: "core.runtime",
-            providerExecuted: event.providerExecuted,
-            toolCallId,
-            toolName: event.toolName,
-          });
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "tool_input_start",
-            providerExecuted: event.providerExecuted,
-            toolCallId,
-            toolName: event.toolName,
-          });
-          break;
-        }
-
-        case "tool_input_delta": {
-          await appendToolInputDelta(event.id as ToolCallId, event.delta);
-          break;
-        }
-
-        case "tool_input_end": {
-          await flushToolInputDelta(event.id as ToolCallId);
-          this.logger?.debug("Model streaming tool input ended", {
-            ...traceContextToLogContext(options.traceContext),
-            event: "model.streaming.tool_input_end",
-            module: "core.runtime",
-            toolCallId: event.id,
-          });
-          await enqueueStreamingEvent({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            kind: "tool_input_end",
-            toolCallId: event.id as ToolCallId,
-          });
-          break;
-        }
-
-        case "tool_call": {
-          const [toolCall] =
-            normalizeModelToolCallsForRuntime([event.toolCall], {
-              logger: this.logger,
-              model: executionModelSelection,
-              source: "streamText",
-              traceContext: options.traceContext,
-            }) ?? [];
-          if (!toolCall) {
-            break;
-          }
-          await flushToolInputDelta(toolCall.id as ToolCallId);
-          if (toolCallIds.has(toolCall.id)) {
-            // 防御原因：协议兼容或自定义 adapter 路径可能重复投递同 id 的 final tool_call；
-            // runtime 按 id 去重，避免同一次响应内重复执行。
-            break;
-          }
-          toolCallIds.add(toolCall.id);
-          toolCalls.push(toolCall);
-          this.logger?.debug("Model streaming tool call completed", {
-            ...traceContextToLogContext(options.traceContext),
-            event: "model.streaming.tool_call",
-            inputKeys:
-              typeof toolCall.input === "object" &&
-              toolCall.input !== null &&
-              !Array.isArray(toolCall.input)
-                ? Object.keys(toolCall.input as Record<string, unknown>)
-                : [],
-            module: "core.runtime",
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-          });
-          await enqueueStreamingEventAndDrain({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: false,
-            input: toolCall.input,
-            kind: "tool_call",
-            toolCallId: toolCall.id as ToolCallId,
-            toolName: toolCall.name,
-          });
-          options.onStreamToolCall?.(toolCall);
-          break;
-        }
-
-        case "finish": {
-          finishReason = event.finishReason;
-          usage = event.usage;
-          providerMetadata = event.providerMetadata;
-          await flushAllToolInputDeltas();
-          await enqueueStreamingEventAndDrain({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: true,
-            kind: "finish",
-          });
-          break;
-        }
-
-        case "error": {
-          await flushAllToolInputDeltas();
-          await enqueueStreamingEventAndDrain({
-            assistantMessageId: options.assistantMessageId,
-            delta: "",
-            done: true,
-            kind: "error",
-          });
-          // AI SDK 的 error chunk 常是 ProviderBusinessError 的 plain object（如 3007），
-          // 若只做 JSON.stringify 会丢失 providerCode，UI 只能看到泛化的 stream 失败文案。
-          throw normalizeStreamError(event.error);
-        }
-      }
+      await applyModelStreamEvent.call(
+        this,
+        event,
+        enqueueStreamingEvent,
+        options,
+        streamState,
+        publishStreamSnapshot,
+        reasoning,
+        reasoningById,
+        toolInputDeltaBuffers,
+        appendToolInputDelta,
+        flushToolInputDelta,
+        executionModelSelection,
+        toolCallIds,
+        toolCalls,
+        enqueueStreamingEventAndDrain,
+        flushAllToolInputDeltas,
+      );
     }
   } catch (error) {
     await streamingEventQueue.drain();
@@ -453,24 +268,27 @@ export async function runModelTextRequest(
   }
   await streamingEventQueue.drain();
 
-  const rawFinishReason = readRawFinishReason(providerMetadata);
-  const outputTokenLimit = isOutputTokenLimitFinishReason(finishReason, rawFinishReason);
+  const rawFinishReason = readRawFinishReason(streamState.providerMetadata);
+  const outputTokenLimit = isOutputTokenLimitFinishReason(
+    streamState.finishReason,
+    rawFinishReason,
+  );
   const contextExceeded =
     toolCalls.length === 0 &&
     !outputTokenLimit &&
-    isContextExceededFinishReason(finishReason, rawFinishReason);
+    isContextExceededFinishReason(streamState.finishReason, rawFinishReason);
   if (contextExceeded) {
     // 这里若把 HTTP 200 + finish metadata 提前抛成流异常，会先被通用断流恢复接管，
     // 从而绕过 turn 层的 Reactive Compact。保留原始结果，由 turn 层统一处理超窗语义。
     this.logger?.warn("Model stream ended with provider context overflow", {
       ...traceContextToLogContext(options.traceContext),
       event: "model.runtime.stream.context_exceeded",
-      finishReason,
+      finishReason: streamState.finishReason,
       module: "core.runtime",
       modelProviderId: executionModelSelection.providerId,
       modelId: executionModelSelection.modelId,
       rawFinishReason,
-      textLength: text.length,
+      textLength: streamState.text.length,
       toolCallCount: toolCalls.length,
     });
   }
@@ -480,7 +298,12 @@ export async function runModelTextRequest(
   if (
     !contextExceeded &&
     !outputTokenLimit &&
-    isSuspiciousEmptyModelResult(finishReason, text.length, toolCalls.length, usage)
+    isSuspiciousEmptyModelResult(
+      streamState.finishReason,
+      streamState.text.length,
+      toolCalls.length,
+      streamState.usage,
+    )
   ) {
     // zcode-plan 常返回 HTTP 200 空 SSE，需在抛错前打出 finish/providerMetadata 摘要，避免只能看到 UI 泛化文案。
     this.logger?.warn("Model stream ended with suspicious empty completion", {
@@ -489,29 +312,29 @@ export async function runModelTextRequest(
       module: "core.runtime",
       modelProviderId: executionModelSelection.providerId,
       modelId: executionModelSelection.modelId,
-      textLength: text.length,
+      textLength: streamState.text.length,
       toolCallCount: toolCalls.length,
       ...buildSuspiciousEmptyDiagnostics({
-        finishReason,
-        providerMetadata,
+        finishReason: streamState.finishReason,
+        providerMetadata: streamState.providerMetadata,
         rawFinishReason,
       }),
     });
     finalizeSuspiciousEmptyModelResult({
-      finishReason,
+      finishReason: streamState.finishReason,
       model: executionModelSelection,
-      providerMetadata,
+      providerMetadata: streamState.providerMetadata,
       rawFinishReason,
     });
   }
 
   return {
     ...(contextUsageBreakdown.length > 0 ? { contextUsageBreakdown } : {}),
-    finishReason,
-    providerMetadata,
+    finishReason: streamState.finishReason,
+    providerMetadata: streamState.providerMetadata,
     reasoning: reasoning.length > 0 ? reasoning : undefined,
-    text,
+    text: streamState.text,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    usage,
+    usage: streamState.usage,
   };
 }

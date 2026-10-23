@@ -1,20 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { createTestModelSelection } from "./test-model-selection.js";
-import { createTestModelFormatProperties } from "./test-runtime-model.js";
 import {
   CompactPhase,
   CompactReason,
-  CompactTrigger,
   CompactTimelineDisplay,
   CompactTimelineStatus,
+  CompactTrigger,
   CoreErrorType,
-  HookEventName,
-  MicrocompactStrategy,
-  MicrocompactTrigger,
-  ModelErrorCode,
-  type McpConnectionSnapshot,
-  type McpPort,
-  SessionEventType,
   createMessageId,
   createPartId,
   createProjectId,
@@ -22,12 +12,19 @@ import {
   createSessionId,
   createTraceId,
   getCurrentModelInvocationContext,
+  HookEventName,
+  MicrocompactStrategy,
+  MicrocompactTrigger,
+  ModelErrorCode,
+  SessionEventType,
   type CompactBoundaryPayload,
   type CompactTimelinePayload,
-  type MicrocompactBoundaryPayload,
+  type McpConnectionSnapshot,
+  type McpPort,
   type MessageInfo,
   type MessagePart,
   type MessageWithParts,
+  type MicrocompactBoundaryPayload,
   type Model,
   type ModelRequest,
   type ModelResult,
@@ -38,8 +35,12 @@ import {
   type SessionStorePort,
   type TodoItem,
 } from "@zcode/contracts";
-import { createTestAgentRuntime } from "./test-agent-runtime.js";
-import { countContinuePrompts } from "./runtime-output-token-continuation-test-helpers.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  realUserRuntimeMetadata,
+  systemReminderAttachmentEntry,
+  type RuntimeMessageEntry,
+} from "../src/agent/message-history.js";
 import {
   buildCompactPrompt,
   buildCompactSummaryMessage,
@@ -47,11 +48,6 @@ import {
   estimateMessageTokens,
   formatCompactSummary,
 } from "../src/compact/index.js";
-import {
-  realUserRuntimeMetadata,
-  systemReminderAttachmentEntry,
-  type RuntimeMessageEntry,
-} from "../src/agent/message-history.js";
 import { createInMemoryHookRunner } from "../src/hooks/index.js";
 import {
   buildPostCompactReadStateReminderEntries,
@@ -59,14 +55,18 @@ import {
   selectCompactEntries,
   toTokenUsageInfo,
 } from "../src/runtime/helpers/index.js";
-import { createToolRegistry } from "../src/tool/registry.js";
-import { createReadFileStateKey } from "../src/tool/read-file-state.js";
-import type { ReadFileStateMap } from "../src/tool/types.js";
 import { estimateCurrentModelInputTokens } from "../src/runtime/methods/compact.js";
+import { createReadFileStateKey } from "../src/tool/read-file-state.js";
+import { createToolRegistry } from "../src/tool/registry.js";
+import type { ReadFileStateMap } from "../src/tool/types.js";
 import { MemoryFileSystem } from "./memory-test-utils.js";
+import { countContinuePrompts } from "./runtime-output-token-continuation-test-helpers.js";
+import { createTestAgentRuntime } from "./test-agent-runtime.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
+import { createTestModelSelection } from "./test-model-selection.js";
 import {
   createTestModelFactory,
+  createTestModelFormatProperties,
   createTestRuntimeModel,
   type TestModelExecutionObservation,
 } from "./test-runtime-model.js";
@@ -2616,7 +2616,10 @@ describe("AgentRuntime manual compact", () => {
     const runtime = createTestAgentRuntime(
       sessionId,
       // 本场景固定截断预算；目录补齐另由 agent-listing-persistence 覆盖。
-      { systemPrompt: "You are a compact prompt-too-long test agent.", subagents: { enabled: false } },
+      {
+        systemPrompt: "You are a compact prompt-too-long test agent.",
+        subagents: { enabled: false },
+      },
       {
         eventStore,
         modelFactory: createTestModelFactory(
@@ -3877,12 +3880,13 @@ describe("AgentRuntime manual compact", () => {
     expect(mainRequestMaxOutputTokens).toBe(64_000);
     expect(autoCompactLog).toMatchObject({
       maxOutputTokens: 64_000,
-      modelContextBudgetStrategy: "legacy",
-      outputReserveTokens: 64_000,
-      threshold: 51_000,
+      // Runtime 将 legacy 配置归一为现行 preflight-v1；不把旧配置当执行事实。
+      modelContextBudgetStrategy: "preflight-v1",
+      outputReserveTokens: 21_000,
+      threshold: 94_000,
     });
     expect(microcompactLog).toMatchObject({
-      thresholdTokens: 45_900,
+      thresholdTokens: 84_600,
     });
   });
 

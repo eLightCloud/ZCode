@@ -1,9 +1,9 @@
 // v4 transcript 锚点写入测试（M2，docs/v4-refactor/07-persistence「无迁移」清单）：
 // persistUserPrompt / persistAssistantMessage / persistSyntheticUserNoticeForSession
 // 必须把 traceContext.turnId 与 v4 origin 词表落进 message.anchor（additive JSON）。
-import { describe, expect, it } from "vitest";
 import type { MessageInfo, TraceContext } from "@zcode/contracts";
 import { createMessageId, createTraceId, createTurnId } from "@zcode/contracts";
+import { describe, expect, it } from "vitest";
 import {
   persistAssistantMessage,
   persistSyntheticUserNoticeForSession,
@@ -26,6 +26,8 @@ function createHarness() {
       modelId: "model",
       options: { reasoningLevel: "high" },
     }),
+    // fixture 实现现行 Runtime 的执行状态读取合同。
+    getPlanEnabled: () => false,
     getTools: () => [],
     async persistMessage(input: MessageInfo) {
       saved.push(input);
@@ -90,7 +92,7 @@ describe("v4 transcript 锚点（additive JSON）", () => {
       trace(turnId),
     );
     expect(saved[0]?.anchor).toEqual({ turnId, origin: undefined });
-    expect(saved[0]).toMatchObject({ providerId: "prov", modelId: "model" });
+    expect(saved[0]).toMatchObject({ providerId: "prov", modelId: "model", planEnabled: false });
     expect(saved[0]).not.toHaveProperty("variant");
 
     await persistAssistantMessage.call(

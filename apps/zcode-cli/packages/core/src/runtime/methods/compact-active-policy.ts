@@ -1,0 +1,3 @@
+export const AUTO_COMPACT_MAX_ATTEMPTS = 3;
+
+export const COMPACT_TOOL_KEEP_MAX_COUNT = 100;

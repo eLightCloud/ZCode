@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from "vitest";
 import {
   HookEventName,
   SessionEventType,
@@ -8,10 +7,10 @@ import {
   type AgentOutput,
   type BackgroundResultOriginMeta,
   type CreateSessionInput,
-  type ModelMessageContent,
   type MessageInfo,
   type MessagePart,
   type MessageWithParts,
+  type ModelMessageContent,
   type PermissionRuleset,
   type SessionEvent,
   type SessionGoal,
@@ -20,14 +19,15 @@ import {
   type SessionStorePort,
   type TodoItem,
 } from "@zcode/contracts";
-import { formatTaskNotification } from "../src/runtime-task/notification.js";
-import { formatLocalAgentTaskNotification } from "../src/subagent/completion-notification.js";
-import { createTestAgentRuntime } from "./test-agent-runtime.js";
-import { createRuntimeCommandId } from "../src/runtime/command-queue.js";
-import type { PromptRuntimeCommand } from "../src/runtime/command-queue.js";
-import { createTurnFailureError } from "../src/runtime/helpers/turn-errors.js";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryHookRunner } from "../src/hooks/index.js";
+import { formatTaskNotification } from "../src/runtime-task/notification.js";
+import type { PromptRuntimeCommand } from "../src/runtime/command-queue.js";
+import { createRuntimeCommandId } from "../src/runtime/command-queue.js";
+import { createTurnFailureError } from "../src/runtime/helpers/turn-errors.js";
+import { formatLocalAgentTaskNotification } from "../src/subagent/completion-notification.js";
 import { createExploreSubagentPort } from "../src/subagent/runner.js";
+import { createTestAgentRuntime } from "./test-agent-runtime.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
 import { createTestModelFactory } from "./test-runtime-model.js";
 
@@ -264,9 +264,10 @@ describe("subagent background notifications", () => {
     expect(notificationTexts[2]).not.toContain("<task-id>agent_idle_3</task-id>");
     const firstNotificationMessage = notificationInputs[0];
     expect(firstNotificationMessage?.role).toBe("user");
-    expect(modelMessageContentToText(firstNotificationMessage?.content)).not.toContain(
-      "<system-reminder>",
-    );
+    // 通知必须带一次标准系统载体与非人工输入标记；仍按已断言的 snapshot batch 隔离。
+    const firstText = modelMessageContentToText(firstNotificationMessage?.content);
+    expect(firstText.match(/<system-reminder>/g)).toHaveLength(1);
+    expect(firstText).toContain("[SYSTEM NOTIFICATION - NOT USER INPUT]");
     expect(hookEvents).toEqual([]);
     expect(requestCount).toBe(3);
     const backgroundMessages = sessionStore.savedMessages.filter(

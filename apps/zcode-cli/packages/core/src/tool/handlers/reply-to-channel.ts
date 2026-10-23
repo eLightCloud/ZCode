@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { channelReplyPartsSchema, channelReplyResultSchema } from "@zcode/shared";
 import type { SessionId } from "@zcode/contracts";
+import { channelReplyPartsSchema, channelReplyResultSchema } from "@zcode/shared";
+import { z } from "zod";
 
 import type { ToolEntry, ToolHandler } from "../types.js";
 
@@ -111,7 +111,8 @@ export const replyToChannelToolEntry: ToolEntry = {
       },
     },
   },
-  outputSchema: z.toJSONSchema(channelReplyResultSchema),
+  // status 分支互斥；oneOf 与严格 runtime union 等价，避免 provider 禁止的 anyOf。
+  outputSchema: { oneOf: channelReplyResultSchema.options.map((schema) => z.toJSONSchema(schema)) },
   runtimeInputSchema: inputSchema,
   runtimeOutputSchema: channelReplyResultSchema,
   permission: {

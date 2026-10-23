@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import type { ModelRequest } from "@zcode/contracts";
 import {
+  CoreErrorType,
   createMessageId,
   createPartId,
   createProjectId,
@@ -8,14 +9,15 @@ import {
   type SessionInfo,
   type SessionStorePort,
 } from "@zcode/contracts";
+import { projectExecutionErrorPayload } from "../src/runtime/helpers/index.js";
+import { describe, expect, it, vi } from "vitest";
 import { AgentRuntime } from "../src/runtime.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
+import { createTestModelSelection } from "./test-model-selection.js";
 import {
   createTestModelFactory,
   type TestModelExecutionObservation,
 } from "./test-runtime-model.js";
-import type { ModelRequest } from "@zcode/contracts";
-import { createTestModelSelection } from "./test-model-selection.js";
 
 describe("未绑定模型的 Session 历史恢复", () => {
   it("不创建执行模型也能恢复历史及 SessionStart hook，重新选模后可以继续发送", async () => {
@@ -123,9 +125,16 @@ describe("未绑定模型的 Session 历史恢复", () => {
       },
       { eventStore: createTestSessionEventStore(), modelFactory: factory },
     );
-    await expect(runtime.executeTurn("not ready")).rejects.toThrow(
-      "Select a model before continuing",
-    );
+    const failure = await runtime.executeTurn("not ready").catch((error: unknown) => error);
+    // 生命周期保留 wrapper 和 ConfigurationError cause；用户文案从标准错误投影读取。
+    expect(failure).toMatchObject({
+      message: "Model creation failed",
+      cause: {
+        type: CoreErrorType.ConfigurationError,
+        message: "Select a model before continuing",
+      },
+    });
+    expect(projectExecutionErrorPayload(failure).message).toBe("Select a model before continuing");
     expect(factory).not.toHaveBeenCalled();
     expect(runtime.getSessionModelSelection()).toBeUndefined();
   });

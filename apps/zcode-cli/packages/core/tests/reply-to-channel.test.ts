@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { replyToChannelHandler } from "../src/tool/handlers/reply-to-channel.js";
+import {
+  replyToChannelHandler,
+  replyToChannelToolEntry,
+} from "../src/tool/handlers/reply-to-channel.js";
 import type { ToolExecutionContext } from "../src/tool/types.js";
 
 function fixture() {
@@ -62,6 +65,19 @@ const input = {
   ],
 };
 describe("ReplyToChannel", () => {
+  it("projects the same mutually exclusive result states to a provider-compatible union", () => {
+    const schema = replyToChannelToolEntry.outputSchema as {
+      oneOf: Array<{ properties: { status: { enum?: string[]; const?: string } } }>;
+      anyOf?: unknown;
+    };
+    expect(schema.anyOf).toBeUndefined();
+    const statuses = schema.oneOf.flatMap(
+      (branch) => branch.properties.status.enum ?? [branch.properties.status.const!],
+    );
+    expect(statuses).toEqual(["sent", "failed", "unknown", "invalidated", "needs_clarification"]);
+    // oneOf 的等价前提必须保持：一个 status 不能同时落入两个分支。
+    expect(new Set(statuses).size).toBe(statuses.length);
+  });
   it("forwards typed names and preserves clarification without claiming delivery", async () => {
     const f = fixture();
     const clarification = {

@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -8,8 +9,11 @@ const { loadBuiltinProviderConfig } = await import(
 );
 
 const { content: zcodeBuiltinProviderConfigJson } = await loadBuiltinProviderConfig();
+const { version } = JSON.parse(await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"));
 
 export const SERVER_CLI_DEFINES = {
+  // 正式状态与发行清单必须同源；缺少注入会把可升级发行包错误标为 0.0.0-dev。
+  __ZCODE_VERSION__: JSON.stringify(version),
   __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: JSON.stringify(zcodeBuiltinProviderConfigJson),
 };
 

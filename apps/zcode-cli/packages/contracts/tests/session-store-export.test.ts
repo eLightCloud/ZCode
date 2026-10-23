@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { ExecutionPort, MessagePart, SessionStorePort } from "../src/index.js";
 import {
   createMessageId,
   createPartId,
   createSessionId,
-  textCheckpointSchema,
   TextCheckpointError,
+  textCheckpointSchema,
 } from "../src/index.js";
-import type { ExecutionPort, MessagePart, SessionStorePort } from "../src/index.js";
 
 describe("root contract exports", () => {
   it("exposes the checkpoint validator and stable errors through the public root", () => {

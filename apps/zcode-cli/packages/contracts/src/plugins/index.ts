@@ -1,4 +1,4 @@
-export { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+export { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared/mcp";
 import type { CustomCommandRoot } from "../commands/index.js";
 import type { HookEventName, HookMatcherConfig } from "../hooks/index.js";
 import type { McpServerConfig } from "../interfaces/mcp.port.js";

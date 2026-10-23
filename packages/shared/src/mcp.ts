@@ -1,4 +1,5 @@
 import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "./builtinPluginIdentity.js";
+export { BUNDLED_PLUGIN_MARKETPLACE_ID } from "./builtinPluginIdentity.js";
 /**
  * MCP (Model Context Protocol) types for ZCode
  * Based on the original Tauri implementation

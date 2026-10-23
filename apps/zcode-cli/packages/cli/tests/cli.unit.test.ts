@@ -8,10 +8,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import {
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
-  ZCODE_PLUGIN_HOST_COMMAND,
-} from "@zcode/contracts";
+import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, ZCODE_PLUGIN_HOST_COMMAND } from "@zcode/contracts";
 import {
   ZCODE_CUA_OFFICIAL_PLUGIN_ID,
   ZCODE_CUA_NODE_REPL_HOST_ENV_KEY,
@@ -601,9 +598,13 @@ test("borrows one process provider registry for a headless prompt and disposes i
     userConfigPath: "/tmp/zcode-legacy-cli.json",
     startProcessProviderRegistryRuntime: async (_env, options) => {
       runtimeStarts += 1;
+      assert.equal(typeof options?.standalone?.onBuiltinRefreshError, "function");
+      assert.equal(typeof options?.standalone?.onBuiltinRefreshResult, "function");
       assert.deepEqual(options, {
         standalone: {
           legacyCliUserConfigFilePath: "/tmp/zcode-legacy-cli.json",
+          onBuiltinRefreshError: options?.standalone?.onBuiltinRefreshError,
+          onBuiltinRefreshResult: options?.standalone?.onBuiltinRefreshResult,
         },
       });
       return {
@@ -6272,9 +6273,13 @@ test("reuses one process provider registry across TUI app replacements", async (
     userConfigPath: "/tmp/zcode-legacy-tui.json",
     startProcessProviderRegistryRuntime: async (_env, options) => {
       runtimeStarts += 1;
+      assert.equal(typeof options?.standalone?.onBuiltinRefreshError, "function");
+      assert.equal(typeof options?.standalone?.onBuiltinRefreshResult, "function");
       assert.deepEqual(options, {
         standalone: {
           legacyCliUserConfigFilePath: "/tmp/zcode-legacy-tui.json",
+          onBuiltinRefreshError: options?.standalone?.onBuiltinRefreshError,
+          onBuiltinRefreshResult: options?.standalone?.onBuiltinRefreshResult,
         },
       });
       return {
@@ -6327,6 +6332,9 @@ test("reuses one process provider registry across TUI app replacements", async (
       } as never;
     },
     runTui: async (options) => {
+      // 真实 TUI 先加载启动数据建立首个 App；仅发送 /new 会跳过首个 App 的惰性创建。
+      await options.loadStartupOptions?.();
+      assert.equal(appCreations, 1);
       await options.submitPrompt("/new", {
         requestPermission: async () => ({
           decision: "deny",

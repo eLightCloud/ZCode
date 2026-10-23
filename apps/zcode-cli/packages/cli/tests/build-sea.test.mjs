@@ -849,6 +849,7 @@ test("allows skill-only official plugins when SEA runtime assets are required", 
     await writeTestFile(root, "packages/browser-use-plugin/docs/workflow.md", "");
     await writeTestFile(root, "packages/browser-use-plugin/scripts/browser-client.mjs", "");
     await writeDocumentPluginFixtures(root);
+    await writeVisualizePluginFixtures(root);
     await writeTestFile(root, "packages/ios-simulator-plugin/.zcode-plugin/plugin.json", "{}");
     await writeTestFile(root, "packages/ios-simulator-plugin/dist/mcp/server.js", "");
     await writeTestFile(
@@ -970,6 +971,7 @@ test("requires SEA runtime assets for runtime-backed official plugins", async ()
     await writeTestFile(root, "packages/skill-creator-plugin/.zcode-plugin/plugin.json", "{}");
     await writeTestFile(root, "packages/zcode-guide-plugin/.zcode-plugin/plugin.json", "{}");
 
+    await writeVisualizePluginFixtures(root);
     await assert.rejects(
       collectSeaOfficialPluginAssets({
         requireRuntime: true,
@@ -1007,6 +1009,7 @@ test("requires the Browser Use client alongside the SEA MCP runtime", async () =
     await writeTestFile(root, "packages/node-repl-host/.zcode-plugin/plugin.json", "{}");
     await writeTestFile(root, "packages/node-repl-host/dist/mcp/server.js", "");
     await writeDocumentPluginFixtures(root);
+    await writeVisualizePluginFixtures(root);
     await writeTestFile(root, "packages/ios-simulator-plugin/dist/mcp/server.js", "");
 
     await assert.rejects(
@@ -1304,4 +1307,14 @@ async function writeDocumentPluginFixtures(root) {
   }
   await writeTestFile(root, "packages/image-search-plugin/.zcode-plugin/plugin.json", "{}");
   await writeTestFile(root, "packages/image-search-plugin/.mcp.json", "{}");
+}
+
+// 当前正式插件清单中的内容插件也必须具备种子资源，负向 runtime 用例才会走到目标缺失处。
+async function writeVisualizePluginFixtures(root) {
+  const plugin = officialSeaPlugins.find((item) => item.name === "visualize");
+  assert.ok(plugin);
+  await writeTestFile(root, "packages/visualize-plugin/.zcode-plugin/plugin.json", "{}");
+  for (const path of plugin.requiredSeedPaths) {
+    await writeTestFile(root, join("packages/visualize-plugin", path), "fixture");
+  }
 }

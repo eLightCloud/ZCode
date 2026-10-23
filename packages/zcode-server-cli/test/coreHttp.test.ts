@@ -347,3 +347,26 @@ describe("standalone Server Core ingress", () => {
     ).rejects.toThrow(/non-loopback.*authentication|loopback/i);
   });
 });
+
+it("atomically freezes idle ingress and refuses new requests", async () => {
+  const server = await createCoreHttpServer(new ServiceCollection(), { host: "127.0.0.1" });
+  try {
+    expect(server.tryBeginIdleShutdown()).toBe(true);
+    expect(server.tryBeginIdleShutdown()).toBe(false);
+    await expect(fetch(`http://127.0.0.1:${server.port}/api/server-info`)).rejects.toThrow();
+  } finally { await server.close(); }
+});
+
+it("refuses idle shutdown while an accepted connection could admit more work", async () => {
+  const { connect } = await import("node:net");
+  const { once } = await import("node:events");
+  const server = await createCoreHttpServer(new ServiceCollection(), { host: "127.0.0.1" });
+  const socket = connect(server.port, "127.0.0.1");
+  try {
+    await once(socket, "connect");
+    const received = once(socket, "data");
+    socket.write("GET /api/server-info HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n");
+    await received;
+    expect(server.tryBeginIdleShutdown()).toBe(false);
+  } finally { socket.destroy(); await server.close(); }
+});

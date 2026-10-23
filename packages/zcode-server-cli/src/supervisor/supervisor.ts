@@ -1,6 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- Supervisor 集中维护生命周期、Core 代际和更新回滚状态机，启动恢复锁边界修复不应拆散其原子流程。 */
 
 import { type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServiceLogger } from "@zcode/services/node";
 import { coreMessageSchema, SERVER_CLI_PROTOCOL_VERSION, type ControlRequest, type LifecycleState, type ReleaseManifest, type ServerStatus } from "../contracts.js";
@@ -37,7 +38,8 @@ export interface SupervisorOptions {
   onStopped?: () => void;
 }
 
-type LifecycleOperationKind = "stop" | "restart" | "update" | "uninstall";
+type LifecycleOperationKind = "stop" | "idle-stop" | "restart" | "update" | "uninstall";
+class IdleStopBlocked extends Error {}
 
 export class Supervisor {
   private readonly layout: ServerLayout;
@@ -140,17 +142,25 @@ export class Supervisor {
     return await this.runLifecycleOperation("stop", () => this.stopInternal(reason));
   }
 
-  private async stopInternal(reason: string): Promise<ServerStatus> {
+  private async stopInternal(reason: string, idleOnly = false): Promise<ServerStatus> {
     if (!this.core) {
+      const alreadyStopped = this.state === "stopped";
       this.state = "stopped";
       await this.persistStatusSnapshot();
       await this.control?.close();
       this.control = undefined;
       await this.lock.release();
-      if (reason !== "restart") this.options.onStopped?.();
+      if (reason !== "restart" && !alreadyStopped) this.options.onStopped?.();
       return this.status();
     }
-    await this.stopCore(reason);
+    try {
+      await this.stopCore(reason, idleOnly);
+    } catch (error) {
+      if (!(error instanceof IdleStopBlocked)) throw error;
+      // 拒绝状态已在同代 Core 的回执处同步恢复；不能在 await 后覆盖已到达的 exit。
+      log.info("server.idle_stop", { correlationId: randomUUID(), outcome: "blocked", reasonCode: "native_activity" });
+      return this.status();
+    }
     this.state = "stopped";
     await this.persistStatusSnapshot();
     await this.control?.close();
@@ -168,7 +178,7 @@ export class Supervisor {
     });
   }
 
-  private async stopCore(reason: string): Promise<void> {
+  private async stopCore(reason: string, idleOnly = false): Promise<void> {
     if (!this.core) return;
     this.state = "stopping";
     this.lastExitReason = reason;
@@ -187,6 +197,7 @@ export class Supervisor {
           core.off("exit", finish);
           core.off("close", finish);
           core.off("error", handleError);
+          core.off("message", idleResult);
         };
         const finish = (): void => {
           if (settled) return;
@@ -198,12 +209,13 @@ export class Supervisor {
           if (settled) return;
           settled = true;
           cleanup();
-          reject(new Error(`Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`));
+          reject(new Error(idleOnly ? "Idle stop was not confirmed; instance retained" : `Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`));
         };
         const handleError = (error: Error): void => {
           log.warn("server core emitted an error while stopping; awaiting exit or close", error);
         };
         const forceKill = (): void => {
+          if (idleOnly) { fail(); return; }
           log.warn("server core did not exit within grace period, sending SIGKILL", { pid: core.pid });
           core.kill("SIGKILL");
           if (!settled) killTimer = setTimeout(fail, this.options.coreKillTimeoutMs ?? 2_000);
@@ -214,8 +226,22 @@ export class Supervisor {
         core.once("exit", finish);
         core.once("close", finish);
         core.once("error", handleError);
+        const idleResult = (message: unknown): void => {
+          if (!idleOnly || typeof message !== "object" || message === null
+            || !("type" in message) || message.type !== "idle-stop-blocked" || settled) return;
+          settled = true;
+          // 回执与 exit 在同一事件循环仲裁。先恢复 ready，使紧随其后的 exit
+          // 走正常恢复；异步 catch 不得再把 crashed 覆盖成无 Core 的 ready。
+          if (this.core === core && this.state === "stopping") {
+            this.state = "ready";
+            this.lastExitReason = "idle-stop-blocked";
+          }
+          cleanup();
+          reject(new IdleStopBlocked());
+        };
+        core.on("message", idleResult);
         try {
-          core.send({ command: "shutdown" });
+          core.send({ command: idleOnly ? "shutdown-if-idle" : "shutdown" });
         } catch {
           // IPC 已关闭不代表 OS 进程已退出，直接强杀后仍等待 exit/close 终态。
           clearTimeout(graceTimer);
@@ -224,8 +250,10 @@ export class Supervisor {
       });
     } catch (error) {
       if (this.core === core) {
-        this.state = "stop-failed";
-        this.lastExitReason = error instanceof Error ? error.message : String(error);
+        if (!(error instanceof IdleStopBlocked)) {
+          this.state = "stop-failed";
+          this.lastExitReason = error instanceof Error ? error.message : String(error);
+        }
         await this.persistStatusSnapshot();
       }
       throw error;
@@ -302,6 +330,7 @@ export class Supervisor {
   public status(): ServerStatus {
     return {
       protocolVersion: SERVER_CLI_PROTOCOL_VERSION,
+      capabilities: { idleStop: true, dataRootLock: "kernel-sqlite-v1", liveStatus: true },
       state: this.state,
       pid: this.core?.pid ?? null,
       port: this.port,
@@ -398,7 +427,12 @@ export class Supervisor {
       this.port = message.port;
       this.generation = message.generation;
       this.startedAt = Date.now();
+      if (this.lastExitReason === "writer-lock-busy") this.lastExitReason = null;
       log.info("server core ready", { host: this.host, port: this.port, generation: this.generation });
+    } else if (message.type === "startup-wait") {
+      if (this.state !== "starting") return;
+      this.lastExitReason = message.reason;
+      log.warn("server.core.startup", { correlationId: randomUUID(), outcome: "blocked", reasonCode: message.reason, generation: expectedGeneration });
     } else if (message.type === "heartbeat" || message.type === "task-activity") {
       this.runningTaskCount = message.runningTaskCount;
       log.debug("core activity snapshot", { type: message.type, runningTaskCount: message.runningTaskCount });
@@ -430,7 +464,12 @@ export class Supervisor {
       case "ping": return { protocolVersion: SERVER_CLI_PROTOCOL_VERSION };
       case "status": return this.status();
       case "stop":
-        this.startAcknowledgedLifecycleOperation("stop", () => this.stopInternal("control request"));
+      case "stop-if-idle":
+        if (request.command === "stop-if-idle" && (this.state !== "ready" || this.runningTaskCount > 0)) {
+          log.info("server.idle_stop", { correlationId: randomUUID(), outcome: "blocked", reasonCode: "native_activity_unknown_or_busy" });
+          return { stopping: false, reason: "native_activity_unknown_or_busy" };
+        }
+        this.startAcknowledgedLifecycleOperation(request.command === "stop-if-idle" ? "idle-stop" : "stop", () => this.stopInternal(request.command === "stop-if-idle" ? "idle" : "control request", request.command === "stop-if-idle"));
         return { stopping: true };
       case "restart":
         this.startAcknowledgedLifecycleOperation("restart", async () => {
@@ -465,10 +504,13 @@ export class Supervisor {
   ): Promise<T> {
     this.assertLifecycleOperationCanStart(kind);
     const active = this.lifecycleOperation;
-    if (active) {
+    if (active && active.kind === kind) {
       return active.promise as Promise<T>;
     }
-    const promise = Promise.resolve().then(operation);
+    // 普通停止不能复用条件停止结果；无论条件被拒还是超时，都继续其自身语义。
+    const previous = active?.kind === "idle-stop" && kind === "stop"
+      ? active.promise.catch(() => undefined) : Promise.resolve();
+    const promise = previous.then(operation);
     this.lifecycleOperation = { kind, promise };
     void promise.then(
       () => {
@@ -500,7 +542,8 @@ export class Supervisor {
 
   private assertLifecycleOperationCanStart(kind: LifecycleOperationKind): void {
     const active = this.lifecycleOperation;
-    if (!active || (kind === "stop" && active.kind === "stop")) return;
+    if (!active || (kind === active.kind && (kind === "stop" || kind === "idle-stop"))
+      || (kind === "stop" && active.kind === "idle-stop")) return;
     throw new ControlRequestError("operation-in-progress", `Lifecycle operation ${active.kind} is already in progress`, true);
   }
 }

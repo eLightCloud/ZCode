@@ -1,6 +1,7 @@
 import { matchesServerToken, matchesServerTokenHash } from "@zcode/shared/node";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import type { Socket } from "node:net";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
@@ -34,6 +35,7 @@ export interface CoreHttpServer {
   host: string;
   port: number;
   close: () => Promise<void>;
+  tryBeginIdleShutdown: () => boolean;
 }
 
 const WEBSOCKET_DRAIN_TIMEOUT_MS = 250;
@@ -136,6 +138,8 @@ export async function createCoreHttpServer(
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
+  let accepting = true;
+  app.use("*", async (context, next) => accepting ? await next() : context.json({ error: "Server stopping" }, 503));
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
   const host = options.host ?? "127.0.0.1";
   const authToken = options.authToken?.trim();
@@ -221,12 +225,26 @@ export async function createCoreHttpServer(
       port: typeof address === "object" && address ? address.port : (options.port ?? 0),
     });
   });
+  const connections = new Set<Socket>();
+  server.on("connection", (socket: Socket) => {
+    if (!accepting) { socket.destroy(); return; }
+    connections.add(socket);
+    socket.once("close", () => connections.delete(socket));
+  });
   injectWebSocket(server);
   const { port } = await listening;
   return {
     host,
     port,
+    tryBeginIdleShutdown: () => {
+      // 与接纳在同一事件循环裁决。保守拒绝所有已接纳 TCP/WS 连接，
+      // 避免只读任务快照之后又从旧连接进入新输入的竞态。
+      if (!accepting || connections.size || wss.clients.size) return false;
+      accepting = false;
+      return true;
+    },
     close: async () => {
+      accepting = false;
       await closeWebSocketServer(wss);
       await new Promise<void>((resolve, reject) =>
         server.close((error?: Error) => (error ? reject(error) : resolve())),

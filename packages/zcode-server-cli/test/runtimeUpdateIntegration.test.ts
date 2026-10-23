@@ -221,3 +221,79 @@ describe.skipIf(process.platform === "win32")("runtime update integration", () =
     }
   }, 30_000);
 });
+
+it.skipIf(process.platform === "win32")("handles SIGTERM while the real foreground CLI is still starting", async () => {
+  const root = await mkdtemp(join("/tmp", "zcode-start-stop-"));
+  const layout = resolveServerLayout(root);
+  const releases = new ReleaseManager(layout);
+  await releases.ensure();
+  const runtime = join(layout.releasesDir, "slow", "runtime");
+  await mkdir(runtime, { recursive: true });
+  await symlink(process.execPath, join(runtime, "node"));
+  await writeFile(join(runtime, "zcode.cjs"), "");
+  await writeFile(join(runtime, "server-core.js"), `
+    const timer = setTimeout(() => process.send({type:'ready', host:'127.0.0.1', port:43120, version:'fixture', generation:1}), 10000);
+    process.on('message', m => { if (m.command === 'shutdown') { clearTimeout(timer); process.exit(0); } });
+  `);
+  await releases.writePending({ version: "slow", releaseDir: join(layout.releasesDir, "slow") });
+  await releases.applyPending();
+  const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../src/main.ts", import.meta.url)),
+    "serve", "--supervisor", "--server-root", root, "--json"], { stdio: ["ignore", "ignore", "pipe"] });
+  const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
+  let diagnostics = "";
+  child.stderr.on("data", (chunk) => { diagnostics += String(chunk); });
+  let seenStarting = false;
+  try {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      try {
+        const value = await requestControl(layout.controlEndpoint, { command: "status" }) as { state: string };
+        if (value.state === "starting") { seenStarting = true; break; }
+      } catch { /* 启动期 socket 尚未建立。 */ }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(seenStarting, diagnostics).toBe(true);
+    child.kill("SIGTERM");
+    expect(await exited).toBe(0);
+    const { DataRootLock } = await import("../src/runtime/lock.js");
+    const replacement = new DataRootLock(layout.lockFile);
+    await replacement.acquire();
+    await replacement.release();
+  } finally { child.kill("SIGKILL"); }
+}, 20_000);
+
+it.skipIf(process.platform === "win32")("does not lose real CLI SIGTERM behind a rejected idle-stop", async () => {
+  const root = await mkdtemp(join("/tmp", "zcode-idle-signal-"));
+  const layout = resolveServerLayout(root);
+  const releases = new ReleaseManager(layout);
+  await releases.ensure();
+  const runtime = join(layout.releasesDir, "controlled", "runtime");
+  await mkdir(runtime, { recursive: true });
+  await symlink(process.execPath, join(runtime, "node"));
+  await writeFile(join(runtime, "zcode.cjs"), "");
+  await writeFile(join(runtime, "server-core.js"), `
+    process.send({type:'ready',host:'127.0.0.1',port:43120,version:'fixture',generation:1});
+    process.on('message',m=>{
+      if(m.command==='shutdown-if-idle')setTimeout(()=>process.send({type:'idle-stop-blocked'}),150);
+      if(m.command==='shutdown')process.exit(0);
+    });
+  `);
+  await releases.writePending({ version: "controlled", releaseDir: join(layout.releasesDir, "controlled") });
+  await releases.applyPending();
+  const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../src/main.ts", import.meta.url)),
+    "serve", "--supervisor", "--server-root", root, "--json"], { stdio: ["ignore", "pipe", "pipe"] });
+  const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
+  let output = "";
+  child.stdout.on("data", (chunk) => { output += String(chunk); });
+  child.stderr.resume();
+  try {
+    await waitForReady(layout.controlEndpoint);
+    await waitForCondition(() => output.includes('"state":"ready"'));
+    await requestControl(layout.controlEndpoint, { command: "stop-if-idle" });
+    child.kill("SIGTERM");
+    expect(await exited).toBe(0);
+    const { DataRootLock } = await import("../src/runtime/lock.js");
+    const replacement = new DataRootLock(layout.lockFile);
+    await replacement.acquire(); await replacement.release();
+  } finally { child.kill("SIGKILL"); }
+}, 20_000);

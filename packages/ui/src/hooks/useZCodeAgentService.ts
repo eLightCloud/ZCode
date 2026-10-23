@@ -7,8 +7,9 @@ export function useZCodeAgentService(
   preferredRemoteSessionId?: string | null,
   workspaceIdentity?: string | null,
 ): IZCodeAgentService {
-  const services = workspacePath
-    ? useWorkspaceServices(workspacePath, preferredRemoteSessionId, workspaceIdentity)
-    : useServices();
+  // 工作区在恢复后才出现；不能因此改变 React hook 调用顺序。
+  const contextServices = useServices();
+  const workspaceServices = useWorkspaceServices(workspacePath, preferredRemoteSessionId, workspaceIdentity);
+  const services = workspacePath ? workspaceServices : contextServices;
   return services.zcodeAgentService;
 }

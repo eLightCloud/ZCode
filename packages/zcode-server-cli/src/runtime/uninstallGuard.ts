@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DataRootLock, type DataRootLockInspection } from "./lock.js";
 import type { ServerLayout } from "./paths.js";
 
-export async function acquireUninstallLock(layout: ServerLayout): Promise<DataRootLock> {
+export async function acquireUninstallLock(layout: ServerLayout): Promise<Pick<DataRootLock, "release">> {
   const lock = new DataRootLock(layout.lockFile);
   const inspection = await lock.inspect();
   if (inspection.state === "active") {
@@ -13,13 +13,23 @@ export async function acquireUninstallLock(layout: ServerLayout): Promise<DataRo
     throw new Error(`Cannot acquire uninstall lock (${describeLockInspection(inspection)})`);
   }
   await lock.acquire();
-  return lock;
+  const writer = new DataRootLock(join(layout.runDir, "core.lock"));
+  try {
+    // Supervisor 已死不代表旧 Core 已排空；卸载也必须取得实际 writer 的互斥。
+    await writer.acquire();
+  } catch (error) {
+    await lock.release();
+    throw error;
+  }
+  return { release: async () => {
+    try { await writer.release(); } finally { await lock.release(); }
+  } };
 }
 
 export async function removeRunContentsExceptLock(layout: ServerLayout): Promise<void> {
   const entries = await readdir(layout.runDir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (entry.name === "server.lock") continue;
+    if (entry.name === "server.lock" || entry.name.endsWith(".lock.sqlite")) continue;
     await rm(join(layout.runDir, entry.name), { recursive: true, force: true });
   }
 }

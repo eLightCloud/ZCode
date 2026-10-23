@@ -88,6 +88,10 @@ UI 入口不再继续拆 `SSHDialog` / `WSLDialog` / `DockerDialog`，而是统�
 - desktop UI：已可从统一 remote 弹窗选择 SSH / WSL / Docker
 - web UI：只保留 SSH；WSL / Docker 探测能力为空实现，不展示对应入口
 
+## 服务 hook 的工作区切换
+
+Agent / Task / Session 服务 hook 在无工作区与有工作区之间切换时，React hook 调用顺序必须稳定。无路径继续使用当前 ServiceProvider；有路径沿现有工作区解析器和准确 remote identity，未知远端不能退回本机。全局服务消费者没有 TabStoreProvider 时只观察空 tab 投影，不创建第二 tab store 或服务实例。
+
 ## 后续建议
 
 1. 保留并验证 “Docker via SSH” 不回归

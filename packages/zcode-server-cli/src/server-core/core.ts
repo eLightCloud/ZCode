@@ -13,17 +13,46 @@ import { installParentDisconnectHandler } from "./parentDisconnect.js";
 import { resolveCoreServerId } from "./serverIdentity.js";
 import { createTaskActivityTracker } from "./taskActivityTracker.js";
 import { startServerAutomationRuntime } from "./automationRuntime.js";
+import { DataRootLock } from "../runtime/lock.js";
+import { resolveServerLayout } from "../runtime/paths.js";
+import { join } from "node:path";
+import { CORE_WRITER_WAIT_MS } from "../contracts.js";
 
 declare const __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: string | undefined;
 
 export async function runServerCore(generation: number): Promise<void> {
   let shutdown: ((reason: string) => Promise<void>) | undefined;
   let parentDisconnected = false;
+  let startupStopReason: string | undefined;
+  const startup = new AbortController();
+  const requestStop = (reason: string): void => {
+    if (shutdown) { void shutdown(reason); return; }
+    startupStopReason = reason;
+    startup.abort();
+  };
+  // writer guard 等待期间也走同一停止入口，不能把 SIGTERM 留到超时后才处理。
+  process.on("message", (message: unknown) => {
+    if (typeof message === "object" && message !== null && "command" in message && message.command === "shutdown") requestStop("requested");
+  });
+  process.once("SIGTERM", () => requestStop("SIGTERM"));
+  process.once("SIGINT", () => requestStop("SIGINT"));
   let disposeParentDisconnectHandler = (): void => undefined;
   disposeParentDisconnectHandler = installParentDisconnectHandler(() => {
     if (shutdown) void shutdown("parent-disconnected");
-    else parentDisconnected = true;
+    else { parentDisconnected = true; requestStop("parent-disconnected"); }
   });
+  // Supervisor 异常死亡后旧 Core 可能仍在排空；独立 writer guard 禁止新 Core 并写。
+  const writerLock = new DataRootLock(join(resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir, "core.lock"));
+  try {
+    await writerLock.acquire({ waitMs: CORE_WRITER_WAIT_MS, signal: startup.signal,
+      onBlocked: () => {
+        if (process.connected) process.send?.({ type: "startup-wait", reason: "writer-lock-busy" }, () => undefined);
+      } });
+  } catch (error) {
+    if (startupStopReason) process.exit(0);
+    throw error;
+  }
+  if (startupStopReason) process.exit(0);
   const topicResourcePeers = createTopicResourcePeers();
   const explicitZCodeBuiltinProviderConfigFilePath =
     process.env[ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]?.trim();
@@ -55,7 +84,8 @@ export async function runServerCore(generation: number): Promise<void> {
         }
       : {}),
   });
-  const taskActivityTracker = createTaskActivityTracker(services.getOptional(IZCodeAgentService));
+  const activitySource = services.getOptional(IZCodeAgentService);
+  const taskActivityTracker = createTaskActivityTracker(activitySource);
   const configuredPort = process.env.ZCODE_SERVER_PORT?.trim();
   const bindPort = configuredPort ? Number(configuredPort) : undefined;
   if (bindPort !== undefined && (!Number.isInteger(bindPort) || bindPort < 1 || bindPort > 65535)) {
@@ -142,19 +172,20 @@ export async function runServerCore(generation: number): Promise<void> {
     }
     // 仅设置 exitCode 无法关闭 Agent/SQLite 等仍持有的事件循环；Supervisor 的有界停止
     // 会因此等待到超时。资源释放完成后显式退出，确保 stop/restart/uninstall 真正收口。
+    // writer guard 保持到真实进程退出，不能在最后 IPC 回执前提前开放另一个 writer。
     process.exit(0);
   };
-  if (parentDisconnected) void shutdown("parent-disconnected");
+  if (parentDisconnected || startupStopReason) void shutdown(startupStopReason ?? "parent-disconnected");
   process.on("message", (message: unknown) => {
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "command" in message &&
-      message.command === "shutdown"
-    ) {
-      void shutdown("requested");
+    if (typeof message === "object" && message !== null && "command" in message
+      && message.command === "shutdown-if-idle") {
+      if (shutdownStarted || !activitySource || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0
+        || !http.tryBeginIdleShutdown()) {
+        void send({ type: "idle-stop-blocked" });
+      } else {
+        void shutdown("idle");
+      }
+      return;
     }
   });
-  process.once("SIGTERM", () => void shutdown("SIGTERM"));
-  process.once("SIGINT", () => void shutdown("SIGINT"));
 }

@@ -9,6 +9,7 @@ import {
   createStoppedServerStatus,
   serverStatusSchema,
   type ServerStatus,
+  CORE_STARTUP_TIMEOUT_MS,
 } from "./contracts.js";
 import { requestControl } from "./ipc/controlClient.js";
 import {
@@ -86,7 +87,7 @@ export async function runServerCli(
     }
     // 同一物理 data-root 的符号链接别名会派生不同 control endpoint 和 OS service
     // identity。生命周期命令统一在 IO 前收敛 root，避免第二个 Supervisor 绕过探测重复注册。
-    const layout = ["serve", "status", "stop", "restart", "update", "uninstall"].includes(command)
+    const layout = ["serve", "status", "stop", "stop-if-idle", "restart", "update", "uninstall"].includes(command)
       ? await resolveCanonicalServerLayout(parsed.layout.serverRoot)
       : parsed.layout;
     switch (command) {
@@ -94,8 +95,9 @@ export async function runServerCli(
         return await runServe(parsed.argv.slice(1), io, json, layout, runtimeOptions);
       case "status":
       case "stop":
+      case "stop-if-idle":
       case "restart":
-        return await runControl(command, io, json, {}, layout);
+        return await runControl(command === "stop" && parsed.argv.includes("--if-idle") ? "stop-if-idle" : command, io, json, {}, layout, parsed.argv.includes("--live"));
       case "update":
         return await runUpdateCommand(parsed.argv, io, json, layout, () =>
           runControl("apply-update", io, json, { force: parsed.argv.includes("--force") }, layout),
@@ -237,7 +239,6 @@ async function runServe(
     process.stdin.destroy();
     return 0;
   }
-  const daemon = supervisorProcess;
   const { Supervisor } = await import("./supervisor/supervisor.js");
   const serviceRegistered = supervisorProcess && isRegisteredServiceEntry(args);
   let foregroundStopped: (() => void) | undefined;
@@ -279,30 +280,35 @@ async function runServe(
       if (supervisorProcess) process.disconnect?.();
     },
   });
-  await supervisor.start();
-  let status: ServerStatus;
+  // 启动期也必须处理停止信号；等待 start 临界区收口后走同一原生 stop。
+  const starting = supervisor.start();
+  const readiness = new AbortController();
+  let signalStop: Promise<ServerStatus> | undefined;
+  const finish = (): void => {
+    signalStop ??= starting.then(() => supervisor.stop("signal"));
+    void signalStop.catch(() => undefined);
+    readiness.abort();
+  };
+  process.once("SIGINT", finish);
+  process.once("SIGTERM", finish);
+  let started = false;
   try {
-    status = await waitForSupervisorReady(supervisor);
+    await starting;
+    started = true;
+    const status = await waitForSupervisorReady(supervisor, readiness.signal);
+    if (!status) { await signalStop; return 0; }
+    if (json) stdout(io, status);
+    else stdout(io, `ZCode Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`);
+    await new Promise<void>((resolve) => { foregroundStopped = resolve; });
+    await signalStop;
   } catch (error) {
-    // Core 进入 crash-loop 时不能把错误直接抛给 CLI 顶层返回：control
-    // socket 仍持有事件循环导致前台进程假死；用户 Ctrl+C（此时信号 handler 尚未注册，
-    // 走默认强杀）后锁文件与 socket 残留，后续 serve 永远报 "already running"。
-    // 启动失败必须先停 Supervisor 收口锁与 socket，再上抛错误。
-    await supervisor.stop("startup-failed").catch(() => undefined);
+    // 抢锁失败的启动者没有生命周期所有权，不能写 stopped 快照覆盖存活 owner。
+    if (started) await supervisor.stop("startup-failed").catch(() => undefined);
     throw error;
+  } finally {
+    process.off("SIGINT", finish);
+    process.off("SIGTERM", finish);
   }
-  if (json) stdout(io, status);
-  else stdout(io, `ZCode Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`);
-  await new Promise<void>((resolve) => {
-    foregroundStopped = resolve;
-    if (!daemon) {
-      const finish = () => {
-        void supervisor.stop("signal").then(() => resolve());
-      };
-      process.once("SIGINT", finish);
-      process.once("SIGTERM", finish);
-    }
-  });
   return 0;
 }
 
@@ -318,6 +324,7 @@ async function runControl(
   json: boolean,
   extra: Record<string, unknown> = {},
   layout = resolveServerLayout(),
+  liveStatus = false,
 ): Promise<number> {
   const request = controlRequestSchema.parse({ id: "cli", command, ...extra });
   let result: unknown;
@@ -328,10 +335,10 @@ async function runControl(
       command === "apply-update" ? APPLY_UPDATE_TIMEOUT_MS : undefined,
     );
   } catch (error: unknown) {
-    if (command === "status") {
+    if (command === "status" && !liveStatus) {
       const persisted = await readPersistedStatusDetailed(layout);
       result = persisted.status ?? createStoppedServerStatus(ZCODE_VERSION);
-    } else if (command === "stop" && isControlEndpointUnavailable(error)) {
+    } else if ((command === "stop" || command === "stop-if-idle") && isControlEndpointUnavailable(error)) {
       const persisted = await readPersistedStatusDetailed(layout);
       if (persisted.state === "invalid" || persisted.state === "unreadable") {
         throw error;
@@ -342,6 +349,12 @@ async function runControl(
         persisted.status.state !== "uninstalled"
       ) {
         throw error;
+      }
+      if (command === "stop-if-idle") {
+        // 缺失 socket 不是停止证明；条件停止的离线重试同时核验两份内核互斥。
+        await waitForServerStopped(layout);
+        const writer = await new DataRootLock(join(layout.runDir, "core.lock")).inspect();
+        if (writer.state !== "missing" && writer.state !== "stale") throw error;
       }
       // Supervisor 停止时会先关闭 control socket，再由 CLI 落盘 stopped 状态。
       // 重复 stop 发生在这个窗口后不应因为 socket 不存在而变成失败。
@@ -443,7 +456,7 @@ async function finishUninstall(
       { encoding: "utf8", mode: 0o600 },
     );
     await uninstallLock.release();
-    await rm(layout.runDir, { recursive: true, force: true });
+    // 固定内核 guard 不删除；否则并发启动者可打开另一 inode 绕过互斥。
     if (json) stdout(io, { uninstalled: true, preservedPaths });
     else stdout(io, "uninstalled");
     return 0;
@@ -460,7 +473,7 @@ async function waitForPersistedStatus(
   assertStillWaiting?: () => void,
   expectedServiceRegistered?: boolean,
 ): Promise<ServerStatus> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + (expectedState === "ready" ? CORE_STARTUP_TIMEOUT_MS : 10_000);
   while (Date.now() < deadline) {
     const status = await readPersistedStatus(layout);
     if (
@@ -478,10 +491,12 @@ async function waitForPersistedStatus(
 
 async function waitForSupervisorReady(supervisor: {
   status: () => ServerStatus;
-}): Promise<ServerStatus> {
-  const deadline = Date.now() + 15_000;
+}, signal?: AbortSignal): Promise<ServerStatus | undefined> {
+  const deadline = Date.now() + CORE_STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    if (signal?.aborted) return undefined;
     const status = supervisor.status();
+    if (status.state === "stopped") return undefined;
     if (status.state === "ready") return status;
     if (status.state === "crash-loop-stopped")
       throw new Error("Server Core entered crash-loop-stopped");

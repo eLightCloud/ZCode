@@ -463,10 +463,12 @@ zcode uninstall
 
 初始化 server root 时必须写入严格 schema 的 `install.json` 所有权标记，包含 product、schema version、
 canonical server root 和 installation id。`uninstall` 只有在 `realpath` 后的 root 与该标记一致时才允许
-自动清理；无标记或标记不匹配时拒绝并提示手工处理。卸载只删除 `releases/`、`run/`、`cache/`、
+自动清理；无标记或标记不匹配时拒绝并提示手工处理。卸载只清理 `releases/`、`run/`、`cache/`、
 `bin/`、`service/`、`current.json`、`pending.json` 和所有权标记等 allowlist 项，server root 内未知文件
 必须保留并在结果的 `preservedPaths` 中列出。完成后在保留的 root 下写 `uninstalled.json`，含卸载时间
 与版本；R2 不实现 Controller UI。
+
+`run/` 内的固定生命周期 / Core writer 内核 guard 保留，不能删文件后重建 inode。卸载必须同时取得两种 guard，防止父 Supervisor 已死、旧 Core 仍排空时删除其数据；guard 只承担互斥，不保留业务表。
 
 ## 9. 数据、状态与不变量
 
@@ -490,7 +492,12 @@ Workspace / Repo / User files
 必须保持：
 
 - 单实例 key = 当前 OS 用户 + data root；
-- stale lock 回收必须先按 ownership token 原子 claim 到隔离路径；release 只能删除仍属于自己的 token，禁止按一次陈旧的 PID 判断直接删除当前路径；
+- data-root 互斥由 DataRootLock 的固定 `server.lock.sqlite` 排他事务拥有，SQLite API 在工作线程执行，不保存业务表；PID、时间与 token 只是诊断。guard 永不删除或替换；SIGKILL 后 OS 释放，无 PID namespace 推断和恢复门文件。metadata 释放只移除自己的 token。Core 另持同一 facade 的 writer guard，防止 Supervisor 死亡后原 Core 尚未排空时新 Core 开始写入；
+- 从旧 PID 锁升级必须先停止全部旧版本写入者，再离线清理旧 metadata / recovery；原生拒绝自动接管旧协议锁，不支持两个锁协议混跑；部署 owner 必须验证旧容器退出与数据卷独占；
+- `stop --if-idle` 与 `stop-if-idle` 使用同一独立控制命令 `stop-if-idle`，不能将未知条件字段降级成普通 stop。status 的可选 capabilities 明确声明 idleStop 与 dataRootLock 协议；无声明旧版本不视为支持。Core 在同一轮同步拒绝运行任务、活动连接和启用自动化的实例，或关闭新连接接纳后排空退出；未知或超时不得升级为强杀。企业只消费回执与容器终态，不维护原生任务状态；
+- 自动生命周期消费者使用 `status --live --json`，控制连接失败必须失败，不得读取诊断快照冒充实时就绪；同时核验 capabilities.liveStatus=true，旧 CLI 可能忽略未知 flag，无能力证明视为未知。普通 `status` 保留离线诊断快照。管理 CLI 与 Supervisor 使用同一发行版本；旧严格快照 reader 不承诺读取新字段，禁止混版本管理命令判定停止安全；
+- 条件停止与普通停止是不同操作意图，只有相同意图可去重；普通 stop / SIGTERM 等条件操作结算后继续正常关闭，即使条件被拒或超时。条件停止离线幂等只接受已停状态（或从未启动）且生命周期与 Core writer guard 均已释放；其它情况失败。受理回执不等于停止完成，仍等待进程终态；
+- Core 终态优先于条件停止拒绝；拒绝只能恢复仍存活的同代 Core，不能将 crashed / 已退出状态覆盖为 ready。writer guard 在服务创建前最多等待 30 秒，正常占用只记录 blocked / acquired，不反复退出消耗 crash budget；CLI 初次 ready 总预算为 45 秒（含服务初始化 15 秒），等待期间普通停止及父断连可中止；
 - Workspace 隔离使用 `workspaceKey = workspaceIdentity?.trim() || workspacePath`；
 - 路径执行继续使用 `workspacePath`；
 - 远程 identity 不得只使用 `workspacePath`；

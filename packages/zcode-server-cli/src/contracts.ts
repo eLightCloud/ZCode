@@ -5,6 +5,8 @@ export const SERVER_RUNTIME_NODE_VERSION = "22.16.0";
 export const CRASH_WINDOW_MS = 5 * 60_000;
 export const CRASH_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
+export const CORE_WRITER_WAIT_MS = 30_000;
+export const CORE_STARTUP_TIMEOUT_MS = CORE_WRITER_WAIT_MS + 15_000;
 
 export const lifecycleStateSchema = z.enum([
   "starting",
@@ -41,6 +43,7 @@ export const serverStatusSchema = z
     runningTaskCount: z.number().int().nonnegative(),
     crashBudget: crashBudgetSchema,
     updatedAt: z.number().int().nonnegative(),
+    capabilities: z.object({ idleStop: z.literal(true), dataRootLock: z.literal("kernel-sqlite-v1"), liveStatus: z.literal(true).optional() }).optional(),
   })
   .strict();
 
@@ -86,6 +89,7 @@ export const controlRequestSchema = z.discriminatedUnion("command", [
   requestBase.extend({ command: z.literal("ping") }),
   requestBase.extend({ command: z.literal("status") }),
   requestBase.extend({ command: z.literal("stop") }),
+  requestBase.extend({ command: z.literal("stop-if-idle") }),
   requestBase.extend({ command: z.literal("restart") }),
   requestBase.extend({ command: z.literal("prepare-update") }),
   requestBase.extend({ command: z.literal("apply-update"), force: z.boolean().optional() }),
@@ -129,6 +133,8 @@ export const coreMessageSchema = z.discriminatedUnion("type", [
     runningTaskCount: z.number().int().nonnegative(),
   }),
   z.object({ type: z.literal("shutdown-ack") }),
+  z.object({ type: z.literal("idle-stop-blocked") }),
+  z.object({ type: z.literal("startup-wait"), reason: z.literal("writer-lock-busy") }),
   z.object({ type: z.literal("fatal"), message: z.string().max(500) }),
   z.object({ type: z.literal("exit"), reason: z.string().max(500) }),
 ]);
@@ -136,6 +142,7 @@ export type CoreMessage = z.infer<typeof coreMessageSchema>;
 
 export const coreCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("shutdown") }),
+  z.object({ command: z.literal("shutdown-if-idle") }),
 ]);
 export type CoreCommand = z.infer<typeof coreCommandSchema>;
 

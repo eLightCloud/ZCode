@@ -59,7 +59,7 @@ export function useTabStore<T>(selector: (state: TabStoreState) => T): T {
   return useStore(store, selector);
 }
 
-/** 供可独立渲染的展示组件读取；无 Root provider 时回退为空 tab 状态。 */
+/** 独立展示或全局服务 hook 只读 tab 投影；无 Root provider 时使用既有空投影。 */
 export function useOptionalTabStore<T>(selector: (state: TabStoreState) => T): T {
   const store = useContext(TabStoreContext);
   return useStore(store ?? fallbackTabStore, selector);

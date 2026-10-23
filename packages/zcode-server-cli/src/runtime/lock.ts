@@ -1,210 +1,135 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import type { FileHandle } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { Worker } from "node:worker_threads";
+import { setTimeout as delay } from "node:timers/promises";
+import { createServiceLogger } from "@zcode/services/node";
+import { releaseKernelFileLock, tryAcquireKernelFileLock } from "./kernelFileLock.js";
+
+const log = createServiceLogger("server-lock");
+const protocol = "kernel-sqlite-v1";
 
 export type DataRootLockInspection =
   | { state: "missing" }
-  | { state: "active"; pid: number }
+  | { state: "active"; pid: number | null }
   | { state: "stale"; pid: number }
   | { state: "invalid" }
   | { state: "unreadable"; error: unknown };
 
 export class DataRootLock {
-  private handle: FileHandle | undefined;
+  private worker: Worker | undefined;
   private ownerToken: string | undefined;
   public constructor(private readonly path: string) {}
 
   public async inspect(): Promise<DataRootLockInspection> {
-    let raw: string;
+    const owner = await this.readOwner();
+    if (owner.state === "unreadable") return owner;
+    // PID 只是诊断。即使旧记录 PID 等于本进程，也必须询问同一固定文件的内核锁。
+    if (owner.state === "record" && owner.protocol !== protocol) return { state: "invalid" };
     try {
-      raw = await readFile(this.path, "utf8");
-    } catch (error: unknown) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-        return { state: "missing" };
-      }
+      // 不因 metadata 写入窗口、损坏或意外删除而把活跃 guard 误报为已释放。
+      const guard = await stat(`${this.path}.sqlite`).catch((error: unknown) => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!guard) return owner.state === "record" ? { state: "stale", pid: owner.pid } : owner;
+      const worker = await tryAcquireKernelFileLock(`${this.path}.sqlite`);
+      if (!worker) return { state: "active", pid: owner.state === "record" ? owner.pid : null };
+      await releaseKernelFileLock(worker);
+      return owner.state === "record" ? { state: "stale", pid: owner.pid } : owner;
+    } catch (error) {
       return { state: "unreadable", error };
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return { state: "invalid" };
-    }
-    const pid =
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "pid" in parsed &&
-      typeof parsed.pid === "number" &&
-      Number.isInteger(parsed.pid) &&
-      parsed.pid > 0
-        ? parsed.pid
-        : undefined;
-    if (pid === undefined) return { state: "invalid" };
-    return this.isHolderAlive(pid) ? { state: "active", pid } : { state: "stale", pid };
   }
 
-  public async acquire(): Promise<void> {
+  public async acquire(options: { waitMs?: number; signal?: AbortSignal; onBlocked?: () => void } = {}): Promise<void> {
+    if (this.worker) throw new Error("Another ZCode Server instance is already running");
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    if (await this.tryAcquireOnce()) return;
-    const recoveryPath = `${this.path}.recovery`;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const observed = await this.readOwner(this.path);
-      if (observed && this.isHolderAlive(observed.record.pid)) {
-        throw new Error("Another ZCode Server instance is already running");
-      }
-      const recoveryToken = await this.tryAcquireRecoveryGate(recoveryPath);
-      if (!recoveryToken) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 5));
-        continue;
-      }
-      try {
-        const current = await this.readOwner(this.path);
-        if (current && this.isHolderAlive(current.record.pid)) {
-          throw new Error("Another ZCode Server instance is already running");
-        }
-        if (current) {
-          await this.claimStalePath(this.path, current.raw);
-        }
-        if (await this.tryAcquireOnce()) return;
-      } finally {
-        await this.releaseOwnedPath(recoveryPath, recoveryToken);
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    const owner = await this.readOwner();
+    if (owner.state === "unreadable") throw owner.error;
+    // 锁协议迁移不能以新 namespace 内看不到 PID 为由偷旧实例的锁。
+    // 部署方须先停止全部旧写入者，再离线清理旧 metadata / recovery。
+    if (owner.state === "record" && owner.protocol !== protocol) {
+      log.warn("server.lock.acquire", { correlationId: randomUUID(), outcome: "blocked", reasonCode: "legacy_lock_migration_required" });
+      throw new Error("Legacy Server lock requires offline migration after all old instances stop");
     }
-    throw new Error("Another ZCode Server instance is already running");
+    // 不用普通 fs.open/close 探测 SQLite 文件：POSIX close 可能释放同进程的 fcntl 锁。
+    const started = Date.now();
+    const correlationId = randomUUID();
+    let worker: Worker | null;
+    let reportedBlocked = false;
+    while (true) {
+      options.signal?.throwIfAborted();
+      worker = await tryAcquireKernelFileLock(`${this.path}.sqlite`);
+      if (worker) break;
+      if (!reportedBlocked) {
+        log.warn("server.lock.acquire", { correlationId, outcome: "blocked", reasonCode: "lock_busy" });
+        options.onBlocked?.();
+        reportedBlocked = true;
+      }
+      if (Date.now() - started >= (options.waitMs ?? 0)) {
+        throw new Error(options.waitMs ? "Server writer lock wait timed out" : "Another ZCode Server instance is already running");
+      }
+      // 仅已确认的 busy 可等待；权限、损坏及旧协议错误直接失败，不能变成重试掩盖。
+      await delay(Math.min(100, (options.waitMs ?? 0) - (Date.now() - started)), undefined, { signal: options.signal });
+    }
+    if (options.signal?.aborted) {
+      await releaseKernelFileLock(worker);
+      options.signal.throwIfAborted();
+    }
+    this.worker = worker;
+    // 非预期 worker 错误必须终止宿主，不能继续无锁执行。
+    worker.removeAllListeners("error");
+    worker.on("error", (error) => { throw error; });
+    worker.on("exit", () => {
+      if (this.worker === worker) throw new Error("Server kernel lock worker was lost");
+    });
+    const token = randomUUID();
+    this.ownerToken = token;
+    try {
+      await chmod(`${this.path}.sqlite`, 0o600);
+      await writeFile(this.path, `${JSON.stringify({ protocol, pid: process.pid, acquiredAt: Date.now(), ownerToken: token })}\n`, { mode: 0o600 });
+      log.info("server.lock.acquire", { correlationId: token, outcome: "succeeded" });
+      if (reportedBlocked) log.info("server.lock.wait", { correlationId, outcome: "succeeded", waitedMs: Date.now() - started });
+    } catch (error) {
+      await this.release();
+      throw error;
+    }
   }
 
   public async release(): Promise<void> {
-    await this.handle?.close().catch(() => undefined);
-    this.handle = undefined;
+    const worker = this.worker;
+    if (!worker) return;
     const token = this.ownerToken;
-    this.ownerToken = undefined;
-    if (token) await this.releaseOwnedPath(this.path, token);
-  }
-
-  private async tryAcquireOnce(): Promise<boolean> {
-    const ownerToken = randomUUID();
-    let handle: FileHandle | undefined;
     try {
-      handle = await open(this.path, "wx", 0o600);
-      await handle.writeFile(
-        `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), ownerToken })}\n`,
-      );
-      this.handle = handle;
-      this.ownerToken = ownerToken;
-      return true;
-    } catch (error: unknown) {
-      if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
-      await handle?.close().catch(() => undefined);
-      const observed = await this.readOwner(this.path);
-      if (observed?.record.ownerToken === ownerToken) {
-        await this.releaseOwnedPath(this.path, ownerToken);
-      }
-      throw error;
-    }
-  }
-
-  private async readOwner(path: string): Promise<{
-    raw: string;
-    record: { ownerToken?: string; pid?: number };
-  } | null> {
-    let raw: string;
-    try {
-      raw = await readFile(path, "utf8");
-    } catch {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(raw) as { ownerToken?: unknown; pid?: unknown };
-      return {
-        raw,
-        record: {
-          ownerToken: typeof parsed.ownerToken === "string" ? parsed.ownerToken : undefined,
-          pid:
-            typeof parsed.pid === "number" && Number.isInteger(parsed.pid) && parsed.pid > 0
-              ? parsed.pid
-              : undefined,
-        },
-      };
-    } catch {
-      return { raw, record: {} };
-    }
-  }
-
-  public isHolderAlive(pid: number | undefined): boolean {
-    if (pid === undefined) return false;
-    if (pid === process.pid) return true;
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (error: unknown) {
-      // ESRCH 表示进程不存在（stale）；EPERM 表示进程存在但无权限，保守视为存活。
-      return error instanceof Error && "code" in error && error.code === "EPERM";
-    }
-  }
-
-  private async tryAcquireRecoveryGate(path: string): Promise<string | null> {
-    const ownerToken = randomUUID();
-    let handle: FileHandle | undefined;
-    try {
-      handle = await open(path, "wx", 0o600);
-      await handle.writeFile(
-        `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), ownerToken })}\n`,
-      );
-      await handle.close();
-      return ownerToken;
-    } catch (error: unknown) {
-      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
-        await handle?.close().catch(() => undefined);
-        const observed = await this.readOwner(path);
-        if (observed?.record.ownerToken === ownerToken) {
-          await this.releaseOwnedPath(path, ownerToken);
-        }
-        throw error;
-      }
+      const owner = await this.readOwner();
+      if (owner.state === "record" && owner.ownerToken === token) await rm(this.path, { force: true });
     } finally {
-      await handle?.close().catch(() => undefined);
+      this.ownerToken = undefined;
+      this.worker = undefined;
+      await releaseKernelFileLock(worker);
+      log.info("server.lock.release", { correlationId: token, outcome: "succeeded" });
     }
-    const observed = await this.readOwner(path);
-    if (!observed || !this.isHolderAlive(observed.record.pid)) {
-      if (observed) await this.claimStalePath(path, observed.raw);
-      return null;
-    }
-    return null;
   }
 
-  private async claimStalePath(path: string, expectedRaw: string): Promise<void> {
-    const quarantine = `${path}.stale-${process.pid}-${randomUUID()}`;
+  private async readOwner(): Promise<
+    | { state: "record"; pid: number; protocol?: string; ownerToken?: string }
+    | { state: "missing" | "invalid" }
+    | { state: "unreadable"; error: unknown }
+  > {
     try {
-      await rename(path, quarantine);
-    } catch (error: unknown) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
-      throw error;
+      const value: unknown = JSON.parse(await readFile(this.path, "utf8"));
+      if (typeof value !== "object" || value === null || !("pid" in value)
+        || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0) return { state: "invalid" };
+      return {
+        state: "record", pid: value.pid,
+        protocol: "protocol" in value && typeof value.protocol === "string" ? value.protocol : undefined,
+        ownerToken: "ownerToken" in value && typeof value.ownerToken === "string" ? value.ownerToken : undefined,
+      };
+    } catch (error) {
+      if (error instanceof SyntaxError) return { state: "invalid" };
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return { state: "missing" };
+      return { state: "unreadable", error };
     }
-    const claimedRaw = await readFile(quarantine, "utf8").catch(() => null);
-    if (claimedRaw === expectedRaw) {
-      await rm(quarantine, { force: true });
-      return;
-    }
-    // 陈旧观察误 claim 了后来者时必须恢复，不能删除新 owner 的 lock。
-    await rename(quarantine, path).catch(() => undefined);
-  }
-
-  private async releaseOwnedPath(path: string, ownerToken: string): Promise<void> {
-    const observed = await this.readOwner(path);
-    if (observed?.record.ownerToken !== ownerToken) return;
-    const quarantine = `${path}.release-${process.pid}-${randomUUID()}`;
-    try {
-      await rename(path, quarantine);
-    } catch {
-      return;
-    }
-    const claimed = await this.readOwner(quarantine);
-    if (claimed?.record.ownerToken === ownerToken) {
-      await rm(quarantine, { force: true });
-      return;
-    }
-    await rename(quarantine, path).catch(() => undefined);
   }
 }

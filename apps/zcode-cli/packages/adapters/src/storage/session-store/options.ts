@@ -1,3 +1,5 @@
+import type { Logger } from "@zcode/contracts";
+
 export type ForkCommitFaultStage =
   | "afterChild"
   | "afterMessages"
@@ -9,6 +11,8 @@ export type ForkCommitFaultStage =
 
 export interface SqliteSessionStoreOptions {
   dbPath?: string;
+  /** 可移植存储操作的低敏结构化结果；不记录包或原始校验错误。 */
+  logger?: Logger;
   /** 仅供事务原子性测试；生产调用不得设置。 */
   forkCommitFaultAt?: ForkCommitFaultStage;
   /** 仅供启动锁等待边界测试；生产调用使用默认值。 */

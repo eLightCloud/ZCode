@@ -101,6 +101,7 @@ import * as sessionInputRepository from "./repositories/session-inputs.js";
 import * as sessionRepository from "./repositories/sessions.js";
 import * as todoRepository from "./repositories/todos.js";
 import * as usageRepository from "./repositories/usage.js";
+import * as textCheckpointRepository from "./repositories/text-checkpoints.js";
 
 function forkChildSessionId(entry: SessionEntryInfo): SessionId | null {
   if (!entry.data || typeof entry.data !== "object" || Array.isArray(entry.data)) return null;
@@ -233,11 +234,13 @@ export class SqliteSessionStore
   private readonly db: DatabaseSync;
   private readonly dbPath: string;
   private readonly forkCommitFaultAt?: ForkCommitFaultStage;
+  private readonly checkpointLogger?: SqliteSessionStoreOptions["logger"];
   private dwfJournalStore?: JournalStorePort;
 
   constructor(options: SqliteSessionStoreOptions = {}, startupToken?: symbol) {
     this.dbPath = options.dbPath ?? getDefaultSessionDbPath();
     this.forkCommitFaultAt = options.forkCommitFaultAt;
+    this.checkpointLogger = options.logger;
     const startupLockTimeoutMs =
       options.startupLockTimeoutMs ?? DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS;
     try {
@@ -310,6 +313,15 @@ export class SqliteSessionStore
   async createSession(input: CreateSessionInput): Promise<SessionInfo> {
     this.throwBeforeWrite();
     return sessionRepository.createSession(this.db, input);
+  }
+
+  async exportTextCheckpoint(input: Parameters<NonNullable<SessionStorePort["exportTextCheckpoint"]>>[0]) {
+    return textCheckpointRepository.exportTextCheckpoint(this.db, input, this.checkpointLogger);
+  }
+
+  async importTextCheckpoint(input: Parameters<NonNullable<SessionStorePort["importTextCheckpoint"]>>[0]) {
+    this.throwBeforeWrite();
+    textCheckpointRepository.importTextCheckpoint(this.db, input, this.checkpointLogger);
   }
 
   async createForkedSessionWithMetadata(

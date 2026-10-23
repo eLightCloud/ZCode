@@ -402,6 +402,47 @@ project 级权限规则。第一版只做 project scope，不做 session/global 
 - message 与 part 的同一阶段写入放进事务。
 - 停止、崩溃、进程退出前强制 flush 当前 message / part。
 
+## 可移植静止文本检查点（版本 1）
+
+`SessionStorePort` 的可选 `exportTextCheckpoint({sessionID})` 与
+`importTextCheckpoint({checkpoint, target})` 是原生持久化能力，不是 share / fork，
+保留 session、message、part 和已处理输入的身份。目标必须尚无该 session；任何全局主键
+碰撞均拒绝，导入同事务全有或全无；重复导入报冲突，调用方查询原 session，不能覆盖。
+`target` 由可信原生调用方指定新 project / workspace / directory，包不含源端路径或权限。
+格式和错误码唯一见 contracts 的 `text-checkpoint.ts` 运行时 schema。
+
+调用前必须由原生 owner 停用接纳并收口工作。SQLite 一致读不等于停止 runtime：
+此端口不实现在线交接、位置授予、租户授权或 PG 同步。版本 1 只支持已完成的交互式文本
+根会话、普通 user / assistant + text，以及模型引用和终态输入去重事实；不复制 system、
+环境、凭据、permission、任意 metadata 或私有推理。pending / running、compact、tool、
+文件、目标 / todo、子会话及未知必要 entry 均明确受阻，不能丢字段后宣称完整恢复。
+非便携字段只有 spec 明确的可重建投影才能省略。进程内 runner 和历史工具不重放。
+明确可重建的投影仅包括历史 `contextSnapshot`、user `tools` 可见目录、
+`agent_listing_delta` 合成枚举消息，以及未授予权限的普通 execution-state 配置。
+被移除枚举消息的 orderedMessageIds 引用同时过滤；真实消息身份不改写，其他 synthetic
+来源、metadata 和边界一律不猜测。目标工具、环境、执行模式及权限按当前配置重新解析。
+
+导入本身不加载模型或执行输入。目标普通 `resume` 重建上下文并重新解析本地配置、
+模型能力和权限；只在显式新 turn 后调用模型。结构化操作结果记录 session ID、阶段、
+消息数及稳定错误码，不记录正文、路径或整个校验错误。验证必须包含新数据根、新进程、
+旧端不可访问、反向再导入、同 ID 碰撞和失败事务回滚，不能以同库重开代替跨位置证明。
+
+```mermaid
+sequenceDiagram
+    participant O as 原生调用方
+    participant S as 源 SQLite adapter
+    participant T as 目标 SQLite adapter
+    participant A as 目标 App
+    O->>O: 停止接纳并收口（S0 为关闭源 App）
+    O->>S: exportTextCheckpoint
+    S-->>O: 一致静止文本包
+    O->>T: importTextCheckpoint + 可信目标绑定
+    T->>T: schema / 引用 / 主键校验及单事务创建
+    O->>A: 显式 resume
+    A->>T: 读取同一会话并重建上下文
+    O->>A: 显式新输入（此时才执行模型）
+```
+
 ## 恢复策略
 
 恢复 session 时：

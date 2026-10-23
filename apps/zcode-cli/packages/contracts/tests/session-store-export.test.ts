@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { createMessageId, createPartId, createSessionId } from "../src/index.js";
+import {
+  createMessageId,
+  createPartId,
+  createSessionId,
+  textCheckpointSchema,
+  TextCheckpointError,
+} from "../src/index.js";
 import type { ExecutionPort, MessagePart, SessionStorePort } from "../src/index.js";
 
 describe("root contract exports", () => {
+  it("exposes the checkpoint validator and stable errors through the public root", () => {
+    expect(
+      textCheckpointSchema.safeParse({ format: "zcode.text-checkpoint", version: 2 }).success,
+    ).toBe(false);
+    expect(new TextCheckpointError("unsupported_state").code).toBe("unsupported_state");
+    type ExportCheckpoint = NonNullable<SessionStorePort["exportTextCheckpoint"]>;
+    const acceptsPort = (_port: ExportCheckpoint | undefined) => true;
+    expect(acceptsPort(undefined)).toBe(true);
+  });
   it("exposes session store message part and port types", async () => {
     const part = {
       id: createPartId("root-export"),

@@ -334,6 +334,13 @@ export async function listSessionInputs(
   db: DatabaseSync,
   input: { sessionID: SessionId; status?: SessionInputStatus },
 ): Promise<SessionInputRecord[]> {
+  return listSessionInputsSync(db, input);
+}
+
+export function listSessionInputsSync(
+  db: DatabaseSync,
+  input: { sessionID: SessionId; status?: SessionInputStatus },
+): SessionInputRecord[] {
   const rows = (input.status
     ? db
         .prepare(

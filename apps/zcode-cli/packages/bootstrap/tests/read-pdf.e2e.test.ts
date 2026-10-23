@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createNodeExecutionAdapter } from "@zcode/adapters/exec";
 import { createNodeFileSystemAdapter } from "@zcode/adapters/fs";
 import { createJimpImageProcessorAdapter } from "@zcode/adapters/image";
-import { AiSdkModelAdapter, AiSdkModelRegistry } from "@zcode/adapters/model";
+import { createPdfModelRuntime } from "./helpers/pdf-model-runtime.js";
 import { createPopplerPdfDocumentAdapter } from "@zcode/adapters/pdf";
 import {
   createInMemorySessionEventStore,
@@ -60,9 +60,8 @@ describe("Read PDF provider and cold-resume E2E", () => {
         sessionId,
         {
           mode: "yolo",
-          modelInputMediaCapabilities: { supportsImages: true, supportsPdf: true },
-          modelProviderOptions: { apiFormat: "openai-chat-completions" },
-          modelRef: CHAT_MODEL,
+
+          modelSelection: { ...CHAT_MODEL, options: { reasoningLevel: "disabled" } },
           modelStreaming: "off",
           workingDirectory: root,
         },
@@ -71,7 +70,9 @@ describe("Read PDF provider and cold-resume E2E", () => {
           eventStore: createInMemorySessionEventStore(),
           fileSystemPort: createNodeFileSystemAdapter(),
           imageProcessorPort: passthroughImageProcessor,
-          modelAdapter: createChatModelAdapter(capture.baseURL),
+          modelFactory: createPdfModelRuntime(capture.baseURL, CHAT_MODEL.providerId, {
+            [CHAT_MODEL.modelId]: true,
+          }).modelFactory,
           pdfDocumentPort: deterministicPdfDocument,
           sessionStore,
         },
@@ -126,7 +127,7 @@ describe.skipIf(!popplerAvailable)("Read PDF Poppler E2E", () => {
         sessionId,
         {
           mode: "yolo",
-          modelInputMediaCapabilities: { supportsImages: true, supportsPdf: true },
+
           workingDirectory: root,
         },
         {
@@ -140,7 +141,7 @@ describe.skipIf(!popplerAvailable)("Read PDF Poppler E2E", () => {
       const model = {
         providerId: createModelProviderId("test"),
         modelId: createModelId("pdf-e2e"),
-        properties: { supportsImages: true, supportsPdf: true },
+        properties: { inputFormat: { supportsImage: true, supportsPdf: true } },
       } as never;
 
       const readTool = runtime.getTools(model).find((tool) => tool.name === "Read")!;
@@ -181,28 +182,6 @@ describe.skipIf(!popplerAvailable)("Read PDF Poppler E2E", () => {
 async function commandSucceeds(command: string, args: string[]): Promise<boolean> {
   return await new Promise((resolve) => {
     execFile(command, args, { timeout: 5_000 }, (error) => resolve(error === null));
-  });
-}
-
-function createChatModelAdapter(baseURL: string): AiSdkModelAdapter {
-  const providerId = String(CHAT_MODEL.providerId);
-  const modelId = String(CHAT_MODEL.modelId);
-  return new AiSdkModelAdapter({
-    registry: new AiSdkModelRegistry({
-      env: {},
-      inputMediaCapabilities: {
-        [`${providerId}/${modelId}`]: { supportsImages: true, supportsPdf: true },
-      },
-      providers: {
-        [providerId]: {
-          apiKey: "pdf-e2e-key",
-          baseURL: `${baseURL}/v1`,
-          kind: "openai-compatible",
-          providerOptions: { apiFormat: "openai-chat-completions" },
-        },
-      },
-    }),
-    retry: { maxAttempts: 1 },
   });
 }
 

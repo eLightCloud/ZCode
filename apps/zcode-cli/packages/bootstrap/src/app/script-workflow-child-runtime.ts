@@ -134,6 +134,8 @@ export function createScriptWorkflowAgentRuntime(input: {
     input.childSessionId,
     {
       ...inheritedConfig,
+      // 首次执行后 shell 快照只存在父 Runtime，初始化配置副本仍可能为空。
+      bashShellSelection: input.deps.runtime.getSessionShellSelection(),
       ...(systemPrompt === undefined ? {} : { systemPrompt }),
       agentName: input.request.opts?.agentType ?? "zcode-workflow",
       maxTurns: input.request.opts?.maxTurns ?? input.deps.runtimeConfig.maxTurns,
@@ -183,9 +185,7 @@ export function createScriptWorkflowAgentRuntime(input: {
       ...(input.workflowSubmitPort && input.workflowSubmitSchema
         ? { workflowSubmitSchema: input.workflowSubmitSchema }
         : {}),
-      ...(input.workflowEscalatePort
-        ? { workflowEscalatePort: input.workflowEscalatePort }
-        : {}),
+      ...(input.workflowEscalatePort ? { workflowEscalatePort: input.workflowEscalatePort } : {}),
       ...(input.modelRequestAdmission
         ? { modelRequestAdmission: input.modelRequestAdmission }
         : {}),

@@ -1,6 +1,5 @@
-import { Buffer } from "node:buffer";
 import {
-  createSessionId,
+  STREAM_RECOVERY_DISCARDED_ERROR_NAME,
   SessionEventType,
   selectActiveConversationBranch,
   type BackgroundTaskInfo,
@@ -9,14 +8,20 @@ import {
   type SessionInfo,
   type SessionProjection,
   type ToolPart,
-  STREAM_RECOVERY_DISCARDED_ERROR_NAME,
 } from "@zcode/contracts";
+
 import type { ZCodeSessionEndedSubagent, ZCodeSessionRunningSubagent } from "@zcode/shared";
 
-const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
-const CANCELLATION_PATTERN = /abort|cancel|interrupt|stop/i;
+import {
+  CANCELLATION_PATTERN,
+  asRecord,
+  candidateFromToolPart,
+  stringField,
+} from "./subagent-session-facts.js";
 
-interface SubagentCandidate {
+export { paginateEndedSubagents } from "./subagent-session-pagination.js";
+
+export interface SubagentCandidate {
   agentId?: string;
   childSessionId: string;
   runInBackground: boolean;
@@ -30,7 +35,7 @@ interface SubagentCandidate {
   title: string;
 }
 
-interface SubagentEventRelation {
+export interface SubagentEventRelation {
   agentId?: string;
   childSessionId?: string;
   description?: string;
@@ -56,47 +61,6 @@ export interface ProjectSessionSubagentsInput {
   childProjectionsById: ReadonlyMap<string, SessionProjection>;
   parentProjection?: SessionProjection;
   parentEvents?: readonly SessionEvent[];
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function stringField(source: Record<string, unknown>, ...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = nonEmptyString(source[key]);
-    if (value) return value;
-  }
-  return undefined;
-}
-
-function parseJsonObject(value: string | undefined): Record<string, unknown> | null {
-  if (!value) return null;
-  try {
-    return asRecord(JSON.parse(value) as unknown);
-  } catch {
-    return null;
-  }
-}
-
-function agentIdFromLaunchAcknowledgement(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  return nonEmptyString(value.match(/(?:^|\n)agentId:\s*([^\s(]+)/)?.[1]);
-}
-
-function contentBlocksToText(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const text = value
-    .map((block) => nonEmptyString(asRecord(block).text))
-    .filter((item): item is string => Boolean(item))
-    .join("\n\n");
-  return text || undefined;
 }
 
 function subagentEventRelations(
@@ -154,62 +118,6 @@ function activeBranchMessages(
     rewindKeptMessageIds: session.revert?.keptMessageIDs,
     rewindTargetMessageId: session.revert?.targetMessageID,
   });
-}
-
-function candidateFromToolPart(
-  part: ToolPart,
-  relation?: SubagentEventRelation,
-): SubagentCandidate | null {
-  if (!SUBAGENT_TOOL_NAMES.has(part.tool)) return null;
-  const completedOutput =
-    part.state.status === "completed" ? nonEmptyString(part.state.output) : undefined;
-  const output = parseJsonObject(completedOutput);
-  const input = asRecord(part.state.input);
-  const stateMetadata = "metadata" in part.state ? asRecord(part.state.metadata) : {};
-  const metadata = { ...asRecord(part.metadata), ...stateMetadata };
-  const agentId =
-    stringField(output ?? {}, "agentId") ??
-    // 后台 Agent 的持久化 launch ACK 是纯文本，cold query 未携带
-    // 临时 spawn event 时无法恢复 childSessionId，导致真实 running Agent 被整条跳过。
-    // 标准 ACK 自带 agentId，按该稳定字段恢复，与 runtime 的 session id 规则对齐。
-    agentIdFromLaunchAcknowledgement(completedOutput) ??
-    stringField(metadata, "agentId") ??
-    relation?.agentId;
-  const childSessionId =
-    stringField(output ?? {}, "childSessionId") ??
-    stringField(metadata, "childSessionId") ??
-    relation?.childSessionId ??
-    (agentId ? createSessionId(`subagent_${agentId}`) : undefined);
-  if (!childSessionId) return null;
-  const title =
-    stringField(output ?? {}, "description") ??
-    stringField(input, "description") ??
-    stringField(metadata, "description") ??
-    relation?.description ??
-    stringField(input, "prompt") ??
-    "Subagent";
-  return {
-    childSessionId,
-    runInBackground: input.run_in_background === true,
-    part,
-    output,
-    agentId: agentId ?? part.callID,
-    subagentType:
-      stringField(output ?? {}, "agentType") ??
-      stringField(metadata, "agentType") ??
-      relation?.subagentType ??
-      stringField(input, "subagent_type", "agent", "agentType") ??
-      "subagent",
-    title,
-    summary:
-      contentBlocksToText(output?.content) ??
-      stringField(output ?? {}, "result", "summary") ??
-      (part.state.status === "error" ? nonEmptyString(part.state.error) : undefined) ??
-      relation?.summary,
-    ...(relation?.startedAt !== undefined ? { startedAt: relation.startedAt } : {}),
-    ...(relation?.stoppedAt !== undefined ? { stoppedAt: relation.stoppedAt } : {}),
-    ...(relation?.stoppedStatus ? { stoppedStatus: relation.stoppedStatus } : {}),
-  };
 }
 
 function collectCandidates(
@@ -446,49 +354,4 @@ export function projectSessionSubagents(
       right.childSessionId.localeCompare(left.childSessionId),
   );
   return { revision: input.revision, running, ended };
-}
-
-function encodeCursor(item: ZCodeSessionEndedSubagent): string {
-  return Buffer.from(
-    JSON.stringify({ childSessionId: item.childSessionId, endedAt: item.endedAt ?? 0 }),
-  ).toString("base64url");
-}
-
-function decodeCursor(cursor: string | undefined): {
-  childSessionId: string;
-  endedAt: number;
-} | null {
-  if (!cursor) return null;
-  try {
-    const value = asRecord(
-      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown,
-    );
-    const childSessionId = nonEmptyString(value.childSessionId);
-    const endedAt = value.endedAt;
-    return childSessionId && typeof endedAt === "number" ? { childSessionId, endedAt } : null;
-  } catch {
-    return null;
-  }
-}
-
-export function paginateEndedSubagents(
-  ended: readonly ZCodeSessionEndedSubagent[],
-  options: { cursor?: string; limit: number },
-): { items: ZCodeSessionEndedSubagent[]; nextCursor?: string } {
-  const cursor = decodeCursor(options.cursor);
-  const start = cursor
-    ? ended.findIndex(
-        (item) =>
-          (item.endedAt ?? 0) < cursor.endedAt ||
-          ((item.endedAt ?? 0) === cursor.endedAt &&
-            item.childSessionId.localeCompare(cursor.childSessionId) < 0),
-      )
-    : 0;
-  if (start < 0) return { items: [] };
-  const items = ended.slice(start, start + options.limit);
-  const last = items.at(-1);
-  return {
-    items,
-    ...(last && start + items.length < ended.length ? { nextCursor: encodeCursor(last) } : {}),
-  };
 }

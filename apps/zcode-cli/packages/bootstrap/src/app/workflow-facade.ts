@@ -284,6 +284,8 @@ function createWorkflowChildRuntime(
     options.childSessionId,
     {
       ...deps.runtimeConfig,
+      // 首次执行后 shell 快照只存在父 Runtime，初始化配置副本仍可能为空。
+      bashShellSelection: deps.runtime.getSessionShellSelection(),
       agentName: options.workflowKind === "expert" ? "zcode-expert" : "zcode-workflow",
       // workflow child 不在 Guarded 合同内；只隔离父任务模式，不继承审批。
       mode: "yolo",

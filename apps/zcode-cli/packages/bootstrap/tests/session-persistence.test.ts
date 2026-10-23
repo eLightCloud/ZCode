@@ -22,7 +22,12 @@ import {
 } from "@zcode/adapters/storage";
 import { createNodeWorkflowStore } from "@zcode/adapters/workflow";
 import { DEFAULT_EXPERT_WORKFLOW_STRATEGY } from "@zcode/core";
-import { createNodeProviderRuntimePathEnv } from "@zcode/provider-node";
+import {
+  createNodeProviderRuntimePathEnv,
+  encodeZCodeBuiltinRelease,
+  encodeProviderConfigFile,
+} from "@zcode/provider-node";
+import { ProviderConfigMap, ProviderTemplateMap, ModelConfigRules } from "@zcode/provider";
 import {
   LogLevel,
   SESSION_ENTRY_BASH_SHELL_SELECTION,
@@ -1474,7 +1479,16 @@ describe("session persistence", () => {
           output,
         }),
       ).rejects.toThrow(/SQLite migration checksum mismatch for 0001_base_session_store/);
-      expect(output.output()).toBe("");
+      const frames = output
+        .output()
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames.every((frame) => frame.method === "startup/storageState")).toBe(true);
+      expect(frames.at(-1)?.params.phase).toBe("failed");
+      expect(frames.at(-1)?.params.errorCode).toBe("checksum_mismatch");
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -1509,7 +1523,15 @@ describe("session persistence", () => {
 
       expect(startupCompletedIndex).toBeGreaterThanOrEqual(0);
       expect(retentionScheduledIndex).toBeGreaterThan(startupCompletedIndex);
-      expect(output.output()).toBe("");
+      const frames = output
+        .output()
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames.every((frame) => frame.method === "startup/storageState")).toBe(true);
+      expect(frames.at(-1)?.params.phase).toBe("ready");
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -1544,7 +1566,15 @@ describe("session persistence", () => {
         });
       }
 
-      expect(output.output()).toBe("");
+      const frames = output
+        .output()
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames.every((frame) => frame.method === "startup/storageState")).toBe(true);
+      expect(frames.at(-1)?.params.phase).toBe("ready");
       const logEntries = await readLogEntries(logDir);
       expect(logEntries.some((entry) => entry.event === "model.sdk.warning")).toBe(true);
     } finally {
@@ -2399,11 +2429,13 @@ describe("session persistence", () => {
       const storedMessages = await store.messages({ sessionID: sessionId });
 
       expect(result.response).toBe("second answer");
-      expect(storedMessages).toHaveLength(4);
+      // 原生 Agent 目录提醒占一条可重建消息；四条人工/回答正文仍完整。
+      expect(storedMessages).toHaveLength(5);
       expect(capturedMessages.map((message) => message.role)).toEqual([
         "system",
         "system",
         "system",
+        "user",
         "user",
         "user",
         "user",
@@ -2417,6 +2449,7 @@ describe("session persistence", () => {
         expect.stringContaining("# Environment"),
         expect.stringContaining("The following skills are available"),
         expect.stringContaining("<system-reminder>"),
+        expect.stringContaining("Available agent types for the Agent tool"),
         "first prompt",
         "first answer",
         "second prompt",
@@ -2491,8 +2524,8 @@ describe("session persistence", () => {
       });
       const result = await secondApp.submitPrompt("second prompt");
 
-      expect(resume.messageCount).toBe(2);
-      expect(resume.appliedMessageCount).toBe(2);
+      expect(resume.messageCount).toBe(3);
+      expect(resume.appliedMessageCount).toBe(3);
       expect(result.response).toBe("second answer");
       // 冷恢复会先补齐持久标题事件，再发布 SessionResumed。
       expect(liveEventTypes).toEqual([
@@ -2505,6 +2538,7 @@ describe("session persistence", () => {
         expect.stringContaining("# Communicating with the user"),
         expect.stringContaining("The following skills are available"),
         expect.stringContaining("<system-reminder>"),
+        expect.stringContaining("Available agent types for the Agent tool"),
         "first prompt",
         "first answer",
         "second prompt",
@@ -2839,21 +2873,24 @@ interface AiSdkWarningGlobal {
 async function createProtocolProviderEnv(root: string): Promise<Record<string, string>> {
   const zcodeBuiltinFilePath = join(root, "zcode-builtin.json");
   const personalFilePath = join(root, "provider-personal.json");
-  const emptyBuiltinRelease = JSON.stringify({
-    // 此处测试启动/存储顺序，不测试旧版 Release 迁移；使用当前正式结构。
-    schemaVersion: 3,
-    revision: 1,
-    config: {
-      providers: {},
-      providerTemplates: {},
-      modelConfigRules: { matchRules: [], templateModelRules: [], providerModelRules: [] },
-    },
-  });
-  const emptyPersonalConfig = JSON.stringify({
-    schemaVersion: 1,
-    providers: {},
-    modelConfigRules: [],
-  });
+  // 复用正式序列化 facade；启动顺序测试不维护另一份易漂移的配置文件形状。
+  const emptyBuiltinRelease = JSON.stringify(
+    encodeZCodeBuiltinRelease({
+      schemaVersion: 1,
+      revision: 1,
+      config: {
+        providers: ProviderConfigMap.empty(),
+        providerTemplates: ProviderTemplateMap.empty(),
+        modelConfigRules: ModelConfigRules.empty(),
+      },
+    }),
+  );
+  const emptyPersonalConfig = JSON.stringify(
+    encodeProviderConfigFile({
+      providers: ProviderConfigMap.empty(),
+      models: ModelConfigRules.empty(),
+    }),
+  );
   await Promise.all([
     writeFile(zcodeBuiltinFilePath, emptyBuiltinRelease),
     writeFile(personalFilePath, emptyPersonalConfig),

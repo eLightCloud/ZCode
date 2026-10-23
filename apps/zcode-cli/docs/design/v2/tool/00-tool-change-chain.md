@@ -1,5 +1,13 @@
 # Tool Change Chain Spec
 
+## S0 质量门修复中的职责拆分（2026-10-24）
+
+本轮按既有职责拆分 CLI 超长实现与合同，保留原公开入口与唯一 owner；handler、
+executor、审批、prompt、持久化、事件、tool result 和两种投递语义不变。
+不新增 tool、运行时字段、fallback 或副作用入口。移动实现后运行原包与调用方测试，
+并核对公开导出与原生端到端链，不以行数合规代替执行验证。
+
+
 ## 明确文件交付（2026-10-21）
 
 新增通用 `DeliverFiles`：契约与运行时 schema → 内置工具注册 / 权限声明 → handler →
@@ -1479,6 +1487,10 @@ TUI 与 headless（`--prompt`、`--target`）没有 Host 下发灰度 mode，改
 
 ## ReplyToChannel（2026-09-23）
 
+2026-10-24 质量门修复：provider 输出以 `oneOf` 投影现有结果分支；分支由互斥的 status 区分，
+与 runtime 的严格 union 接受同一结果集合。复用 shared schema 生成每一分支，不复制字段定义。
+权限、真正发送、取消、trace、结果持久化与两种客户端投递语义均不变。
+
 工具用当前任务绑定会话已确认的 mention refId 发送原生提及，包括客户端续聊引用历史目标；不接收群 ID、应用 ID 或裸用户 ID。
 2026-10-08：新增 mentionName（name、可选 candidateRef），由 Host 在当前授权会话查询真实身份。
 输入 schema/模型工具 schema/描述 → 当前执行输入 → 现有 reply port/协议 → Host 查询与复核
@@ -1640,3 +1652,7 @@ interrupted result。修复不改变工具 schema、权限、执行时机、协�
 
 身份定位补充：conversation-quotes 将原始有序 text/mention 节点逐条映射到模型专用
 材料，保留同名手打文字与原生提及的区别，不改持久化正文或发送 ref 的授权边界。
+
+2026-10-24 S0 全量回归续修：新旧协议共用的执行材料与 detached runner 收尾 lease 移至 App owner，v4 不经旧协议调用；插件宿主常量改由 Shared 的 MCP 窄入口转出，避免加载 Shared 根模块触发 Agent 初始化。工具授权、凭据注入、lease 计数及事件不变；以无桥结构测试、收尾池测试与 Node/desktop 实际打包启动测试验证。
+
+2026-10-24 全量回归：expert/script workflow child 必须经父 Runtime 现有 getSessionShellSelection 读取首次真实执行后落定的快照；不得从初始化前 runtimeConfig 或 SHELL 再推导一份。子会话提示和 Bash 执行继承同一快照，保留 fish 环境下选定 zsh 的两条回归。

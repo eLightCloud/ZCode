@@ -9,7 +9,7 @@ import type {
   CommandResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { isHighspeedProviderId } from "@zcode/shared";
-import { createModelExecutionContext } from "../../../zcode-protocol/model-execution.js";
+import { createModelExecutionContext } from "../../../app/model-execution-context.js";
 import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { inputIntentMetadataFromQueueItem } from "../input-intent.js";
 import { startPromptTurn } from "../prompt-turn.js";

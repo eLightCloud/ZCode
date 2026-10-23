@@ -7,7 +7,7 @@ import { type TurnBackgroundAttribution, type TurnInputIntentMetadata } from "@z
 import type { TurnAttachment } from "@zcode/core";
 import type { ZCodeAutomationBotDeliveryTarget } from "@zcode/shared";
 import type { SendInputOptions, SendInputResult } from "../../app/types.js";
-import { runWithSessionResidencyFinalization } from "../../zcode-protocol/session-residency.js";
+import { runWithSessionResidencyFinalization } from "../../app/session-residency-finalization.js";
 import type { V4CommandCoreHost, V4SessionRecordView } from "./types.js";
 
 export interface StartPromptTurnParamsBase {

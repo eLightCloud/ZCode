@@ -5,6 +5,7 @@ import {
   ApiKeyAccessConfig,
   ModelConfigRules,
   ProviderConfig,
+  ProviderApiConfig,
   ProviderConfigMap,
   ProviderConfigResolver,
   ProviderRegistry,
@@ -36,18 +37,16 @@ afterAll(() => source.dispose());
 describe("真实 ZCode Built-in Config 到 Active Model", () => {
   it("API Key Personal Overlay 经 Registry 原样装配到 Adapter", () => {
     const providerId = "zai-api";
-    const modelId = "glm-5.3";
+    const modelId = "GLM-5.3";
     const registry = resolveOneBuiltinProvider(providerId, {
-      personalProviders: new ProviderConfigMap([
-        [
-          providerId,
-          new ProviderConfig({
-            templateId: "zai-api",
-            group: "standard-personal",
-            access: new ApiKeyAccessConfig({ apiKey: "test-zai-api-key" }),
-          }),
-        ],
-      ]),
+      personalProviders: ProviderConfigMap.empty().setRule({
+        providerId,
+        templateId: "zai-api",
+        config: new ProviderConfig({
+          group: "standard-personal",
+          access: new ApiKeyAccessConfig({ apiKey: "test-zai-api-key" }),
+        }),
+      }),
     });
     const capture = captureRuntime(registry);
 
@@ -87,7 +86,12 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
         ],
       ]),
       personalProviders: new ProviderConfigMap([
-        [providerId, new ProviderConfig({ label: "Personal final label" })],
+        [
+          providerId,
+          new ProviderConfig({
+            api: new ProviderApiConfig({ headers: { "X-Personal-Overlay": "final" } }),
+          }),
+        ],
       ]),
     });
     const capture = captureRuntime(registry);
@@ -100,7 +104,7 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
       modelId,
     ]);
     expect(capture.created[0]?.providerConfig).toMatchObject({
-      label: "Personal final label",
+      api: { headers: { "X-Personal-Overlay": "final" } },
       access: {
         type: "zhipu-account",
         accountType: "zai",
@@ -112,7 +116,7 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
 
   it("隐藏 Request Auth Provider 仍由普通 Registry 精确创建 Model", () => {
     const providerId = "account:zai-offpeak-idle-plan";
-    const modelId = "GLM-5.2";
+    const modelId = "GLM-5.3-Flash";
     const registry = resolveOneBuiltinProvider(providerId, {
       accountProviders: new ProviderConfigMap([
         [

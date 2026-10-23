@@ -7,7 +7,7 @@ import type {
   CommandResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { isHighspeedProviderId } from "@zcode/shared";
-import { createModelExecutionContext } from "../../../zcode-protocol/model-execution.js";
+import { createModelExecutionContext } from "../../../app/model-execution-context.js";
 import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import {
   applyHeldQueueDisposition,
@@ -50,7 +50,10 @@ async function sendText(
   const rawPayload = envelope.payload as CommandPayloadMap["sendText"];
   const record = requireRecord(host, envelope.sessionId);
   // Bug 根因：旧校验只看正文，UI 已允许的 attachment-only query 会在 CLI 被误判为空。
-  if (!hasPromptInput(rawPayload.text, rawPayload.attachments) && !rawPayload.conversationQuotes?.length) {
+  if (
+    !hasPromptInput(rawPayload.text, rawPayload.attachments) &&
+    !rawPayload.conversationQuotes?.length
+  ) {
     throw new V4InputAdmissionRejectedError("proto.invalidPayload", "input must not be empty");
   }
   const activeAutomationId = resolveTurnAutomationId({

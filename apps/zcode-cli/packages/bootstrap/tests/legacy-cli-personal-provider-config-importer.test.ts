@@ -46,9 +46,9 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
     expect(update.providers.keys()).toEqual(["bigmodel-api"]);
+    expect(update.providers.getRule("bigmodel-api")?.templateId).toBe("bigmodel-api");
     expect(update.providers.get("bigmodel-api")?.toJSON()).toEqual({
       group: "standard-personal",
-      templateId: "bigmodel-api",
       access: { type: "api-key", apiKey: "kept" },
     });
   });
@@ -110,31 +110,43 @@ describe("importLegacyCliPersonalProviderConfig", () => {
 
     expect(encoded(update)).toEqual({
       schemaVersion: 1,
-      providers: {
-        custom: {
-          group: "standard-personal",
-          label: "Custom API",
-          access: { type: "api-key", apiKey: "secret" },
-          api: {
-            type: "openai-chat-completions",
-            baseUrl: "https://custom.example.com/v1",
-          },
-          personalModelIds: ["model-a"],
-          modelOrder: ["model-a"],
-        },
-      },
-      models: [
+      providers: [
         {
-          type: "provider-model",
           providerId: "custom",
-          modelId: "model-a",
+          providerName: "Custom API",
           config: {
-            properties: {
-              contextWindow: 128_000,
+            group: "standard-personal",
+            access: {
+              type: "api-key",
+              apiKey: "secret",
             },
+            api: {
+              type: "openai-chat-completions",
+              baseUrl: "https://custom.example.com/v1",
+            },
+            personalModelIds: ["model-a"],
+            modelOrder: ["model-a"],
           },
         },
       ],
+      models: {
+        modelRules: [],
+        modelApiRules: [],
+        providerSiteRules: [],
+        templateModelRules: [],
+        builtinProviderModelRules: [
+          {
+            providerId: "custom",
+            modelId: "model-a",
+            config: {
+              properties: {
+                contextWindow: 128000,
+              },
+            },
+          },
+        ],
+        manualProviderModelRules: [],
+      },
     });
   });
 
@@ -145,8 +157,15 @@ describe("importLegacyCliPersonalProviderConfig", () => {
 
     expect(encoded(update)).toEqual({
       schemaVersion: 1,
-      providers: {},
-      models: [],
+      providers: [],
+      models: {
+        modelRules: [],
+        modelApiRules: [],
+        providerSiteRules: [],
+        templateModelRules: [],
+        builtinProviderModelRules: [],
+        manualProviderModelRules: [],
+      },
     });
   });
 
@@ -168,7 +187,7 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(Object.keys(encoded(update).providers)).toEqual(["custom"]);
+    expect(update.providers.keys()).toEqual(["custom"]);
   });
 
   it("忽略旧 model options 中没有正式语义的任意字段", () => {
@@ -200,8 +219,10 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(encoded(update).models[0]?.config).not.toHaveProperty("requestParameters");
-    expect(encoded(update).models).toHaveLength(1);
+    expect(encoded(update).models.builtinProviderModelRules[0]?.config).not.toHaveProperty(
+      "requestParameters",
+    );
+    expect(update.models.rules()).toHaveLength(1);
   });
 
   it("不迁移历史 model options 中的输出上限", () => {
@@ -229,7 +250,7 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(encoded(update).models).toEqual([]);
+    expect(update.models.rules()).toEqual([]);
   });
 
   it("忽略没有生产消费方的 reasoning replay 元数据", () => {
@@ -253,8 +274,8 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(encoded(update).providers).toHaveProperty("custom");
-    expect(encoded(update).models).toHaveLength(0);
+    expect(update.providers.keys()).toEqual(["custom"]);
+    expect(update.models.rules()).toHaveLength(0);
   });
 
   it("忽略旧 Provider Schema 接受但运行时没有消费的扩展字段", () => {
@@ -276,7 +297,7 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(encoded(update).providers).toHaveProperty("custom");
+    expect(update.providers.keys()).toEqual(["custom"]);
   });
 
   it("无 API Key Provider 在正式类型建立前继续留在兼容链路", () => {

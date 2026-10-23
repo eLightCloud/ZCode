@@ -8,7 +8,7 @@ import type { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { resolveSessionFallbackModelSelection } from "../input-admission.js";
 import { inputIntentMetadataFromCanonical } from "../input-intent.js";
 import { startPromptTurn } from "../prompt-turn.js";
-import { createModelExecutionContext } from "../../../zcode-protocol/model-execution.js";
+import { createModelExecutionContext } from "../../../app/model-execution-context.js";
 import type { V4CommandCoreHost, V4QueuedTurnExecution, V4SessionRecordView } from "../types.js";
 import { applyGoalCommand } from "./goal-compact.js";
 import type { ConversationEditTarget } from "../../product-projection.js";

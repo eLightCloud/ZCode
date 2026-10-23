@@ -4119,6 +4119,16 @@ describe("v4/command 收口", () => {
     await expect(sending).resolves.toMatchObject({ status: "accepted" });
     expect(sendSettled).toBe(true);
 
+    // ACK 可以早于 TurnStarted；真实事件到达后推进 revision，旧行操作才是 stale。
+    gateway.ingest(
+      "session-1",
+      log.push(
+        SessionEventType.TurnStarted,
+        { turnNumber: 2, input: "你好", messageId: "msg-new", inputId: "cmd-new" },
+        { turnId: "turn-new" },
+      ),
+    );
+
     const staleRetry = gateway.handleCommand(
       commandParams({
         commandId: "cmd-stale-retry",

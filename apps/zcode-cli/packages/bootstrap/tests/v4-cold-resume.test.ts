@@ -10,30 +10,7 @@
 //   v4 subscribe → snapshot 含历史行（transcript 合成路径）→ sendText 再发一轮成功；
 //   restoreWarning 语义保真（workspace 无可用模型时 sendText 被拒）；
 //   store 无此会话 → fault.subscribe.sessionNotFound。
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteSessionStore } from "@zcode/adapters/storage";
-import {
-  zcodeProtocolMethods,
-  zcodeSessionStateSnapshotSchema,
-  type ZCodeProtocolMessage,
-} from "@zcode/shared";
-import {
-  V4_METHODS,
-  V4_NOTIFICATIONS,
-  commandAckSchema,
-  conversationTopic,
-  conversationTopicFrameSchema,
-  routedTopicWireFrameSchema,
-  sessionsIndexTopic,
-  sessionsIndexTopicFrameSchema,
-  v4ConversationSubscribeResultSchema,
-  v4ConversationRowsRangeResultSchema,
-  v4SessionsIndexSubscribeResultSchema,
-  type ConversationTopicFrame,
-} from "@zcode/shared/zcode-protocol-v4";
 import type {
   EventId,
   MessageId,
@@ -61,17 +38,40 @@ import {
   type Provider,
 } from "@zcode/provider";
 import {
+  zcodeProtocolMethods,
+  zcodeSessionStateSnapshotSchema,
+  type ZCodeProtocolMessage,
+} from "@zcode/shared";
+import {
+  V4_METHODS,
+  V4_NOTIFICATIONS,
+  commandAckSchema,
+  conversationTopic,
+  conversationTopicFrameSchema,
+  routedTopicWireFrameSchema,
+  sessionsIndexTopic,
+  sessionsIndexTopicFrameSchema,
+  v4ConversationRowsRangeResultSchema,
+  v4ConversationSubscribeResultSchema,
+  v4SessionsIndexSubscribeResultSchema,
+  type ConversationTopicFrame,
+} from "@zcode/shared/zcode-protocol-v4";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRegistryBackedModel } from "../src/app/provider-registry-selection.js";
+import type { ZCodeApp, ZCodeAppOptions } from "../src/app/types.js";
+import {
   ConversationV4Gateway,
   V4SubscribeSessionUnavailableError,
   type ColdSessionResumeOutcome,
 } from "../src/zcode-protocol-v4/index.js";
-import { resolveSessionContextUsage } from "../src/zcode-protocol/session-mapper.js";
-import { getRegistryBackedModel } from "../src/app/provider-registry-selection.js";
-import { ZCodeProtocolAgentServer } from "../src/zcode-protocol/server.js";
 import type { SessionUsageSeed } from "../src/zcode-protocol-v4/product-projection.js";
-import type { ZCodeApp, ZCodeAppOptions } from "../src/app/types.js";
-import { createApiKeyProviderConfig } from "./provider-config-fixtures.js";
+import { ZCodeProtocolAgentServer } from "../src/zcode-protocol/server.js";
+import { resolveSessionContextUsage } from "../src/zcode-protocol/session-mapper.js";
 import { createRegistryBackedTestApp } from "./helpers/registry-backed-test-app.js";
+import { createApiKeyProviderConfig } from "./provider-config-fixtures.js";
 
 // ── gateway 单元层（stub host，模式对齐 v4-gateway.test.ts）──────────────────
 
@@ -2500,7 +2500,8 @@ describe("v4 冷恢复（集成：真 sqlite + server + binder）", () => {
         sessionID: SESSION_ID,
         type: SESSION_ENTRY_MODEL_SELECTION,
         time: { created: 5, updated: 5 },
-        data: { modelId: "glm-4.6", providerId: "glm", thoughtLevel: "deep" },
+        // 当前 Selection 的 reasoning 只来自 options；旧 thoughtLevel 是回滚快照。
+        data: { modelId: "glm-4.6", providerId: "glm", options: { reasoningLevel: "deep" } },
       });
     } finally {
       seedStore.close();
@@ -2534,7 +2535,7 @@ describe("v4 冷恢复（集成：真 sqlite + server + binder）", () => {
     }
   });
 
-  it("重启后冷订阅：旧 fork 消息缺档位时不借用相邻消息的档位", async () => {
+  it("重启后冷订阅：仅旧 fork 快照不恢复执行选择，也不借相邻消息补档位", async () => {
     const dbPath = join(tempRoot, "sessions.db");
     const legacyForkSessionId = "sess_legacy_fork_thought" as SessionId;
     const parentSessionId = "sess_legacy_fork_parent";
@@ -2642,9 +2643,10 @@ describe("v4 冷恢复（集成：真 sqlite + server + binder）", () => {
       );
       if (frame.payload.kind !== "snapshot") throw new Error("Expected snapshot frame");
       expect(frame.payload.snapshot.config).toMatchObject({
-        model: "glm-4-air",
-        provider: "glm",
+        model: "",
+        provider: "",
         thought: "",
+        thoughtLevels: [],
       });
     } finally {
       await close();
@@ -2710,7 +2712,7 @@ describe("v4 冷恢复（集成：真 sqlite + server + binder）", () => {
     }
   });
 
-  it("重启后冷订阅：旧 transcript 无档位时留空，不读取 task-index 提示", async () => {
+  it("重启后冷订阅：旧 transcript 只恢复内容，不按旧模型快照或 task-index 补选择", async () => {
     const dbPath = join(tempRoot, "sessions.db");
     await seedPersistedSession(dbPath);
 
@@ -2732,11 +2734,16 @@ describe("v4 冷恢复（集成：真 sqlite + server + binder）", () => {
       );
       if (frame.payload.kind !== "snapshot") throw new Error("Expected snapshot frame");
       expect(frame.payload.snapshot.config).toMatchObject({
-        model: "glm-4-air",
-        provider: "glm",
+        model: "",
+        provider: "",
         thought: "",
-        thoughtLevels: ["medium", "deep"],
+        thoughtLevels: [],
       });
+      expect(
+        frame.payload.snapshot.rows.window.some(
+          (row) => row.kind === "assistantText" && row.text === "历史回答二",
+        ),
+      ).toBe(true);
     } finally {
       await close();
     }

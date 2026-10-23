@@ -83,7 +83,7 @@ describe("Runtime 创建与未绑定恢复的边界", () => {
     const config = resolveAppRuntimeConfig({
       cliStorageRoot: "/test/cli",
       configResult: createConfig({ env: {}, skipUserConfig: true, workingDirectory: "/test" }),
-      options: { providerRegistry: createRegistry() },
+      options: { providerRegistry: new ProviderRegistry([]) },
       subagentOutputRootDir: "/test/agents",
       workingDirectory: "/test",
     });

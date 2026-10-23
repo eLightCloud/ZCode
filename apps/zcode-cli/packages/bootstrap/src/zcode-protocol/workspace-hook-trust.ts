@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { workspaceHookPolicySchema } from "@zcode/contracts";
 import type { WorkspaceHookPolicyProvider } from "@zcode/core";
 import {
@@ -8,6 +7,7 @@ import {
   type ZCodeWorkspaceHookTrustGrantReasonCode,
   type ZCodeWorkspaceHookTrustGrantResult,
 } from "@zcode/shared";
+import { resolve } from "node:path";
 import {
   grantWorkspaceHookTrust,
   type WorkspaceHookTrustCliStatus,
@@ -33,10 +33,7 @@ export async function grantWorkspaceHookTrustForProtocol(
   const grant = dependencies.grant ?? grantWorkspaceHookTrust;
   const workspaceIdentity =
     params.workspace.workspaceIdentity?.trim() || resolve(params.workspace.workspacePath);
-  const policyRejection = getPolicyRejectionReason(
-    dependencies.policyProvider,
-    workspaceIdentity,
-  );
+  const policyRejection = getPolicyRejectionReason(dependencies.policyProvider, workspaceIdentity);
   if (policyRejection) {
     return zcodeWorkspaceHookTrustGrantResultSchema.parse({
       accepted: false,
@@ -71,9 +68,7 @@ function getPolicyRejectionReason(
   workspaceIdentity: string,
 ): ZCodeWorkspaceHookTrustGrantReasonCode | undefined {
   try {
-    const policy = workspaceHookPolicySchema.parse(
-      policyProvider.getPolicy(workspaceIdentity),
-    );
+    const policy = workspaceHookPolicySchema.parse(policyProvider.getPolicy(workspaceIdentity));
     if (policy.mode === "user_decides") return undefined;
     return policy.mode === "allow_trusted_only"
       ? "workspace_hooks_policy_requires_pretrust"
@@ -104,4 +99,29 @@ function didGrantExactDeclaration(
       item.hookDeclarationDigest === hookDeclarationDigest &&
       item.trustState === "trusted_persistent",
   );
+}
+
+import { notifyWorkspaceHookTrustGrantSessions } from "./protocol-server-support.js";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+
+/** 授权与已加载会话镜像通知属于同一协议操作；接纳、日志和重载仍由既有 owner 负责。 */
+export async function grantWorkspaceHookTrustAndNotifySessions(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+) {
+  const grantResult = await grantWorkspaceHookTrustForProtocol(rawParams, {
+    appVersion: context.deps.version,
+    policyProvider: context.deps.workspaceHookPolicyProvider,
+  });
+  if (grantResult.accepted) {
+    await notifyWorkspaceHookTrustGrantSessions({
+      // dispatch 层的 params 是弱类型；grant 内部已用同一 schema parse 过，这里
+      // safeParse 只为取出 workspaceKey 做匹配，失败即跳过通知（防御，正常必成功）。
+      grantedWorkspaceKey: zcodeWorkspaceHookTrustGrantParamsSchema.safeParse(rawParams).success
+        ? zcodeWorkspaceHookTrustGrantParamsSchema.parse(rawParams).workspace.workspaceKey
+        : undefined,
+      sessions: context.sessions,
+    });
+  }
+  return grantResult;
 }

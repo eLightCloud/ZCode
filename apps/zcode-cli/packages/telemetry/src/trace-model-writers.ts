@@ -1,6 +1,5 @@
 import { recordRequestObservation } from "./request-security-edition/index.js";
 
-/* oxlint-disable eslint(max-lines) -- concrete Writer 在同一文件显式维护各自 canonical key，避免运行时 Schema/Registry 再造一层映射。 */
 import { type Attributes, type Context, type Span } from "@opentelemetry/api";
 
 import type {

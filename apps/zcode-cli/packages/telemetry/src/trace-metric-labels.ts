@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- concrete Writer 在同一文件显式维护各自 canonical key，避免运行时 Schema/Registry 再造一层映射。 */
 import { type Attributes } from "@opentelemetry/api";
 
 import type {

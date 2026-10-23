@@ -4,7 +4,6 @@ import type * as implementation2 from "./trace-runtime-model.js";
 import type * as implementation1 from "./trace-runtime-operations.js";
 import type * as implementation3 from "./trace-runtime-writer-lifecycle.js";
 
-/* oxlint-disable eslint(max-lines) -- concrete Writer 在同一文件显式维护各自 canonical key，避免运行时 Schema/Registry 再造一层映射。 */
 import { type Tracer } from "@opentelemetry/api";
 
 import type {

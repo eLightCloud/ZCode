@@ -4,7 +4,7 @@ import { type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServiceLogger } from "@zcode/services/node";
-import { coreMessageSchema, SERVER_CLI_PROTOCOL_VERSION, type ControlRequest, type LifecycleState, type ReleaseManifest, type ServerStatus } from "../contracts.js";
+import { CRASH_BACKOFF_MS, coreMessageSchema, SERVER_CLI_PROTOCOL_VERSION, type ControlRequest, type LifecycleState, type ReleaseManifest, type ServerStatus } from "../contracts.js";
 import { createControlServer, type ControlHandler } from "../ipc/controlServer.js";
 import { ControlRequestError } from "../ipc/controlError.js";
 import { DataRootLock } from "../runtime/lock.js";
@@ -47,6 +47,7 @@ export class Supervisor {
   private readonly crashBudget: CrashBudget;
   private readonly releaseManager: ReleaseManager;
   private core: ChildProcess | undefined;
+  private writerWaitTimedOutCore: ChildProcess | undefined;
   private control: Awaited<ReturnType<typeof createControlServer>> | undefined;
   private state: LifecycleState = "stopped";
   private generation = 0;
@@ -327,10 +328,11 @@ export class Supervisor {
     }
   }
 
-  public status(): ServerStatus {
+  public status(includeCapabilities = false): ServerStatus {
     return {
       protocolVersion: SERVER_CLI_PROTOCOL_VERSION,
-      capabilities: { idleStop: true, dataRootLock: "kernel-sqlite-v1", liveStatus: true },
+      // 默认响应和快照维持旧严格 reader 的字段集合，能力必须显式协商。
+      ...(includeCapabilities ? { capabilities: { idleStop: true as const, dataRootLock: "kernel-sqlite-v1" as const, liveStatus: true as const } } : {}),
       state: this.state,
       pid: this.core?.pid ?? null,
       port: this.port,
@@ -368,11 +370,15 @@ export class Supervisor {
         void this.persistStatusSnapshot();
         return;
       }
+      const writerWaitTimedOut = this.writerWaitTimedOutCore === child;
       this.core = undefined;
       this.clearCoreScopedStatus();
       this.state = "crashed";
-      this.lastExitReason = reason;
-      const decision = this.crashBudget.recordCrash();
+      this.lastExitReason = writerWaitTimedOut ? "writer-lock-timeout" : reason;
+      // 已确认的 writer 等待超时是资源阻断，沿原重启入口重试，不污染真实崩溃预算。
+      const decision = writerWaitTimedOut
+        ? { shouldRestart: true, delayMs: CRASH_BACKOFF_MS[0] }
+        : this.crashBudget.recordCrash();
       if (!decision.shouldRestart) {
         this.state = "crash-loop-stopped";
         log.error("server core crash budget exhausted, entering crash-loop-stopped", {
@@ -381,7 +387,7 @@ export class Supervisor {
         void this.persistStatusSnapshot();
         return;
       }
-      log.warn("server core crashed, scheduling restart", {
+      log.warn(writerWaitTimedOut ? "server core writer wait expired, scheduling retry" : "server core crashed, scheduling restart", {
         lastExitReason: this.lastExitReason,
         delayMs: decision.delayMs,
       });
@@ -437,8 +443,11 @@ export class Supervisor {
       this.runningTaskCount = message.runningTaskCount;
       log.debug("core activity snapshot", { type: message.type, runningTaskCount: message.runningTaskCount });
     } else if (message.type === "fatal") {
+      if (message.reason === "writer-lock-timeout" && this.state === "starting") {
+        this.writerWaitTimedOutCore = child;
+        log.warn("server.core.writer_wait", { reasonCode: message.reason, generation: expectedGeneration });
+      } else log.error("server core reported fatal error", { message: message.message });
       this.lastExitReason = message.message;
-      log.error("server core reported fatal error", { message: message.message });
     } else if (message.type === "exit") {
       this.lastExitReason = message.reason;
       log.info("server core reported exit", { reason: message.reason });
@@ -453,6 +462,7 @@ export class Supervisor {
   }
 
   private clearCoreScopedStatus(): void {
+    this.writerWaitTimedOutCore = undefined;
     this.host = null;
     this.port = null;
     this.startedAt = null;
@@ -462,7 +472,7 @@ export class Supervisor {
   private async handleControl(request: ControlRequest): Promise<unknown> {
     switch (request.command) {
       case "ping": return { protocolVersion: SERVER_CLI_PROTOCOL_VERSION };
-      case "status": return this.status();
+      case "status": return this.status(request.includeCapabilities === true);
       case "stop":
       case "stop-if-idle":
         if (request.command === "stop-if-idle" && (this.state !== "ready" || this.runningTaskCount > 0)) {

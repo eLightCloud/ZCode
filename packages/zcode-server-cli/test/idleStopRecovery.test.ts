@@ -10,7 +10,7 @@ import { runServerCli } from "../src/cli.js";
 import { DataRootLock } from "../src/runtime/lock.js";
 import { ReleaseManager } from "../src/runtime/releaseManager.js";
 import { resolveServerLayout } from "../src/runtime/paths.js";
-import { createStoppedServerStatus } from "../src/contracts.js";
+import { serverStatusSchema, createStoppedServerStatus } from "../src/contracts.js";
 
 // 仅阻塞已有持久化 facade 的完成时刻，保留真实落盘，不给生产增加测试分支。
 const persistence = vi.hoisted(() => ({ beforeWrite: undefined as undefined | (() => Promise<void>) }));
@@ -157,3 +157,56 @@ it.each(["missing", "stopped", "corrupt", "ready", "writer-active"])("validates 
     if (kind === "writer-active") expect((await writer.inspect()).state).toBe("active");
   } finally { await writer.release(); await rm(root, { recursive: true, force: true }); }
 });
+
+
+it("keeps v1 strict readers compatible unless capabilities are explicitly requested", async () => {
+  const f = await fixture();
+  const oldReader = serverStatusSchema.omit({ capabilities: true }).strict();
+  try {
+    const normal = await requestControl(f.layout.controlEndpoint, { command: "status" });
+    expect(oldReader.parse(normal).state).toBe("ready");
+    expect(normal).not.toHaveProperty("capabilities");
+    const live = await requestControl(f.layout.controlEndpoint, { command: "status", includeCapabilities: true });
+    expect(live).toHaveProperty("capabilities.liveStatus", true);
+    expect(oldReader.safeParse(live).success).toBe(false);
+    let output = "";
+    expect(await runServerCli(["status", "--live", "--json", "--server-root", f.layout.serverRoot], {
+      stdout: { write: (chunk) => { output += chunk; } },
+    })).toBe(0);
+    expect(JSON.parse(output).capabilities.liveStatus).toBe(true);
+    await f.supervisor.stop();
+    expect(oldReader.parse(JSON.parse(await readFile(f.layout.statusFile, "utf8"))).state).toBe("stopped");
+    output = "";
+    expect(await runServerCli(["status", "--json", "--server-root", f.layout.serverRoot], {
+      stdout: { write: (chunk) => { output += chunk; } },
+    })).toBe(0);
+    expect(oldReader.parse(JSON.parse(output)).state).toBe("stopped");
+  } finally { await f.cleanup(); }
+});
+
+
+it("does not spend crash budget on repeated typed writer wait timeouts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zcode-writer-budget-"));
+  const cores: ControlledCore[] = [];
+  const supervisor = new Supervisor({ layout: resolveServerLayout(root), version: "test", launcher: {
+    launch(generation) {
+      const core = new ControlledCore(); cores.push(core);
+      queueMicrotask(() => {
+        if (cores.length <= 6) {
+          core.emit("message", { type: "fatal", reason: "writer-lock-timeout", message: "Server writer lock wait timed out" });
+          core.emit("exit", 1, null); core.emit("close", 1, null);
+        } else core.emit("message", { type: "ready", host: "127.0.0.1", port: 43123, version: "test", generation });
+      });
+      return core as unknown as ChildProcess;
+    },
+  } });
+  try {
+    await supervisor.start();
+    const deadline = Date.now() + 12000;
+    while (supervisor.status().state !== "ready" && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(supervisor.status().state).toBe("ready");
+    expect(cores).toHaveLength(7);
+    expect(supervisor.status().crashBudget.crashCount).toBe(0);
+  } finally { await supervisor.stop(); await rm(root, { recursive: true, force: true }); }
+}, 15000);

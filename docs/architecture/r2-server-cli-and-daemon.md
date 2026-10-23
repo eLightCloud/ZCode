@@ -492,12 +492,12 @@ Workspace / Repo / User files
 必须保持：
 
 - 单实例 key = 当前 OS 用户 + data root；
-- data-root 互斥由 DataRootLock 的固定 `server.lock.sqlite` 排他事务拥有，SQLite API 在工作线程执行，不保存业务表；PID、时间与 token 只是诊断。guard 永不删除或替换；SIGKILL 后 OS 释放，无 PID namespace 推断和恢复门文件。metadata 释放只移除自己的 token。Core 另持同一 facade 的 writer guard，防止 Supervisor 死亡后原 Core 尚未排空时新 Core 开始写入；
+- data-root 互斥由 DataRootLock 的固定 `server.lock.sqlite` 排他事务拥有，SQLite API 在工作线程执行，不保存业务表；PID、时间与 token 只是诊断。guard 永不删除或替换；SIGKILL 后 OS 释放，无 PID namespace 推断和恢复门文件。metadata 释放只移除自己的 token。正常释放通过 worker 消息关闭 SQLite 并等待自然退出；1 秒无响应时请求 terminate，仍以实际 worker 退出确认释放，不承诺操作系统不可中断 I/O 的绝对期限。释放机制不能删除或替换 guard。Core 另持同一 facade 的 writer guard，防止 Supervisor 死亡后原 Core 尚未排空时新 Core 开始写入；
 - 从旧 PID 锁升级必须先停止全部旧版本写入者，再离线清理旧 metadata / recovery；原生拒绝自动接管旧协议锁，不支持两个锁协议混跑；部署 owner 必须验证旧容器退出与数据卷独占；
-- `stop --if-idle` 与 `stop-if-idle` 使用同一独立控制命令 `stop-if-idle`，不能将未知条件字段降级成普通 stop。status 的可选 capabilities 明确声明 idleStop 与 dataRootLock 协议；无声明旧版本不视为支持。Core 在同一轮同步拒绝运行任务、活动连接和启用自动化的实例，或关闭新连接接纳后排空退出；未知或超时不得升级为强杀。企业只消费回执与容器终态，不维护原生任务状态；
-- 自动生命周期消费者使用 `status --live --json`，控制连接失败必须失败，不得读取诊断快照冒充实时就绪；同时核验 capabilities.liveStatus=true，旧 CLI 可能忽略未知 flag，无能力证明视为未知。普通 `status` 保留离线诊断快照。管理 CLI 与 Supervisor 使用同一发行版本；旧严格快照 reader 不承诺读取新字段，禁止混版本管理命令判定停止安全；
+- `stop --if-idle` 与 `stop-if-idle` 使用同一独立控制命令 `stop-if-idle`，不能将未知条件字段降级成普通 stop。status 仅在请求 includeCapabilities=true 时附带 capabilities，声明 idleStop / dataRootLock / liveStatus；默认响应及观测快照保持 v1 旧字段，使旧严格 reader 可诊断。无能力声明不视为支持。Core 在同一轮同步拒绝运行任务、活动连接和启用自动化的实例，或关闭新连接接纳后排空退出；未知或超时不得升级为强杀。企业只消费回执与容器终态，不维护原生任务状态；
+- 自动生命周期消费者使用 `status --live --json`，控制连接失败必须失败，不得读取诊断快照冒充实时就绪；同时核验 capabilities.liveStatus=true，旧 CLI 可能忽略未知 flag，无能力证明视为未知。普通 `status` 保留离线诊断快照。旧严格 reader 可读取默认状态和快照，但不能据此执行新条件停止；新生命周期管理必须使用支持显式能力协商的 CLI，并验证响应能力，禁止旧管理命令忽略未知 flag 后判定停止安全；
 - 条件停止与普通停止是不同操作意图，只有相同意图可去重；普通 stop / SIGTERM 等条件操作结算后继续正常关闭，即使条件被拒或超时。条件停止离线幂等只接受已停状态（或从未启动）且生命周期与 Core writer guard 均已释放；其它情况失败。受理回执不等于停止完成，仍等待进程终态；
-- Core 终态优先于条件停止拒绝；拒绝只能恢复仍存活的同代 Core，不能将 crashed / 已退出状态覆盖为 ready。writer guard 在服务创建前最多等待 30 秒，正常占用只记录 blocked / acquired，不反复退出消耗 crash budget；CLI 初次 ready 总预算为 45 秒（含服务初始化 15 秒），等待期间普通停止及父断连可中止；
+- Core 终态优先于条件停止拒绝；拒绝只能恢复仍存活的同代 Core，不能将 crashed / 已退出状态覆盖为 ready。writer guard 在服务创建前最多等待 30 秒，正常占用记录 blocked / acquired；单次等待超时通过 typed fatal reason 表达资源阻断，由既有 Supervisor 延后重试，不消耗真实 crash budget，其它启动失败仍计入预算；CLI 初次 ready 总预算为 45 秒（含服务初始化 15 秒），等待期间普通停止及父断连可中止；
 - Workspace 隔离使用 `workspaceKey = workspaceIdentity?.trim() || workspacePath`；
 - 路径执行继续使用 `workspacePath`；
 - 远程 identity 不得只使用 `workspacePath`；

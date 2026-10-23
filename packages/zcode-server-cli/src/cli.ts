@@ -326,7 +326,9 @@ async function runControl(
   layout = resolveServerLayout(),
   liveStatus = false,
 ): Promise<number> {
-  const request = controlRequestSchema.parse({ id: "cli", command, ...extra });
+  const request = controlRequestSchema.parse({ id: "cli", command, ...extra,
+    ...(command === "status" && liveStatus ? { includeCapabilities: true } : {}),
+  });
   let result: unknown;
   try {
     result = await requestControl(
@@ -362,6 +364,15 @@ async function runControl(
     } else {
       throw error;
     }
+  }
+  if (command === "status") {
+    const status = serverStatusSchema.parse(result);
+    if (liveStatus && status.capabilities?.liveStatus !== true) {
+      throw new Error("Supervisor does not support capability-negotiated live status");
+    }
+    // 也收敛上一候选版留下的带 capabilities 快照，供旧严格 reader 诊断。
+    if (!liveStatus) delete status.capabilities;
+    result = status;
   }
   if (json) stdout(io, result);
   else stdout(io, result ?? "ok");

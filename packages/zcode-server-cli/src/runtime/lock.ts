@@ -8,6 +8,7 @@ import { releaseKernelFileLock, tryAcquireKernelFileLock } from "./kernelFileLoc
 
 const log = createServiceLogger("server-lock");
 const protocol = "kernel-sqlite-v1";
+export class DataRootLockWaitTimeout extends Error {}
 
 export type DataRootLockInspection =
   | { state: "missing" }
@@ -43,7 +44,7 @@ export class DataRootLock {
   }
 
   public async acquire(options: { waitMs?: number; signal?: AbortSignal; onBlocked?: () => void } = {}): Promise<void> {
-    if (this.worker) throw new Error("Another ZCode Server instance is already running");
+    if (this.worker) throw new Error("This DataRootLock has already been acquired");
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     const owner = await this.readOwner();
     if (owner.state === "unreadable") throw owner.error;
@@ -68,7 +69,8 @@ export class DataRootLock {
         reportedBlocked = true;
       }
       if (Date.now() - started >= (options.waitMs ?? 0)) {
-        throw new Error(options.waitMs ? "Server writer lock wait timed out" : "Another ZCode Server instance is already running");
+        if (options.waitMs) throw new DataRootLockWaitTimeout("Server writer lock wait timed out");
+        throw new Error("Another ZCode Server instance is already running");
       }
       // 仅已确认的 busy 可等待；权限、损坏及旧协议错误直接失败，不能变成重试掩盖。
       await delay(Math.min(100, (options.waitMs ?? 0) - (Date.now() - started)), undefined, { signal: options.signal });
@@ -80,7 +82,7 @@ export class DataRootLock {
     this.worker = worker;
     // 非预期 worker 错误必须终止宿主，不能继续无锁执行。
     worker.removeAllListeners("error");
-    worker.on("error", (error) => { throw error; });
+    worker.on("error", (error) => { if (this.worker === worker) throw error; });
     worker.on("exit", () => {
       if (this.worker === worker) throw new Error("Server kernel lock worker was lost");
     });

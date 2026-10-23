@@ -87,7 +87,7 @@ export function createStoppedServerStatus(
 const requestBase = z.object({ id: z.string().trim().min(1).max(128) });
 export const controlRequestSchema = z.discriminatedUnion("command", [
   requestBase.extend({ command: z.literal("ping") }),
-  requestBase.extend({ command: z.literal("status") }),
+  requestBase.extend({ command: z.literal("status"), includeCapabilities: z.boolean().optional() }),
   requestBase.extend({ command: z.literal("stop") }),
   requestBase.extend({ command: z.literal("stop-if-idle") }),
   requestBase.extend({ command: z.literal("restart") }),
@@ -135,7 +135,7 @@ export const coreMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("shutdown-ack") }),
   z.object({ type: z.literal("idle-stop-blocked") }),
   z.object({ type: z.literal("startup-wait"), reason: z.literal("writer-lock-busy") }),
-  z.object({ type: z.literal("fatal"), message: z.string().max(500) }),
+  z.object({ type: z.literal("fatal"), message: z.string().max(500), reason: z.literal("writer-lock-timeout").optional() }),
   z.object({ type: z.literal("exit"), reason: z.string().max(500) }),
 ]);
 export type CoreMessage = z.infer<typeof coreMessageSchema>;

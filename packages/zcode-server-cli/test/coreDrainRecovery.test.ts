@@ -25,12 +25,12 @@ async function until<T>(read: () => T | Promise<T>, accepted: (value: T) => bool
   }
 }
 
-it.skipIf(process.platform === "win32")("waits for a real orphan Core drain before opening the original data root", async () => {
+it.skipIf(process.platform === "win32").each([16000, 32000])("waits %i ms for a real orphan Core drain before opening the original data root", async (drainMs) => {
   const root = await mkdtemp(join(tmpdir(), "zcode-real-drain-"));
   const layout = resolveServerLayout(join(root, "server"));
   const env = { ...process.env, ZCODE_SERVER_ROOT: layout.serverRoot, ZCODE_DATA_BASE_DIR: layout.dataBaseDir,
     ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: config, ZCODE_SERVER_PORT: "", ZCODE_SERVER_AUTOMATION_ENABLED: "0" };
-  const launcher = () => fork(coreEntry, ["1"], { env, execArgv: ["--import", "tsx"], stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const launcher = (generation: number) => fork(coreEntry, [String(generation)], { env, execArgv: ["--import", "tsx"], stdio: ["ignore", "ignore", "ignore", "ipc"] });
   const program = `
     import {fork} from 'node:child_process';
     const {Supervisor}=await import(${JSON.stringify(supervisorModule)});
@@ -59,14 +59,16 @@ it.skipIf(process.platform === "win32")("waits for a real orphan Core drain befo
     const writer = new DataRootLock(join(layout.runDir, "core.lock"));
     expect(await writer.inspect()).toMatchObject({ state: "active", pid: oldPid });
     const launched: ChildProcess[] = [];
-    replacement = new Supervisor({ layout, version: "test", launcher: { launch() {
-      const child = launcher(); launched.push(child); return child;
+    replacement = new Supervisor({ layout, version: "test", launcher: { launch(generation) {
+      const child = launcher(generation); launched.push(child); return child;
     } } });
     await replacement.start();
     await until(() => replacement!.status(), (value) => value.lastExitReason === "writer-lock-busy");
     // 跨过旧实现约 15 秒崩溃预算窗口，真实 HTTP 排空期间不反复 fork。
-    await new Promise((resolve) => setTimeout(resolve, 16000));
-    expect(launched).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, drainMs));
+    const expectedLaunches = drainMs > 30000 ? 2 : 1;
+    await until(() => replacement!.status(), (value) => launched.length === expectedLaunches && value.state === "starting");
+    expect(launched).toHaveLength(expectedLaunches);
     expect(replacement.status().state).toBe("starting");
     expect(replacement.status().crashBudget.crashCount).toBe(0);
     expect(await writer.inspect()).toMatchObject({ state: "active", pid: oldPid });
@@ -74,7 +76,7 @@ it.skipIf(process.platform === "win32")("waits for a real orphan Core drain befo
     const ready = await until(() => replacement!.status(), (value) => value.state === "ready");
     expect(ready.pid).not.toBe(oldPid);
     expect(ready.crashBudget.crashCount).toBe(0);
-    expect(launched).toHaveLength(1);
+    expect(launched).toHaveLength(expectedLaunches);
     expect(await writer.inspect()).toMatchObject({ state: "active", pid: ready.pid });
     const info = await (await fetch(`http://127.0.0.1:${ready.port}/api/server-info`)).json();
     expect(info.serverId).toBe(oldInfo.serverId);
@@ -85,7 +87,7 @@ it.skipIf(process.platform === "win32")("waits for a real orphan Core drain befo
     if (oldPid) { try { process.kill(oldPid, "SIGKILL"); } catch { /* 已退出 */ } }
     await rm(root, { recursive: true, force: true });
   }
-}, 60000);
+}, 75000);
 
 it("stops a real Core while it waits for another writer, without stealing the lock", async () => {
   const root = await mkdtemp(join(tmpdir(), "zcode-writer-stop-"));

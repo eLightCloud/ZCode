@@ -38,5 +38,20 @@ export async function tryAcquireKernelFileLock(path: string): Promise<Worker | n
 }
 
 export async function releaseKernelFileLock(worker: Worker): Promise<void> {
-  await worker.terminate();
+  if (worker.threadId === -1) return;
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      worker.off("exit", finish);
+      worker.off("error", fail);
+    };
+    const finish = (): void => { cleanup(); resolve(); };
+    const fail = (error: Error): void => { cleanup(); reject(error); };
+    worker.once("exit", finish);
+    worker.once("error", fail);
+    // 正常关闭由同一 worker 的 SQLite owner 完成；异常无响应才终止，不删除 guard。
+    const terminate = (): void => { void worker.terminate().then(finish, fail); };
+    const timer = setTimeout(terminate, 1000);
+    try { worker.postMessage("release"); } catch { terminate(); }
+  });
 }

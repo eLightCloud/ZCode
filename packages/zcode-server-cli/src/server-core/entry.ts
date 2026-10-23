@@ -1,3 +1,4 @@
+import { DataRootLockWaitTimeout } from "../runtime/lock.js";
 import { runServerCore } from "./core.js";
 
 const generation = Number(process.argv[2] ?? 0);
@@ -13,7 +14,9 @@ void runServerCore(generation).catch((error: unknown) => {
   }
   try {
     process.send(
-      { type: "fatal", message: error instanceof Error ? error.message : String(error) },
+      { type: "fatal", message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof DataRootLockWaitTimeout ? { reason: "writer-lock-timeout" } : {}),
+      },
       exit,
     );
   } catch {

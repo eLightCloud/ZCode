@@ -3,26 +3,37 @@
 // ============================================================
 
 import { type ModelMessage as AiSdkModelMessage, type ToolResultPart } from "ai";
+
 import {
   ModelErrorCode,
   modelMessageContentToText,
-  type ModelCacheControl,
-  type ModelInputMessage,
   type ModelInputFormat,
+  type ModelInputMessage,
   type ModelMessageContent,
   type ModelMessageContentBlock,
 } from "@zcode/contracts";
+
 import { AiSdkModelAdapterError } from "./errors.js";
+
 import { providerOptionsForReasoningBlock } from "./anthropic-reasoning-metadata.js";
+
 import {
   shouldTextifyStructuredToolResults,
-  toStructuredToolResultText,
-  undeliverableFrameReferenceText,
   toToolResultMediaUserParts,
   toolResultHasVideoMedia,
+  undeliverableFrameReferenceText,
 } from "./tool-result-media-projection.js";
-import { dataUrlToDataContent, unsupportedInputMediaText } from "./media-transform-policy.js";
+
 import { normalizeOpenAiCompatibleSystemMessages } from "./system-message-compat.js";
+
+import {
+  hasOpenAiStoredReasoningItemId,
+  projectToolNameForProvider,
+  providerOptionsForCacheControl,
+  shouldStripStoredReasoningForOpenAiResponsesStatelessReplay,
+} from "./transform-options.js";
+
+import { toAiSdkToolResultOutput, toAiSdkUserContent } from "./transform-content.js";
 
 export interface AiSdkMessageTransformOptions {
   apiFormat?: string;
@@ -33,12 +44,17 @@ export interface AiSdkMessageTransformOptions {
 }
 
 type AiSdkAssistantMessage = Extract<AiSdkModelMessage, { role: "assistant" }>;
+
 type AiSdkAssistantContent = AiSdkAssistantMessage["content"];
+
 type AiSdkAssistantContentPart = Extract<AiSdkAssistantContent, unknown[]>[number];
-type AiSdkToolResultOutput = ToolResultPart["output"];
-type AiSdkProviderOptions = NonNullable<
+
+export type AiSdkToolResultOutput = ToolResultPart["output"];
+
+export type AiSdkProviderOptions = NonNullable<
   Extract<AiSdkModelMessage, { role: "system" }>["providerOptions"]
 >;
+
 type AiSdkAssistantTransformOptions = AiSdkMessageTransformOptions & {
   stripOpenAiResponsesStoredReasoning?: boolean;
 };
@@ -156,111 +172,7 @@ export function toAiSdkMessages(
   return transformedMessages;
 }
 
-type AiSdkUserContent = Extract<AiSdkModelMessage, { role: "user" }>["content"];
-
-function toAiSdkToolResultOutput(
-  content: ModelMessageContent,
-  options: AiSdkMessageTransformOptions,
-  isError = false,
-  textifyStructuredContent = false,
-): AiSdkToolResultOutput {
-  if (isError) {
-    return { type: "error-text", value: modelMessageContentToText(content) };
-  }
-
-  if (typeof content === "string") return { type: "text", value: content };
-
-  if (textifyStructuredContent) {
-    return { type: "text", value: toStructuredToolResultText(content, options) };
-  }
-
-  if (options.stripMedia) {
-    return { type: "text", value: modelMessageContentToText(content) };
-  }
-
-  const value = content.flatMap((block) => contentBlockToAiSdkToolResultParts(block, options));
-  return value.length > 0
-    ? { type: "content", value }
-    : { type: "text", value: modelMessageContentToText(content) };
-}
-
-function contentBlockToAiSdkToolResultParts(
-  block: ModelMessageContentBlock,
-  options: AiSdkMessageTransformOptions,
-): Extract<AiSdkToolResultOutput, { type: "content" }>["value"] {
-  switch (block.type) {
-    case "text":
-      return block.text.length > 0 ? [{ type: "text", text: block.text }] : [];
-
-    case "reasoning":
-      return [];
-
-    case "image": {
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      const data = dataUrlToDataContent(block.dataUrl);
-      if (!data) {
-        return [
-          { type: "text", text: "ERROR: Image file is empty or corrupted. Inform the user." },
-        ];
-      }
-      return [{ type: "image-data", data: data.data, mediaType: block.mediaType }];
-    }
-
-    case "video": {
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      // AI SDK tool result part 无 video 变体：视频媒体统一由 tool-result-media-projection
-      // 拆成后置 user part（toolResultHasVideoMedia 对含 video 的 tool result 在所有
-      // provider kind 上强制 textify），这里不产出内嵌 part。
-      return [];
-    }
-
-    case "file": {
-      if (block.text !== undefined && block.text.length > 0) {
-        return [{ type: "text", text: block.text }];
-      }
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      const data = block.dataUrl ? dataUrlToDataContent(block.dataUrl) : undefined;
-      if (data) {
-        return [
-          {
-            type: "file-data",
-            data: data.data,
-            mediaType: block.mediaType,
-            ...(block.name ? { filename: block.name } : {}),
-          },
-        ];
-      }
-      return [{ type: "text", text: modelMessageContentToText([block]) }];
-    }
-
-    case "resource_link":
-      return [{ type: "text", text: modelMessageContentToText([block]) }];
-  }
-}
+export type AiSdkUserContent = Extract<AiSdkModelMessage, { role: "user" }>["content"];
 
 function toAiSdkAssistantContent(
   content: ModelMessageContent,
@@ -332,184 +244,4 @@ function contentBlockToAiSdkAssistantParts(
       return text.length > 0 ? [{ type: "text", text }] : [];
     }
   }
-}
-
-function shouldStripStoredReasoningForOpenAiResponsesStatelessReplay(
-  options: AiSdkMessageTransformOptions,
-): boolean {
-  if (options.providerKind !== "openai") return false;
-  if (resolveApiFormat(options) !== "openai-responses") return false;
-  const openaiOptions = objectRecord(options.providerOptions?.openai);
-  if (typeof openaiOptions.previousResponseId === "string") return false;
-  if (typeof openaiOptions.conversation === "string") return false;
-  if (openaiOptions.store === false) return false;
-  return true;
-}
-
-function resolveApiFormat(options: AiSdkMessageTransformOptions): string | undefined {
-  if (typeof options.apiFormat === "string") return options.apiFormat;
-  const apiFormat = options.providerOptions?.apiFormat;
-  return typeof apiFormat === "string" ? apiFormat : undefined;
-}
-
-function projectToolNameForProvider(
-  toolName: unknown,
-  options: AiSdkMessageTransformOptions,
-): string {
-  if (typeof toolName !== "string") {
-    throw new AiSdkModelAdapterError(
-      ModelErrorCode.InvalidModelRequest,
-      "Tool model messages require toolCallId and toolName",
-    );
-  }
-  if (toolName.trim().length > 0) return toolName;
-
-  const apiFormat = resolveApiFormat(options);
-  if (apiFormat !== undefined) {
-    return apiFormat === "anthropic-messages" ? toolName : "empty_tool_name";
-  }
-
-  // OpenAI-compatible wire 不可靠接受空 function name，但历史中的原始
-  // 名称仍需保留给 Anthropic 回放；占位值只在 provider 投影边界生成。
-  return options.providerKind === "anthropic" ? toolName : "empty_tool_name";
-}
-
-function hasOpenAiStoredReasoningItemId(providerOptions: unknown): boolean {
-  const openaiOptions = objectRecord(objectRecord(providerOptions).openai);
-  return typeof openaiOptions.itemId === "string" && openaiOptions.itemId.length > 0;
-}
-
-function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-const EMPTY_USER_CONTENT_FALLBACK = "(no content)";
-
-function toAiSdkUserContent(
-  content: ModelMessageContent,
-  options: AiSdkMessageTransformOptions,
-): AiSdkUserContent {
-  // 附件-only query 拆出 prompt attachment 后可能留下空 user
-  // content，空白占位又可能被 provider trim 后视为缺失 prompt。只在 wire
-  // 序列化边界使用固定 fallback，避免改写 session 事实、UI 可见 query 和标题种子。
-  if (typeof content === "string") return content || EMPTY_USER_CONTENT_FALLBACK;
-
-  const parts = content.flatMap((block) => contentBlockToAiSdkUserParts(block, options));
-  return parts.length > 0 ? parts : EMPTY_USER_CONTENT_FALLBACK;
-}
-
-function contentBlockToAiSdkUserParts(
-  block: ModelMessageContentBlock,
-  options: AiSdkMessageTransformOptions,
-): Extract<AiSdkUserContent, unknown[]> {
-  switch (block.type) {
-    case "text":
-      return block.text.length > 0 ? [{ type: "text", text: block.text }] : [];
-
-    case "reasoning":
-      return block.text.length > 0 ? [{ type: "text", text: block.text }] : [];
-
-    case "image": {
-      if (options.stripMedia) {
-        return [{ type: "text", text: modelMessageContentToText([block]) }];
-      }
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      const data = dataUrlToDataContent(block.dataUrl);
-      if (!data) {
-        return [
-          {
-            type: "text",
-            text: "ERROR: Image file is empty or corrupted. Inform the user.",
-          },
-        ];
-      }
-      return [{ type: "image", image: data.data, mediaType: block.mediaType }];
-    }
-
-    case "video": {
-      if (options.stripMedia) {
-        return [{ type: "text", text: modelMessageContentToText([block]) }];
-      }
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      const data = dataUrlToDataContent(block.dataUrl);
-      if (!data) {
-        return [
-          {
-            type: "text",
-            text: "ERROR: Video file is empty or corrupted. Inform the user.",
-          },
-        ];
-      }
-      // AI SDK 无 video part 类型；mediaType 为自由 string，video/* file part 由
-      // patch 后的 @ai-sdk/openai-compatible / @ai-sdk/anthropic 转成 video_url / video block。
-      return [{ type: "file", data: data.data, mediaType: block.mediaType }];
-    }
-
-    case "file": {
-      if (block.text !== undefined && block.text.length > 0) {
-        return [{ type: "text", text: block.text }];
-      }
-      if (options.stripMedia) {
-        return [{ type: "text", text: modelMessageContentToText([block]) }];
-      }
-      const unsupportedText = unsupportedInputMediaText(block, options.inputFormat);
-      if (unsupportedText) {
-        return [
-          {
-            type: "text",
-            text: unsupportedText,
-          },
-        ];
-      }
-      const data = block.dataUrl ? dataUrlToDataContent(block.dataUrl) : undefined;
-      if (data) {
-        return [
-          {
-            type: "file",
-            data: data.data,
-            filename: block.name,
-            mediaType: block.mediaType,
-          },
-        ];
-      }
-      return [{ type: "text", text: modelMessageContentToText([block]) }];
-    }
-
-    case "resource_link":
-      return [{ type: "text", text: modelMessageContentToText([block]) }];
-  }
-}
-
-function providerOptionsForCacheControl(
-  cacheControl: ModelCacheControl | undefined,
-): { providerOptions: AiSdkProviderOptions } | Record<string, never> {
-  if (!cacheControl) {
-    return {};
-  }
-
-  return {
-    providerOptions: {
-      anthropic: {
-        cacheControl: { ...cacheControl },
-      },
-    },
-  };
 }

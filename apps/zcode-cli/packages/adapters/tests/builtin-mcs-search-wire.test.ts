@@ -37,14 +37,14 @@ describe("Published MCS and search final Anthropic wire", () => {
       "https://zcode.z.ai/api/v1/off-peak/anthropic",
       "GLM-5.3-Flash",
       true,
-      true,
+      false,
     ],
     [
       "account:bigmodel-offpeak-idle-plan",
       "https://zcode.z.ai/api/v1/off-peak/anthropic",
       "GLM-5.3-Flash",
       true,
-      true,
+      false,
     ],
     ["fixture", "https://api.anthropic.com/v1", "claude-sonnet-5", false, true],
     ["fixture", "https://proxy.invalid/v1", "vendor/claude-opus-4-8", true, false],
@@ -102,6 +102,8 @@ describe("Published MCS and search final Anthropic wire", () => {
           reasoningLevel: config.optionSpecs!.reasoningLevel!.values!.at(-1)!,
         },
       });
+      // 发布配置是能力事实来源；off-peak 目前不开放原生 WebSearch。
+      expect(model.properties.supportsNativeWebSearch).toBe(search);
       await model.generateText({
         messages: buildProviderRequestMessages({
           useMidConversationSystem: model.properties.supportsMidConversationSystem,

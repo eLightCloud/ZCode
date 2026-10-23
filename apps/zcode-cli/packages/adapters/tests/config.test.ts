@@ -1,11 +1,7 @@
+import * as configFacade from "../src/config/index.js";
 import { describe, expect, it } from "vitest";
 import { ConfigScope, DefaultRuntimeConfig } from "@zcode/contracts";
-import {
-  createConfig,
-  updateCodingPlanProviderInFileConfig,
-  updateModelSelectionInFileConfig,
-  updateUiLocaleInFileConfig,
-} from "../src/config/index.js";
+import { createConfig, updateUiLocaleInFileConfig } from "../src/config/index.js";
 import { parseEnvConfig } from "../src/config/env-config.adapter.js";
 import {
   addSuppressedBuiltinInFileConfig,
@@ -15,7 +11,7 @@ import {
   updatePluginEnabledInFileConfig,
   updatePluginOptionsInFileConfig,
 } from "../src/config/file-config.adapter.js";
-import { ModelCatalogService } from "../src/model/catalog.js";
+
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -116,12 +112,11 @@ describe("config adapters", () => {
         ).suppressed,
       ).toBe(false);
       expect(
-        (
-          await removePluginFromFileConfig(configPath, "computer-use@zcode-plugins-official")
-        ).removedEnabled,
+        (await removePluginFromFileConfig(configPath, "computer-use@zcode-plugins-official"))
+          .removedEnabled,
       ).toBe(true);
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-        plugins: { enabledPlugins: {}, suppressedBuiltins: [] },
+        plugins: { enabledPlugins: {}, options: {}, suppressedBuiltins: [] },
       });
     } finally {
       await rm(dir, { force: true, recursive: true });
@@ -1800,7 +1795,7 @@ describe("config adapters", () => {
     }
   });
 
-  it("rejects inline model target config from file", async () => {
+  it("keeps retired inline model targets out of RuntimeConfig", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -1820,16 +1815,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
-      expect(result.loaded).toBe(false);
-      expect(result.config).toEqual({});
+      expect(result.loaded).toBe(true);
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("loads main and lite model references from provider-first config", async () => {
+  it("does not resolve retired main and lite references in RuntimeConfig", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -1862,23 +1860,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(result.config.model?.main).toMatchObject({
-        provider: "deepseek",
-        model: "deepseek-v4-pro",
-        kind: "openai-compatible",
-        baseURL: "https://api.deepseek.com",
-        apiKey: "secret",
-      });
-      expect(result.config.model?.lite?.model).toBe("deepseek-chat");
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("patches string model selection in file config without dropping other fields", async () => {
+  it("patches UI locale without rewriting retired string model selection", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -1911,18 +1905,23 @@ describe("config adapters", () => {
         }),
       );
 
-      await updateModelSelectionInFileConfig(path, "deepseek/deepseek-v4-pro");
-
-      const updated = JSON.parse(await readFile(path, "utf-8"));
-      expect(updated.model).toBe("deepseek/deepseek-v4-pro");
-      expect(updated.mcp.servers.local.command).toBe("node");
-      expect(updated.provider.deepseek.options.apiKey).toBe("secret");
+      const before = JSON.parse(await readFile(path, "utf8"));
+      await updateUiLocaleInFileConfig(path, "en-US");
+      const updated = JSON.parse(await readFile(path, "utf8"));
+      expect(updated).toEqual({ ...before, ui: { locale: "en-US" } });
+      expect(configFacade).not.toHaveProperty("updateModelSelectionInFileConfig");
+      expect(configFacade).not.toHaveProperty("updateCodingPlanProviderInFileConfig");
+      const loaded = loadFileConfig(path);
+      expect(loaded.loaded).toBe(true);
+      expect(loaded.config.ui?.locale).toBe("en-US");
+      expect(loaded.config).not.toHaveProperty("model");
+      expect(loaded.config).not.toHaveProperty("modelCatalog");
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("patches object model main in file config without changing lite", async () => {
+  it("patches UI locale without rewriting retired main or lite selection", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -1950,19 +1949,23 @@ describe("config adapters", () => {
         }),
       );
 
-      await updateModelSelectionInFileConfig(path, "deepseek/deepseek-v4-pro");
-
-      const updated = JSON.parse(await readFile(path, "utf-8"));
-      expect(updated.model).toEqual({
-        main: "deepseek/deepseek-v4-pro",
-        lite: "deepseek/deepseek-lite",
-      });
+      const before = JSON.parse(await readFile(path, "utf8"));
+      await updateUiLocaleInFileConfig(path, "en-US");
+      const updated = JSON.parse(await readFile(path, "utf8"));
+      expect(updated).toEqual({ ...before, ui: { locale: "en-US" } });
+      expect(configFacade).not.toHaveProperty("updateModelSelectionInFileConfig");
+      expect(configFacade).not.toHaveProperty("updateCodingPlanProviderInFileConfig");
+      const loaded = loadFileConfig(path);
+      expect(loaded.loaded).toBe(true);
+      expect(loaded.config.ui?.locale).toBe("en-US");
+      expect(loaded.config).not.toHaveProperty("model");
+      expect(loaded.config).not.toHaveProperty("modelCatalog");
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("patches ZAI Coding Plan provider config with an API key", async () => {
+  it("patches UI locale without rewriting retired provider credentials", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -2002,70 +2005,44 @@ describe("config adapters", () => {
         }),
       );
 
-      const result = await updateCodingPlanProviderInFileConfig({
-        apiKey: "zai-coding-key",
-        filePath: path,
-        providerId: "zai",
-      });
-      const updated = JSON.parse(await readFile(path, "utf-8"));
-
-      expect(result).toEqual({
-        mainModel: "zai/glm-5.1",
-        path,
-        providerId: "zai",
-      });
-      expect(updated.provider.zai.kind).toBe("anthropic");
-      expect(updated.provider.zai.options).toEqual({
-        apiKey: "zai-coding-key",
-        apiKeyRequired: true,
-        baseURL: "https://api.z.ai/api/anthropic",
-        timeout: 30000,
-      });
-      expect(updated.provider.zai.models["glm-5.1"]).toEqual({
-        contextWindow: 200000,
-        name: "GLM-5.1",
-      });
-      expect(updated.provider.deepseek.options.apiKey).toBe("deepseek-secret");
-      expect(updated.model).toEqual({
-        main: "zai/glm-5.1",
-        lite: "deepseek/deepseek-chat",
-      });
+      const before = JSON.parse(await readFile(path, "utf8"));
+      await updateUiLocaleInFileConfig(path, "en-US");
+      const updated = JSON.parse(await readFile(path, "utf8"));
+      expect(updated).toEqual({ ...before, ui: { locale: "en-US" } });
+      expect(configFacade).not.toHaveProperty("updateModelSelectionInFileConfig");
+      expect(configFacade).not.toHaveProperty("updateCodingPlanProviderInFileConfig");
+      const loaded = loadFileConfig(path);
+      expect(loaded.loaded).toBe(true);
+      expect(loaded.config.ui?.locale).toBe("en-US");
+      expect(loaded.config).not.toHaveProperty("model");
+      expect(loaded.config).not.toHaveProperty("modelCatalog");
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("creates default Coding Plan configs when the file is missing", async () => {
+  it("creates supported UI config without resurrecting model writers", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
     try {
-      await updateCodingPlanProviderInFileConfig({
-        apiKey: "bigmodel-coding-key",
-        filePath: path,
-        providerId: "bigmodel",
-      });
-
-      const updated = JSON.parse(await readFile(path, "utf-8"));
-      expect(updated.model).toEqual({
-        main: "bigmodel/glm-5.1",
-        lite: "bigmodel/glm-4.7",
-      });
-      expect(updated.provider.bigmodel).toMatchObject({
-        kind: "anthropic",
-        name: "BigModel Coding Plan",
-        options: {
-          apiKey: "bigmodel-coding-key",
-          apiKeyRequired: true,
-          baseURL: "https://open.bigmodel.cn/api/anthropic",
-        },
-      });
+      const before = {};
+      await updateUiLocaleInFileConfig(path, "en-US");
+      const updated = JSON.parse(await readFile(path, "utf8"));
+      expect(updated).toEqual({ ...before, ui: { locale: "en-US" } });
+      expect(configFacade).not.toHaveProperty("updateModelSelectionInFileConfig");
+      expect(configFacade).not.toHaveProperty("updateCodingPlanProviderInFileConfig");
+      const loaded = loadFileConfig(path);
+      expect(loaded.loaded).toBe(true);
+      expect(loaded.config.ui?.locale).toBe("en-US");
+      expect(loaded.config).not.toHaveProperty("model");
+      expect(loaded.config).not.toHaveProperty("modelCatalog");
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("loads provider map config with model metadata", async () => {
+  it("leaves legacy provider metadata to the one-time importer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -2128,66 +2105,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(result.config.model?.main).toEqual({
-        provider: "provider-auth-zai",
-        model: "glm-5",
-        kind: "openai-compatible",
-        providerName: "Z.AI",
-        baseURL: "https://api.z.ai/api/coding/v1",
-        apiKey: "secret",
-        includeUsage: false,
-        providerOptions: {
-          openaiCompatible: {
-            reasoningSummary: "auto",
-          },
-        },
-      });
-      expect(result.config.model?.lite?.model).toBe("glm-4.7");
-      expect(result.config.model?.lite?.baseURL).toBe("https://api.z.ai/api/coding/v1");
-      expect(
-        result.config.model?.available?.map((target) => `${target.provider}/${target.model}`),
-      ).toEqual(["provider-auth-zai/glm-5", "provider-auth-zai/glm-4.7"]);
-      expect(result.config.modelCatalog?.overrides?.["provider-auth-zai/glm-5"]).toEqual({
-        name: "GLM-5",
-        contextWindow: 200000,
-        maxOutputTokens: 8192,
-        supportsImages: true,
-        supportsPdf: true,
-        supportsVideo: true,
-        supportsReasoning: true,
-        supportsToolCall: true,
-        reasoning: {
-          enabled: true,
-          levels: ["low", "medium", "high"],
-          defaultLevel: "medium",
-          providerOptionsByLevel: {
-            high: {
-              openaiCompatible: {
-                reasoningEffort: "high",
-              },
-            },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["provider-auth-zai/glm-4.7"]).toEqual({
-        name: "GLM-4.7",
-        contextWindow: 128000,
-        maxOutputTokens: 4096,
-        supportsImages: false,
-        supportsReasoning: false,
-        reasoning: {
-          enabled: false,
-        },
-      });
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("maps top-level model maxOutputTokens into the existing model capability override", async () => {
+  it("does not derive model capabilities from retired top-level budget metadata", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-model-output-"));
     const path = join(dir, "config.json");
 
@@ -2216,23 +2146,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(result.config.modelCatalog.overrides["axec-proxy/tob-glm-5.2-cc"]).toMatchObject({
-        contextWindow: 1_000_000,
-        maxOutputTokens: 64_000,
-      });
-      expect(result.config.model?.main).toMatchObject({
-        model: "tob-glm-5.2-cc",
-        provider: "axec-proxy",
-      });
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("resolves output budget with limit before options.max_tokens before top-level", async () => {
+  it("does not derive a competing budget from legacy precedence fields", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-model-output-precedence-"));
     const path = join(dir, "config.json");
 
@@ -2260,20 +2186,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
-      expect(result.config.modelCatalog.overrides["compatible/limit-wins"]?.maxOutputTokens).toBe(
-        64_000,
-      );
-      expect(result.config.modelCatalog.overrides["compatible/options-wins"]?.maxOutputTokens).toBe(
-        48_000,
-      );
+      expect(result.loaded).toBe(true);
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("uses kind-aware Anthropic defaults for configured thinking models", async () => {
+  it("does not infer reasoning defaults from legacy model names", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -2305,156 +2230,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(result.config.modelCatalog?.overrides?.["zai/glm-5.1"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["enabled", "disabled"],
-          defaultLevel: "enabled",
-          providerOptionsByLevel: {
-            enabled: {
-              anthropic: {
-                thinking: {
-                  budgetTokens: 1024,
-                  type: "enabled",
-                },
-              },
-            },
-            disabled: {
-              anthropic: {
-                thinking: {
-                  type: "disabled",
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["zai/deepseek-v4-pro"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["high", "max"],
-          defaultLevel: "max",
-          providerOptionsByLevel: {
-            high: {
-              anthropic: {
-                effort: "high",
-                thinking: {
-                  budgetTokens: 1024,
-                  type: "enabled",
-                },
-              },
-            },
-            max: {
-              anthropic: {
-                effort: "max",
-                thinking: {
-                  budgetTokens: 1024,
-                  type: "enabled",
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["zai/glm-5.2"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["max", "high", "nothink"],
-          defaultLevel: "max",
-          providerOptionsByLevel: {
-            high: {
-              anthropic: {
-                effort: "high",
-                thinking: {
-                  budgetTokens: 16_000,
-                  type: "enabled",
-                },
-              },
-            },
-            max: {
-              anthropic: {
-                effort: "max",
-                thinking: {
-                  budgetTokens: 32_000,
-                  type: "enabled",
-                },
-              },
-            },
-            nothink: {
-              anthropic: {
-                thinking: {
-                  type: "disabled",
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["zai/deepseek-v4-toB-glm-5.3-route"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["low", "high", "max"],
-          defaultLevel: "max",
-          providerOptionsByLevel: {
-            low: {
-              anthropic: {
-                effort: "low",
-                thinking: { budgetTokens: 8_000, type: "enabled" },
-              },
-            },
-            high: {
-              anthropic: {
-                effort: "high",
-                thinking: { budgetTokens: 16_000, type: "enabled" },
-              },
-            },
-            max: {
-              anthropic: {
-                effort: "max",
-                thinking: { budgetTokens: 32_000, type: "enabled" },
-              },
-            },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["zai/glm-0531[1m]"]?.reasoning).toEqual(
-        result.config.modelCatalog?.overrides?.["zai/glm-5.2"]?.reasoning,
-      );
-      expect(result.config.modelCatalog?.overrides?.["zai/glm-0606[1m]"]?.reasoning).toEqual(
-        result.config.modelCatalog?.overrides?.["zai/glm-5.2"]?.reasoning,
-      );
-      expect(result.config.modelCatalog?.overrides?.["zai/kimi-k3"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["low", "high", "max"],
-          defaultLevel: "max",
-          providerOptionsByLevel: {
-            low: { anthropic: { effort: "low" } },
-            high: { anthropic: { effort: "high" } },
-            max: { anthropic: { effort: "max" } },
-          },
-        },
-      });
-      expect(result.config.modelCatalog?.overrides?.["zai/k3"]).toEqual(
-        result.config.modelCatalog?.overrides?.["zai/kimi-k3"],
-      );
-      expect(result.config.modelCatalog?.overrides?.["zai/k3-256k"]).toEqual(
-        result.config.modelCatalog?.overrides?.["zai/kimi-k3"],
-      );
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("maps ox-alpha reasoning by configured transport without injecting unrelated defaults", async () => {
+  it("does not infer legacy ox-alpha reasoning from transport", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-ox-alpha-"));
     const path = join(dir, "config.json");
 
@@ -2488,69 +2276,19 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
-      expect(
-        result.config.modelCatalog.overrides["openrouter-chat/vendor/ox-alpha-preview"],
-      ).toEqual({
-        reasoning: {
-          defaultLevel: "max",
-          enabled: true,
-          levels: ["low", "high", "max"],
-          providerOptionsByLevel: {
-            low: { openaiCompatible: { reasoningEffort: "low" } },
-            high: { openaiCompatible: { reasoningEffort: "high" } },
-            max: { openaiCompatible: { reasoningEffort: "max" } },
-          },
-        },
-        supportsReasoning: true,
-      });
-      expect(result.config.modelCatalog.overrides["openrouter-anthropic/ox-alpha"]).toEqual({
-        reasoning: {
-          defaultLevel: "max",
-          enabled: true,
-          levels: ["low", "high", "max"],
-          providerOptionsByLevel: {
-            low: { anthropic: { effort: "low", thinking: { type: "adaptive" } } },
-            high: { anthropic: { effort: "high", thinking: { type: "adaptive" } } },
-            max: { anthropic: { effort: "max", thinking: { type: "adaptive" } } },
-          },
-        },
-        supportsReasoning: true,
-      });
-      expect(result.config.modelCatalog.overrides["openrouter-responses/ox-alpha"]).toEqual({
-        supportsReasoning: false,
-      });
-      expect(result.config.modelCatalog.overrides["openrouter-chat/GLM-X-PREVIEW-F"]).toEqual(
-        result.config.modelCatalog.overrides["openrouter-chat/vendor/ox-alpha-preview"],
-      );
-      expect(result.config.modelCatalog.overrides["openrouter-anthropic/gLm-X-pReViEw-F"]).toEqual(
-        result.config.modelCatalog.overrides["openrouter-anthropic/ox-alpha"],
-      );
-      expect(result.config.modelCatalog.overrides["openrouter-chat/X-pReViEw-F-fReE"]).toEqual(
-        result.config.modelCatalog.overrides["openrouter-chat/vendor/ox-alpha-preview"],
-      );
-      expect(result.config.modelCatalog.overrides["openrouter-anthropic/x-PrEvIeW-f-FrEe"]).toEqual(
-        result.config.modelCatalog.overrides["openrouter-anthropic/ox-alpha"],
-      );
-      expect(result.config.modelCatalog.overrides["openrouter-responses/GlM-x-PrEvIeW-f"]).toEqual(
-        result.config.modelCatalog.overrides["openrouter-responses/ox-alpha"],
-      );
-
-      const catalog = new ModelCatalogService({
-        modelsDev: false,
-        overrides: result.config.modelCatalog.overrides,
-      });
-      expect(catalog.getCapability("openrouter-responses", "ox-alpha")).toMatchObject({
-        reasoning: { enabled: false, levels: [] },
-        supportsReasoning: false,
-      });
+      expect(result.loaded).toBe(true);
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("rejects legacy small model config keys", async () => {
+  it("does not interpret retired small-model aliases", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const smallModelPath = join(dir, "small-model.json");
     const modelSmallPath = join(dir, "model-small.json");
@@ -2583,14 +2321,21 @@ describe("config adapters", () => {
         }),
       );
 
-      expect(loadFileConfig(smallModelPath).loaded).toBe(false);
-      expect(loadFileConfig(modelSmallPath).loaded).toBe(false);
+      for (const filePath of [smallModelPath, modelSmallPath]) {
+        const before = await readFile(filePath, "utf8");
+        const loaded = loadFileConfig(filePath);
+        expect(loaded.loaded).toBe(true);
+        expect(loaded.config).not.toHaveProperty("model");
+        expect(loaded.config).not.toHaveProperty("provider");
+        expect(loaded.config).not.toHaveProperty("small_model");
+        expect(await readFile(filePath, "utf8")).toBe(before);
+      }
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("loads selectable models from multiple configured providers", async () => {
+  it("does not create a second selectable-model registry from file config", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -2633,19 +2378,13 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(
-        result.config.model?.available?.map((target) => `${target.provider}/${target.model}`),
-      ).toEqual(["zai/glm-5.1", "zai/glm-4.7", "deepseek/deepseek-v4-pro"]);
-      expect(
-        result.config.model?.available?.find((target) => target.provider === "deepseek"),
-      ).toMatchObject({
-        kind: "openai-compatible",
-        apiKey: "deepseek-secret",
-        baseURL: "https://api.deepseek.example",
-      });
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
@@ -2659,6 +2398,7 @@ describe("config adapters", () => {
       await writeFile(
         path,
         JSON.stringify({
+          modelStream: { idleTimeoutMs: 0 },
           provider: {
             local: {
               models: {
@@ -2683,7 +2423,7 @@ describe("config adapters", () => {
     }
   });
 
-  it("rejects unsupported provider kinds and npm-based provider config", async () => {
+  it("does not execute retired provider kinds or npm declarations", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const unsupportedKindPath = join(dir, "unsupported-kind.json");
     const npmPath = join(dir, "npm-provider.json");
@@ -2718,14 +2458,21 @@ describe("config adapters", () => {
         }),
       );
 
-      expect(loadFileConfig(unsupportedKindPath).loaded).toBe(false);
-      expect(loadFileConfig(npmPath).loaded).toBe(false);
+      for (const filePath of [unsupportedKindPath, npmPath]) {
+        const before = await readFile(filePath, "utf8");
+        const loaded = loadFileConfig(filePath);
+        expect(loaded.loaded).toBe(true);
+        expect(loaded.config).not.toHaveProperty("model");
+        expect(loaded.config).not.toHaveProperty("provider");
+        expect(loaded.config).not.toHaveProperty("small_model");
+        expect(await readFile(filePath, "utf8")).toBe(before);
+      }
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
-  it("loads model catalog reasoning overrides from file config", async () => {
+  it("does not apply retired model catalog reasoning overrides", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");
 
@@ -2753,22 +2500,13 @@ describe("config adapters", () => {
         }),
       );
 
+      const before = await readFile(path, "utf8");
       const result = loadFileConfig(path);
-
       expect(result.loaded).toBe(true);
-      expect(result.config.modelCatalog?.overrides?.["openai/glm-4.7"]).toEqual({
-        supportsReasoning: true,
-        reasoning: {
-          enabled: true,
-          levels: ["low", "medium", "high"],
-          defaultLevel: "medium",
-          providerOptionsByLevel: {
-            high: {
-              reasoningEffort: "high",
-            },
-          },
-        },
-      });
+      for (const key of ["model", "provider", "modelCatalog", "small_model"])
+        expect(result.config).not.toHaveProperty(key);
+      expect(await readFile(path, "utf8")).toBe(before);
+      // Registry/Model 是唯一能力 owner；普通配置解析无权改写遗留模型字段。
     } finally {
       await rm(dir, { force: true, recursive: true });
     }

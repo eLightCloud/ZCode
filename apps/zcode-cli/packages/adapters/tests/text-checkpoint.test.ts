@@ -1,16 +1,16 @@
+import {
+  textCheckpointSchema,
+  type LogContext,
+  type Logger,
+  type ProjectId,
+  type SessionId,
+} from "@zcode/contracts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSqliteSessionStore } from "../src/storage/session-store.js";
-import {
-  textCheckpointSchema,
-  type Logger,
-  type LogContext,
-  type ProjectId,
-  type SessionId,
-} from "@zcode/contracts";
 
 const roots: string[] = [];
 afterEach(async () => {

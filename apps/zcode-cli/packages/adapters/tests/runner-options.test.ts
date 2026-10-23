@@ -1,6 +1,9 @@
+import { createTestModelProperties } from "./test-model-format.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelErrorCode } from "@zcode/contracts";
-import { AiSdkModelAdapterError } from "../src/model/errors.js";
+import { createModel } from "../src/model/model.js";
+import { compileModelOptionMaps, RestrictedCelError } from "@zcode/model-option-map";
+import { createModelOptionMapFetch } from "../src/model/model-option-map-fetch.js";
 import {
   createGenerateTextOptions,
   createStreamTextOptions,
@@ -10,7 +13,81 @@ import { isOpenCodeGoBaseUrl } from "../src/model/opencode-session.js";
 import type { ResolvedAiSdkModel } from "../src/model/runner-runtime.js";
 
 function resolved(partial: Partial<ResolvedAiSdkModel>): ResolvedAiSdkModel {
-  return partial as ResolvedAiSdkModel;
+  // fixture 以 Registry 已解析的 ModelProperties 和平铺身份构造执行句柄。
+  return { properties: createTestModelProperties(), ...partial } as ResolvedAiSdkModel;
+}
+
+// 当前公共 Model 验证显式预算；per-option map 在最终 JSON 出口落实协议字段。
+// 这里复用生产 Model/Fetch，绝不在测试夹具恢复旧预算或 Provider-name 推断算法。
+async function executeBudget(
+  maxOutputTokens: number | undefined,
+  map: string,
+  body: Record<string, any> = {},
+) {
+  let wire: unknown;
+  const transport = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    wire = JSON.parse(String(init?.body));
+    return new Response("{}");
+  });
+  const generateText = vi.fn(
+    async (request: import("../src/model/model.js").ModelExecutionRequest) => {
+      const fetch = createModelOptionMapFetch({
+        fetch: transport,
+        maps: compileModelOptionMaps({
+          reasoningLevel: { map: "{}" },
+          maxOutputTokens: { map },
+        }),
+        values: request.options,
+      });
+      await fetch("https://model.example.test", { method: "POST", body: JSON.stringify(body) });
+      return {
+        text: "ok",
+        finishReason: "stop" as const,
+        usage: {},
+        providerId: "provider",
+        modelId: "model",
+      };
+    },
+  );
+  const model = createModel({
+    providerId: "provider",
+    modelId: "model",
+    properties: createTestModelProperties(),
+    optionSpecs: {
+      maxOutputTokens: { type: "limit", max: 200_000, map },
+      reasoningLevel: { type: "enum", values: ["low"], map: "{}" },
+    },
+    executor: {
+      generateText,
+      async *streamText() {
+        throw new Error("unexpected stream executor");
+      },
+    },
+    options: { reasoningLevel: "low" },
+  });
+  const request = {
+    messages: [{ role: "user" as const, content: "hello" }],
+    options: { maxOutputTokens },
+  };
+  if (
+    maxOutputTokens === undefined ||
+    !Number.isInteger(maxOutputTokens) ||
+    maxOutputTokens <= 0 ||
+    maxOutputTokens > 200_000
+  ) {
+    await expect(model.generateText(request)).rejects.toMatchObject({
+      code: ModelErrorCode.InvalidModelRequest,
+    });
+    expect(() => model.streamText(request)).toThrow("maxOutputTokens is outside");
+    expect(generateText).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+    return;
+  }
+  await model.generateText(request);
+  expect(generateText).toHaveBeenCalledTimes(1);
+  expect(transport).toHaveBeenCalledTimes(1);
+  expect(model.options).toEqual({ reasoningLevel: "low" });
+  return wire;
 }
 
 describe("shouldIncludeStreamResponseBody", () => {
@@ -24,6 +101,7 @@ describe("shouldIncludeStreamResponseBody", () => {
       shouldIncludeStreamResponseBody(
         resolved({
           providerKind: "openai-compatible",
+          accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
           baseURL: "https://zcode.z.ai/api/v1/zcode-plan",
         }),
       ),
@@ -86,7 +164,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test-provider", modelId: "test-model" },
+        providerId: "test-provider",
+        modelId: "test-model",
         providerKind: "custom",
       }),
       statusContext: {
@@ -126,7 +205,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test-provider", modelId: "lite-model" },
+        providerId: "test-provider",
+        modelId: "lite-model",
         providerKind: "anthropic",
       }),
       statusContext: {
@@ -156,7 +236,8 @@ describe("createStreamTextOptions", () => {
     };
 
     const generateOptions = createGenerateTextOptions(generateInput);
-    expect(generateOptions.maxOutputTokens).toBe(256);
+    // 总预算在 Model/Option Map 边界处理，SDK options 不推导第二份预算。
+    expect(generateOptions).not.toHaveProperty("maxOutputTokens");
     expect(generateOptions.providerOptions).toEqual({
       anthropic: { structuredOutputMode: "outputFormat" },
     });
@@ -172,7 +253,8 @@ describe("createStreamTextOptions", () => {
         },
         resolved: resolved({
           model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "custom-compatible", modelId: "empty-user-model" },
+          providerId: "custom-compatible",
+          modelId: "empty-user-model",
           providerKind: "openai-compatible",
           baseURL: "https://api.example.test/v1",
         }),
@@ -207,9 +289,10 @@ describe("createStreamTextOptions", () => {
         ],
       },
       resolved: resolved({
-        inputMediaCapabilities: { supportsImages: false },
+        properties: createTestModelProperties({ supportsImage: false }),
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "zai", modelId: "glm-text" },
+        providerId: "zai",
+        modelId: "glm-text",
         providerKind: "openai-compatible",
       }),
       statusContext: {
@@ -248,9 +331,10 @@ describe("createStreamTextOptions", () => {
           ],
         },
         resolved: resolved({
-          inputMediaCapabilities: { supportsVideo: true },
+          properties: createTestModelProperties({ supportsVideo: false }),
           model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "openai", modelId: "gpt-test" },
+          providerId: "openai",
+          modelId: "gpt-test",
           providerKind: "openai",
         }),
         statusContext: {
@@ -271,493 +355,137 @@ describe("createStreamTextOptions", () => {
     }
   });
 
-  it("subtracts fixed Anthropic thinking from the explicit model-level generateText budget", () => {
-    const options = createGenerateTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 131_072,
-        maxOutputTokensSource: "model-capability",
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          anthropic: {
-            thinking: {
-              budgetTokens: 1_024,
-              type: "enabled",
-            },
-          },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "anthropic",
-        baseURL: "https://api.xiaomimimo.com/anthropic",
-      }),
-      statusContext: {
-        model: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "anthropic",
-        requestId: "req_mimo_generate",
-        sessionId: "sess_mimo_generate",
-        traceId: "trace_mimo_generate",
-      } as never,
+  it("maps the total Anthropic generate budget without subtracting a second budget", async () => {
+    const body = { thinking: { type: "enabled", budget_tokens: 1_024 } };
+    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}", body)).toEqual({
+      ...body,
+      max_tokens: 131_072,
     });
-
-    expect(options.maxOutputTokens).toBe(130_048);
   });
 
-  it("subtracts fixed Anthropic thinking from the explicit model-level streamText budget", () => {
-    const options = createStreamTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 131_072,
-        maxOutputTokensSource: "model-capability",
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          anthropic: {
-            thinking: {
-              budgetTokens: 1_024,
-              type: "enabled",
-            },
-          },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "anthropic",
-        baseURL: "https://api.xiaomimimo.com/anthropic",
-      }),
-      statusContext: {
-        model: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "anthropic",
-        requestId: "req_mimo_stream",
-        sessionId: "sess_mimo_stream",
-        traceId: "trace_mimo_stream",
-      } as never,
-    });
-
-    expect(options.maxOutputTokens).toBe(130_048);
+  it("maps the total Anthropic stream budget without guessing thinking overhead", async () => {
+    expect(
+      await executeBudget(131_072, "{'max_tokens': maxOutputTokens}", { stream: true }),
+    ).toEqual({ stream: true, max_tokens: 131_072 });
   });
 
-  it("fits oversized fixed Anthropic thinking into one immutable request budget", () => {
-    const providerOptions = {
-      anthropic: {
-        effort: "high",
-        vendorFlag: "kept",
-        thinking: { budgetTokens: 32_000, type: "enabled" },
-      },
+  it("does not mutate fixed thinking fields while mapping the explicit total budget", async () => {
+    const body = {
+      thinking: { type: "enabled", budget_tokens: 32_000 },
+      effort: "high",
+      vendorFlag: "kept",
     };
-    const input = {
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 20_000,
-        maxOutputTokensSource: "runtime-default" as const,
-        messages: [{ role: "user" as const, content: "compact" }],
-        providerOptions,
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "anthropic-compatible", modelId: "fixed-thinking-model" },
-        providerKind: "anthropic",
-        baseURL: "https://api.example.test/anthropic",
-      }),
-      statusContext: {
-        model: { providerId: "anthropic-compatible", modelId: "fixed-thinking-model" },
-        providerKind: "anthropic",
-        requestId: "req_compact_fixed_thinking",
-        sessionId: "sess_compact_fixed_thinking",
-        traceId: "trace_compact_fixed_thinking",
-      } as never,
-    };
-
-    for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-      const options = createOptions(input);
-
-      expect(options.maxOutputTokens).toBe(1);
-      expect(options.providerOptions).toMatchObject({
-        anthropic: {
-          effort: "high",
-          vendorFlag: "kept",
-          thinking: { budgetTokens: 19_999, type: "enabled" },
-        },
-      });
-    }
-    expect(providerOptions.anthropic.thinking.budgetTokens).toBe(32_000);
+    const before = structuredClone(body);
+    expect(await executeBudget(20_000, "{'max_tokens': maxOutputTokens}", body)).toEqual({
+      ...body,
+      max_tokens: 20_000,
+    });
+    expect(body).toEqual(before);
   });
 
   it.each([0.5, 1])(
-    "rejects Anthropic fixed thinking when the total request budget is %s",
-    (maxOutputTokens) => {
-      const input = {
-        includeModelIO: false,
-        request: {
-          maxOutputTokens,
-          messages: [{ role: "user" as const, content: "small budget" }],
-          providerOptions: {
-            anthropic: {
-              thinking: { budgetTokens: 32_000, type: "enabled" },
-            },
-          },
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "anthropic-compatible", modelId: "fixed-thinking-model" },
-          providerKind: "anthropic",
-          baseURL: "https://api.example.test/anthropic",
-        }),
-        statusContext: {
-          model: { providerId: "anthropic-compatible", modelId: "fixed-thinking-model" },
-          providerKind: "anthropic",
-          requestId: "req_small_fixed_thinking",
-          sessionId: "sess_small_fixed_thinking",
-          traceId: "trace_small_fixed_thinking",
-        } as never,
-      };
-
-      for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-        let error: unknown;
-        try {
-          createOptions(input);
-        } catch (caught) {
-          error = caught;
-        }
-
-        expect(error).toBeInstanceOf(AiSdkModelAdapterError);
-        expect(error).toMatchObject({
-          code: ModelErrorCode.InvalidModelRequest,
-          message: "Anthropic-compatible fixed thinking requires maxOutputTokens to be at least 2",
-        } satisfies Partial<AiSdkModelAdapterError>);
-      }
+    "validates the total budget without inferring a thinking minimum: %s",
+    async (maxOutputTokens) => {
+      const wire = await executeBudget(maxOutputTokens, "{'max_tokens': maxOutputTokens}");
+      if (maxOutputTokens === 1) expect(wire).toEqual({ max_tokens: 1 });
     },
   );
 
-  it("keeps explicit model-level output tokens on non-Anthropic transport", () => {
-    const options = createGenerateTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 131_072,
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          anthropic: {
-            thinking: {
-              budgetTokens: 1_024,
-              type: "enabled",
-            },
-          },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "openai-compatible",
-        baseURL: "https://api.xiaomimimo.com/v1",
-      }),
-      statusContext: {
-        model: { providerId: "default-mimo", modelId: "mimo-v2.5-pro" },
-        providerKind: "openai-compatible",
-        requestId: "req_mimo_openai",
-        sessionId: "sess_mimo_openai",
-        traceId: "trace_mimo_openai",
-      } as never,
+  it("maps explicit OpenAI-compatible total tokens at the raw-body boundary", async () => {
+    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}")).toEqual({
+      max_tokens: 131_072,
     });
-
-    expect(options.maxOutputTokens).toBe(131_072);
   });
 
   it.each([
-    { caseId: "OTB01", modelLimit: undefined, expected: 32_000 },
-    { caseId: "OTB02", modelLimit: 16_000, expected: 16_000 },
-    { caseId: "OTB03", modelLimit: 64_000, expected: 64_000 },
-    { caseId: "fractional normalization", modelLimit: 16_000.9, expected: 16_000 },
-    { caseId: "invalid zero", modelLimit: 0, expected: 32_000 },
-    { caseId: "invalid negative", modelLimit: -1, expected: 32_000 },
-    { caseId: "invalid non-finite", modelLimit: Number.NaN, expected: 32_000 },
-  ])("$caseId resolves model capability $modelLimit to $expected", ({ modelLimit, expected }) => {
-    for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-      const options = createOptions({
-        includeModelIO: false,
-        request: {
-          maxOutputTokens: modelLimit,
-          maxOutputTokensSource: "model-capability",
-          messages: [{ role: "user", content: "hi" }],
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "custom-compatible", modelId: "reasoning-model" },
-          providerKind: "openai-compatible",
-          baseURL: "https://api.example.test/v1",
-        }),
-        statusContext: {
-          model: { providerId: "custom-compatible", modelId: "reasoning-model" },
-          providerKind: "openai-compatible",
-          requestId: "req_model_capability",
-          sessionId: "sess_model_capability",
-          traceId: "trace_model_capability",
-        } as never,
-      });
-
-      expect(options.maxOutputTokens).toBe(expected);
-    }
-  });
+    { caseId: "OTB01", modelLimit: undefined },
+    { caseId: "OTB02", modelLimit: 16_000 },
+    { caseId: "OTB03", modelLimit: 64_000 },
+    { caseId: "fractional normalization", modelLimit: 16_000.9 },
+    { caseId: "invalid zero", modelLimit: 0 },
+    { caseId: "invalid negative", modelLimit: -1 },
+    { caseId: "invalid non-finite", modelLimit: Number.NaN },
+  ])(
+    "$caseId validates explicit model budget $modelLimit without fallback or rounding",
+    async ({ modelLimit }) => {
+      const wire = await executeBudget(modelLimit, "{'max_tokens': maxOutputTokens}");
+      if (Number.isInteger(modelLimit) && modelLimit > 0)
+        expect(wire).toEqual({ max_tokens: modelLimit });
+    },
+  );
 
   it.each([
     {
-      expected: 32_000,
       name: "model-capability source",
       providerKind: "openai-compatible" as const,
       source: "model-capability" as const,
     },
     {
-      expected: 32_000,
       name: "runtime-default source",
       providerKind: "openai-compatible" as const,
       source: "runtime-default" as const,
     },
     {
-      expected: 32_000,
       name: "legacy Anthropic request",
       providerKind: "anthropic" as const,
       source: undefined,
     },
     {
-      expected: undefined,
       name: "legacy non-Anthropic request",
       providerKind: "openai-compatible" as const,
       source: undefined,
     },
-  ])(
-    "keeps the missing-budget compatibility behavior for $name",
-    ({ expected, providerKind, source }) => {
-      for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-        const options = createOptions({
-          includeModelIO: false,
-          request: {
-            maxOutputTokensSource: source,
-            messages: [{ role: "user", content: "hi" }],
-          },
-          resolved: resolved({
-            model: {} as ResolvedAiSdkModel["model"],
-            ref: { providerId: "provider", modelId: "model" },
-            providerKind,
-          }),
-          statusContext: {
-            model: { providerId: "provider", modelId: "model" },
-            providerKind,
-            requestId: "req_missing_output_budget",
-            sessionId: "sess_missing_output_budget",
-            traceId: "trace_missing_output_budget",
-          } as never,
-        });
-
-        expect(options.maxOutputTokens).toBe(expected);
-      }
-    },
-  );
+  ])("rejects a missing explicit budget before I/O for $name", async () => {
+    await executeBudget(undefined, "{'max_tokens': maxOutputTokens}");
+  });
 
   it.each(["openai", "openai-compatible", "gateway", "custom"] as const)(
-    "keeps normal model capability budget for %s providers",
-    (providerKind) => {
-      const options = createGenerateTextOptions({
-        includeModelIO: false,
-        request: {
-          maxOutputTokens: 131_072,
-          maxOutputTokensSource: "model-capability",
-          messages: [{ role: "user", content: "hi" }],
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "provider", modelId: "model" },
-          providerKind,
-        }),
-        statusContext: {
-          model: { providerId: "provider", modelId: "model" },
-          providerKind,
-          requestId: `req_${providerKind}`,
-          sessionId: `sess_${providerKind}`,
-          traceId: `trace_${providerKind}`,
-        } as never,
-      });
-
-      expect(options.maxOutputTokens).toBe(131_072);
+    "uses an explicit option map instead of inferring budget from %s kind",
+    async (providerKind) => {
+      const map =
+        providerKind === "openai"
+          ? "{'max_completion_tokens': maxOutputTokens}"
+          : "{'max_tokens': maxOutputTokens}";
+      expect(await executeBudget(131_072, map)).toEqual(
+        providerKind === "openai" ? { max_completion_tokens: 131_072 } : { max_tokens: 131_072 },
+      );
     },
   );
 
-  it("keeps the Compact summary budget for OpenAI-compatible runtime-default requests", () => {
-    const generateOptions = createGenerateTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 20_000,
-        maxOutputTokensSource: "runtime-default",
-        messages: [{ role: "user", content: "hi" }],
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "custom-openai-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "openai-compatible",
-        baseURL: "https://api.example.test/v1",
+  it("maps an explicitly selected Compact budget for OpenAI-compatible transport", async () => {
+    expect(await executeBudget(20_000, "{'max_tokens': maxOutputTokens}")).toEqual({
+      max_tokens: 20_000,
+    });
+  });
+
+  it("lets the declared option map override SDK output fields while retaining vendor fields", async () => {
+    const body = { max_tokens: 32_768, vendor_flag: true };
+    expect(await executeBudget(64_000, "{'max_tokens': maxOutputTokens}", body)).toEqual({
+      max_tokens: 64_000,
+      vendor_flag: true,
+    });
+    expect(body).toEqual({ max_tokens: 32_768, vendor_flag: true });
+  });
+
+  it("rejects missing Model budget even if a raw provider body contains max_tokens", async () => {
+    await executeBudget(undefined, "{'max_tokens': maxOutputTokens}", { max_tokens: 32_768 });
+  });
+
+  it("maps explicitly bound Anthropic total output tokens", async () => {
+    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}")).toEqual({
+      max_tokens: 131_072,
+    });
+  });
+
+  it("maps the explicit Compact summary budget on Anthropic transport", async () => {
+    expect(
+      await executeBudget(20_000, "{'max_tokens': maxOutputTokens}", {
+        thinking: { type: "disabled" },
       }),
-      statusContext: {
-        model: { providerId: "custom-openai-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "openai-compatible",
-        requestId: "req_openai_compatible_default_generate",
-        sessionId: "sess_openai_compatible_default_generate",
-        traceId: "trace_openai_compatible_default_generate",
-      } as never,
-    });
-    const streamOptions = createStreamTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 20_000,
-        maxOutputTokensSource: "runtime-default",
-        messages: [{ role: "user", content: "hi" }],
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "custom-openai-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "openai-compatible",
-        baseURL: "https://api.example.test/v1",
-      }),
-      statusContext: {
-        model: { providerId: "custom-openai-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "openai-compatible",
-        requestId: "req_openai_compatible_default_stream",
-        sessionId: "sess_openai_compatible_default_stream",
-        traceId: "trace_openai_compatible_default_stream",
-      } as never,
-    });
-
-    expect(generateOptions.maxOutputTokens).toBe(20_000);
-    expect(streamOptions.maxOutputTokens).toBe(20_000);
+    ).toEqual({ max_tokens: 20_000, thinking: { type: "disabled" } });
   });
 
-  it("lets the canonical budget override native OpenAI-compatible output params", () => {
-    for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-      const options = createOptions({
-        includeModelIO: false,
-        request: {
-          maxOutputTokens: 64_000,
-          maxOutputTokensSource: "runtime-default",
-          messages: [{ role: "user", content: "hi" }],
-          providerOptions: {
-            openaiCompatible: {
-              extra_body: {
-                max_tokens: 32_768,
-                vendor_flag: true,
-              },
-            },
-          },
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "custom-openai-compatible", modelId: "large-output-model" },
-          providerKind: "openai-compatible",
-          baseURL: "https://api.example.test/v1",
-          providerOptionsName: "Custom Compatible",
-        } as Partial<ResolvedAiSdkModel> & { providerOptionsName: string }),
-        statusContext: {
-          model: { providerId: "custom-openai-compatible", modelId: "large-output-model" },
-          providerKind: "openai-compatible",
-          requestId: "req_openai_compatible_native_max_tokens",
-          sessionId: "sess_openai_compatible_native_max_tokens",
-          traceId: "trace_openai_compatible_native_max_tokens",
-        } as never,
-      });
-
-      expect(options.maxOutputTokens).toBe(64_000);
-      expect(options.providerOptions).toEqual({
-        openaiCompatible: {
-          extra_body: { vendor_flag: true },
-        },
-        "Custom Compatible": { vendor_flag: true },
-      });
-    }
-  });
-
-  it("keeps native output params for legacy requests without a canonical budget", () => {
-    const options = createGenerateTextOptions({
-      includeModelIO: false,
-      request: {
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          openaiCompatible: { extra_body: { max_tokens: 32_768 } },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "custom-openai-compatible", modelId: "legacy-model" },
-        providerKind: "openai-compatible",
-        providerOptionsName: "Custom Compatible",
-      } as Partial<ResolvedAiSdkModel> & { providerOptionsName: string }),
-      statusContext: {
-        model: { providerId: "custom-openai-compatible", modelId: "legacy-model" },
-        providerKind: "openai-compatible",
-        requestId: "req_legacy_native_max_tokens",
-        sessionId: "sess_legacy_native_max_tokens",
-        traceId: "trace_legacy_native_max_tokens",
-      } as never,
-    });
-
-    expect(options.maxOutputTokens).toBeUndefined();
-    expect(options.providerOptions).toMatchObject({
-      "Custom Compatible": { max_tokens: 32_768 },
-    });
-  });
-
-  it("keeps explicit Anthropic runtime-default output tokens", () => {
-    const options = createGenerateTextOptions({
-      includeModelIO: false,
-      request: {
-        maxOutputTokens: 131_072,
-        maxOutputTokensSource: "runtime-default",
-        messages: [{ role: "user", content: "hi" }],
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "custom-anthropic-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "anthropic",
-        baseURL: "https://api.example.test/anthropic",
-      }),
-      statusContext: {
-        model: { providerId: "custom-anthropic-compatible", modelId: "generic-reasoning-model" },
-        providerKind: "anthropic",
-        requestId: "req_anthropic_runtime_default",
-        sessionId: "sess_anthropic_runtime_default",
-        traceId: "trace_anthropic_runtime_default",
-      } as never,
-    });
-
-    expect(options.maxOutputTokens).toBe(131_072);
-  });
-
-  it("keeps the Compact summary budget on Anthropic requests", () => {
-    for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
-      const options = createOptions({
-        includeModelIO: false,
-        request: {
-          maxOutputTokens: 20_000,
-          maxOutputTokensSource: "runtime-default",
-          messages: [{ role: "user", content: "hi" }],
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "custom-anthropic-compatible", modelId: "generic-reasoning-model" },
-          providerKind: "anthropic",
-          baseURL: "https://api.example.test/anthropic",
-        }),
-        statusContext: {
-          model: { providerId: "custom-anthropic-compatible", modelId: "generic-reasoning-model" },
-          providerKind: "anthropic",
-          requestId: "req_anthropic_compact_independent_cap",
-          sessionId: "sess_anthropic_compact_independent_cap",
-          traceId: "trace_anthropic_compact_independent_cap",
-        } as never,
-      });
-
-      expect(options.maxOutputTokens).toBe(20_000);
-    }
-  });
-
-  it("unwraps OpenAI-compatible extra_body into the SDK provider namespace", () => {
+  it("passes static provider namespaces without guessing a provider-name projection", () => {
     const options = createStreamTextOptions({
       includeModelIO: false,
       request: {
@@ -774,7 +502,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "custom-glm", modelId: "GLM-5.2" },
+        providerId: "custom-glm",
+        modelId: "GLM-5.2",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
         providerOptionsName: "GLM52 E2E",
@@ -796,15 +525,10 @@ describe("createStreamTextOptions", () => {
           },
         },
       },
-      "GLM52 E2E": {
-        chat_template_kwargs: {
-          reasoning_effort: "max",
-        },
-      },
     });
   });
 
-  it("preserves raw and sibling namespaces while projecting canonical options", () => {
+  it("preserves raw and sibling namespaces without implicit rewriting", () => {
     const options = createStreamTextOptions({
       includeModelIO: false,
       request: {
@@ -834,7 +558,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "foo-bar", modelId: "reasoning-model" },
+        providerId: "foo-bar",
+        modelId: "reasoning-model",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
         providerOptionsName: "foo-bar",
@@ -857,12 +582,7 @@ describe("createStreamTextOptions", () => {
         mode: "direct",
         reasoningEffort: "max",
       },
-      "foo-bar": {
-        mode: "direct",
-        rawOnly: true,
-        reasoningEffort: "max",
-        thinking: { type: "enabled" },
-      },
+      "foo-bar": { rawOnly: true },
       fooBar: {
         camelOnly: true,
       },
@@ -875,44 +595,10 @@ describe("createStreamTextOptions", () => {
     });
   });
 
-  it("rejects a non-object canonical extra_body", () => {
-    let error: unknown;
-
-    try {
-      createGenerateTextOptions({
-        includeModelIO: false,
-        request: {
-          messages: [{ role: "user", content: "hi" }],
-          providerOptions: {
-            openaiCompatible: {
-              extra_body: [],
-            },
-          },
-        },
-        resolved: resolved({
-          model: {} as ResolvedAiSdkModel["model"],
-          ref: { providerId: "custom-compatible", modelId: "reasoning-model" },
-          providerKind: "openai-compatible",
-          baseURL: "https://api.example.test/v1",
-          providerOptionsName: "Custom Compatible",
-        } as Partial<ResolvedAiSdkModel> & { providerOptionsName: string }),
-        statusContext: {
-          model: { providerId: "custom-compatible", modelId: "reasoning-model" },
-          providerKind: "openai-compatible",
-          requestId: "req_invalid_extra_body",
-          sessionId: "sess_invalid_extra_body",
-          traceId: "trace_invalid_extra_body",
-        } as never,
-      });
-    } catch (caught) {
-      error = caught;
-    }
-
-    expect(error).toBeInstanceOf(AiSdkModelAdapterError);
-    expect(error).toMatchObject({
-      code: ModelErrorCode.InvalidModelRequest,
-      message: "openaiCompatible.extra_body 必须是对象",
-    } satisfies Partial<AiSdkModelAdapterError>);
+  it("rejects an option map with a non-object patch before network I/O", () => {
+    expect(() =>
+      compileModelOptionMaps({ reasoningLevel: { map: "{}" }, maxOutputTokens: { map: "[]" } }),
+    ).toThrow(RestrictedCelError);
   });
 
   it("passes experimental_include.responseBody for zcode-plan streams", () => {
@@ -923,7 +609,9 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "builtin:zai-coding-plan", modelId: "glm-5.1" },
+        providerId: "builtin:zai-coding-plan",
+        modelId: "glm-5.1",
+        accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
         providerKind: "openai-compatible",
         baseURL: "https://zcode.z.ai/api/v1/zcode-plan",
       }),
@@ -961,7 +649,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "openai", modelId: "gpt-5" },
+        providerId: "openai",
+        modelId: "gpt-5",
         providerKind: "openai",
         providerOptions: { apiFormat: "openai-responses" },
       }),
@@ -987,7 +676,7 @@ describe("createStreamTextOptions", () => {
     expect(options.providerOptions).toEqual({ apiFormat: "openai-responses" });
   });
 
-  it("packages native OpenAI reasoning effort without dropping static OpenAI options", () => {
+  it("preserves static OpenAI options without interpreting obsolete top-level aliases", () => {
     for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
       const options = createOptions({
         includeModelIO: false,
@@ -999,7 +688,8 @@ describe("createStreamTextOptions", () => {
           model: {} as ResolvedAiSdkModel["model"],
           providerKind: "openai",
           providerOptions: { openai: { reasoningEffort: "high", store: false } },
-          ref: { providerId: "openai", modelId: "gpt-5.2" },
+          providerId: "openai",
+          modelId: "gpt-5.2",
         }),
         statusContext: {
           model: { providerId: "openai", modelId: "gpt-5.2" },
@@ -1012,9 +702,10 @@ describe("createStreamTextOptions", () => {
 
       expect(options.providerOptions).toEqual({
         openai: {
-          reasoningEffort: "none",
+          reasoningEffort: "high",
           store: false,
         },
+        reasoningEffort: "none",
       });
     }
   });
@@ -1027,7 +718,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test", modelId: "model-a" },
+        providerId: "test",
+        modelId: "model-a",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
       }),
@@ -1065,7 +757,8 @@ describe("createStreamTextOptions", () => {
           "x-zcode-session-type": "spoofed",
         },
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test", modelId: "model-a" },
+        providerId: "test",
+        modelId: "model-a",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
       }),
@@ -1100,7 +793,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test", modelId: "model-a" },
+        providerId: "test",
+        modelId: "model-a",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
       }),
@@ -1129,7 +823,8 @@ describe("createStreamTextOptions", () => {
       },
       resolved: resolved({
         model: {} as ResolvedAiSdkModel["model"],
-        ref: { providerId: "test", modelId: "model-a" },
+        providerId: "test",
+        modelId: "model-a",
         providerKind: "openai-compatible",
         baseURL: "https://api.example.test/v1",
       }),
@@ -1166,7 +861,8 @@ describe("createStreamTextOptions", () => {
           headers: { "x-opencode-session": "spoofed" },
           model: {} as ResolvedAiSdkModel["model"],
           providerKind: "openai-compatible",
-          ref: { providerId: "custom-provider", modelId: "kimi-k2.5" },
+          providerId: "custom-provider",
+          modelId: "kimi-k2.5",
         }),
         statusContext: {
           model: { providerId: "custom-provider", modelId: "kimi-k2.5" },
@@ -1193,7 +889,8 @@ describe("createStreamTextOptions", () => {
         baseURL: "https://opencode.ai/zen/v1",
         model: {} as ResolvedAiSdkModel["model"],
         providerKind: "openai-compatible",
-        ref: { providerId: "custom-provider", modelId: "kimi-k2.5" },
+        providerId: "custom-provider",
+        modelId: "kimi-k2.5",
       }),
       statusContext: {
         model: { providerId: "custom-provider", modelId: "kimi-k2.5" },

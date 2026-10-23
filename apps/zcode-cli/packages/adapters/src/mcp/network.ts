@@ -1,7 +1,7 @@
-import { accessSync, constants } from "node:fs";
-import { delimiter, posix, win32 } from "node:path";
 import { sanitizeZCodeRuntimeEnv } from "@zcode/shared";
 import { withoutNetworkCapture } from "@zcode/shared/node";
+import { accessSync, constants } from "node:fs";
+import { delimiter, posix, win32 } from "node:path";
 import { createNetworkProxyFetch } from "../network/proxy-fetch.js";
 import { applyNetworkEgressEnv, type NetworkEgressEnvPolicy } from "../network/subprocess-env.js";
 
@@ -24,13 +24,14 @@ export function createMcpTransportFetch(options: {
   env?: NodeJS.ProcessEnv;
   network?: NetworkEgressEnvPolicy;
 }): typeof globalThis.fetch {
-  const fetch = createNetworkProxyFetch({
+  // 此处只委托具备代理/CA 策略的 adapter facade，不直接拥有原始 HTTP 出口。
+  const proxyFetch = createNetworkProxyFetch({
     caCertFile: options.network?.caCertFile,
     env: options.env ?? process.env,
     httpProxy: options.network?.httpProxy,
     noProxy: options.network?.noProxy,
   });
-  return (input, init) => withoutNetworkCapture(() => fetch(input, init));
+  return (input, init) => withoutNetworkCapture(() => proxyFetch(input, init));
 }
 
 function filterStringEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -68,20 +69,12 @@ export function prependRunningNodeDirectory(
   const currentPath = env[pathKey] ?? "";
   const nodeDirectory = pathApi.dirname(options.execPath);
   const pathEntries = currentPath.split(pathDelimiter).filter(Boolean);
-  if (
-    pathEntries.some((entry) =>
-      arePathEntriesEqual(entry, nodeDirectory, options.platform),
-    )
-  ) {
+  if (pathEntries.some((entry) => arePathEntriesEqual(entry, nodeDirectory, options.platform))) {
     return env;
   }
 
   const nodeExecutableName = options.platform === "win32" ? "node.exe" : "node";
-  if (
-    pathEntries.some((entry) =>
-      options.isExecutable(pathApi.join(entry, nodeExecutableName)),
-    )
-  ) {
+  if (pathEntries.some((entry) => options.isExecutable(pathApi.join(entry, nodeExecutableName)))) {
     return env;
   }
 
@@ -90,17 +83,11 @@ export function prependRunningNodeDirectory(
   // 目录可保持插件配置跨本地/SSH/WSL/Docker 可移植，同时不覆盖插件显式注入的环境。
   return {
     ...env,
-    [pathKey]: currentPath
-      ? `${nodeDirectory}${pathDelimiter}${currentPath}`
-      : nodeDirectory,
+    [pathKey]: currentPath ? `${nodeDirectory}${pathDelimiter}${currentPath}` : nodeDirectory,
   };
 }
 
-function arePathEntriesEqual(
-  left: string,
-  right: string,
-  platform: NodeJS.Platform,
-): boolean {
+function arePathEntriesEqual(left: string, right: string, platform: NodeJS.Platform): boolean {
   const pathApi = platform === "win32" ? win32 : posix;
   const normalize = (value: string) => {
     const normalized = pathApi.normalize(value);

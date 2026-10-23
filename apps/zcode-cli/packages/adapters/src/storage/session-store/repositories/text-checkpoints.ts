@@ -1,6 +1,3 @@
-import type { DatabaseSync } from "node:sqlite";
-import { randomUUID } from "node:crypto";
-import { isAbsolute } from "node:path";
 import {
   SESSION_ENTRY_MODEL_SELECTION,
   TextCheckpointError,
@@ -9,14 +6,17 @@ import {
   type MessageInfo,
   type MessagePart,
   type SessionId,
-  type TraceId,
   type TextCheckpoint,
   type TextCheckpointStorePort,
+  type TraceId,
 } from "@zcode/contracts";
+import { randomUUID } from "node:crypto";
+import { isAbsolute } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { projectTextCheckpoint } from "../text-checkpoint-projection.js";
 import { messagesSync, saveMessageSync, savePartSync } from "./messages.js";
-import { listSessionInputsSync } from "./session-inputs.js";
 import { saveSessionEntry, sessionEntries } from "./session-entries.js";
+import { listSessionInputsSync } from "./session-inputs.js";
 import { createSession, getSession } from "./sessions.js";
 
 function observe<T>(

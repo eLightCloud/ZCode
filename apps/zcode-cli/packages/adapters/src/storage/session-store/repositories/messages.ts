@@ -1,4 +1,3 @@
-import type { DatabaseSync } from "node:sqlite";
 import type {
   MessageId,
   MessageInfo,
@@ -8,6 +7,7 @@ import type {
   SessionId,
   SessionStorePort,
 } from "@zcode/contracts";
+import type { DatabaseSync } from "node:sqlite";
 import { decodeMessageRow, decodePartRow, partCreatedAt } from "../codecs.js";
 import { encodeJson } from "../json.js";
 import type { MessageRow, PartRow } from "../rows.js";

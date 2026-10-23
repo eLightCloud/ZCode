@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+
 import type {
   BrowserBackendDescriptor,
   BrowserCommand,
@@ -8,8 +9,11 @@ import type {
   BrowserControlPort,
   BrowserErrorCode,
 } from "@zcode/contracts";
+
 import type { Browser } from "playwright-core";
+
 import { createManagedCdpDescriptor } from "./descriptor.js";
+
 import {
   loadPlaywrightChromium,
   resolveInstalledBrowserExecutable,
@@ -17,9 +21,25 @@ import {
   type BrowserExecutableResolutionOptions,
   type PlaywrightChromiumModule,
 } from "./executable.js";
+
 import { executeManagedPageCommand } from "./page-command.js";
+
 import { abortError, classifyError, hasSideEffects, raceWithAbort } from "./request.js";
+
 import { ManagedCdpSession } from "./session.js";
+
+import { DEFAULT_BROWSER_CLOSE_TIMEOUT_MS, waitForPromise } from "./browser-control-lifecycle.js";
+
+import type { PendingRequest } from "./browser-control-lifecycle.js";
+
+export {
+  resolveInstalledBrowserExecutable,
+  validateExplicitBrowserExecutable,
+} from "./executable.js";
+
+export type { BrowserExecutableResolutionOptions, PlaywrightChromiumModule } from "./executable.js";
+
+export { isAllowedManagedBrowserUrl } from "./page-command.js";
 
 export interface ManagedCdpBrowserRuntimeOptions extends BrowserExecutableResolutionOptions {
   closeTimeoutMs?: number;
@@ -30,14 +50,6 @@ export interface ManagedCdpBrowserRuntime {
   browserControlPort: BrowserControlPort;
   close(): Promise<void>;
 }
-
-interface PendingRequest {
-  controller: AbortController;
-  sessionId: string;
-  turnId?: string;
-}
-
-const DEFAULT_BROWSER_CLOSE_TIMEOUT_MS = 1_500;
 
 class ManagedCdpBrowserControlPort implements BrowserControlPort {
   readonly #browserId = `cdp:${randomUUID()}`;
@@ -416,29 +428,4 @@ export function createManagedCdpBrowserRuntime(
     browserControlPort: port,
     close: async () => port.close(),
   };
-}
-
-export {
-  resolveInstalledBrowserExecutable,
-  validateExplicitBrowserExecutable,
-} from "./executable.js";
-export type { BrowserExecutableResolutionOptions, PlaywrightChromiumModule } from "./executable.js";
-export { isAllowedManagedBrowserUrl } from "./page-command.js";
-
-function waitForPromise(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    let settled = false;
-    let timer: NodeJS.Timeout | undefined;
-    const finish = (completed: boolean) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      resolve(completed);
-    };
-    timer = setTimeout(() => finish(false), timeoutMs);
-    void promise.then(
-      () => finish(true),
-      () => finish(true),
-    );
-  });
 }

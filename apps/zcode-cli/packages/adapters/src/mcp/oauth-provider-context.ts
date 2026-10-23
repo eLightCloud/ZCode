@@ -1,0 +1,52 @@
+import type { InternalZCodeMcpAuthorizationCodeProvider } from "./oauth.js";
+
+/** 同一 owner 的内部类型视图；不复制状态，不暴露到端口。 */
+export interface ZCodeMcpAuthorizationCodeProviderMethodsContext {
+  readonly adapterInstanceId: InternalZCodeMcpAuthorizationCodeProvider["adapterInstanceId"];
+  readonly callbackServer: InternalZCodeMcpAuthorizationCodeProvider["callbackServer"];
+  readonly config: InternalZCodeMcpAuthorizationCodeProvider["config"];
+  readonly credentialStore: InternalZCodeMcpAuthorizationCodeProvider["credentialStore"];
+  readonly keyPrefix: InternalZCodeMcpAuthorizationCodeProvider["keyPrefix"];
+  readonly logger: InternalZCodeMcpAuthorizationCodeProvider["logger"];
+  readonly onAuthorizationRequired: InternalZCodeMcpAuthorizationCodeProvider["onAuthorizationRequired"];
+  readonly openAuthorizationUrl: InternalZCodeMcpAuthorizationCodeProvider["openAuthorizationUrl"];
+  readonly serverName: InternalZCodeMcpAuthorizationCodeProvider["serverName"];
+  readonly stateValue: InternalZCodeMcpAuthorizationCodeProvider["stateValue"];
+  readonly transactionId: InternalZCodeMcpAuthorizationCodeProvider["transactionId"];
+  canonicalSnapshot: InternalZCodeMcpAuthorizationCodeProvider["canonicalSnapshot"];
+  credentialSnapshotsLoaded: InternalZCodeMcpAuthorizationCodeProvider["credentialSnapshotsLoaded"];
+  legacyClientSnapshot: InternalZCodeMcpAuthorizationCodeProvider["legacyClientSnapshot"];
+  legacyTokensSnapshot: InternalZCodeMcpAuthorizationCodeProvider["legacyTokensSnapshot"];
+  storedCredentialPair: InternalZCodeMcpAuthorizationCodeProvider["storedCredentialPair"];
+  storedCredentialPairLoaded: InternalZCodeMcpAuthorizationCodeProvider["storedCredentialPairLoaded"];
+  pendingAuthorization: InternalZCodeMcpAuthorizationCodeProvider["pendingAuthorization"];
+  transactionClientInformation: InternalZCodeMcpAuthorizationCodeProvider["transactionClientInformation"];
+  transactionClientSource: InternalZCodeMcpAuthorizationCodeProvider["transactionClientSource"];
+  verifierPersisted: InternalZCodeMcpAuthorizationCodeProvider["verifierPersisted"];
+  redirectUrl: InternalZCodeMcpAuthorizationCodeProvider["redirectUrl"];
+  clientMetadata: InternalZCodeMcpAuthorizationCodeProvider["clientMetadata"];
+  state: InternalZCodeMcpAuthorizationCodeProvider["state"];
+  clientInformation: InternalZCodeMcpAuthorizationCodeProvider["clientInformation"];
+  saveClientInformation: InternalZCodeMcpAuthorizationCodeProvider["saveClientInformation"];
+  tokens: InternalZCodeMcpAuthorizationCodeProvider["tokens"];
+  saveTokens: InternalZCodeMcpAuthorizationCodeProvider["saveTokens"];
+  redirectToAuthorization: InternalZCodeMcpAuthorizationCodeProvider["redirectToAuthorization"];
+  saveCodeVerifier: InternalZCodeMcpAuthorizationCodeProvider["saveCodeVerifier"];
+  codeVerifier: InternalZCodeMcpAuthorizationCodeProvider["codeVerifier"];
+  saveDiscoveryState: InternalZCodeMcpAuthorizationCodeProvider["saveDiscoveryState"];
+  discoveryState: InternalZCodeMcpAuthorizationCodeProvider["discoveryState"];
+  invalidateCredentials: InternalZCodeMcpAuthorizationCodeProvider["invalidateCredentials"];
+  hasPendingAuthorization: InternalZCodeMcpAuthorizationCodeProvider["hasPendingAuthorization"];
+  close: InternalZCodeMcpAuthorizationCodeProvider["close"];
+  invalidateCredentialSnapshot: InternalZCodeMcpAuthorizationCodeProvider["invalidateCredentialSnapshot"];
+  loadCredentialSnapshots: InternalZCodeMcpAuthorizationCodeProvider["loadCredentialSnapshots"];
+  parseJsonSnapshot: InternalZCodeMcpAuthorizationCodeProvider["parseJsonSnapshot"];
+  loadStoredCredentialPair: InternalZCodeMcpAuthorizationCodeProvider["loadStoredCredentialPair"];
+  resetCredentialSnapshots: InternalZCodeMcpAuthorizationCodeProvider["resetCredentialSnapshots"];
+  loadJson: InternalZCodeMcpAuthorizationCodeProvider["loadJson"];
+  saveJson: InternalZCodeMcpAuthorizationCodeProvider["saveJson"];
+  key: InternalZCodeMcpAuthorizationCodeProvider["key"];
+  logContext: InternalZCodeMcpAuthorizationCodeProvider["logContext"];
+  verifierKey: InternalZCodeMcpAuthorizationCodeProvider["verifierKey"];
+  clearVerifier: InternalZCodeMcpAuthorizationCodeProvider["clearVerifier"];
+}

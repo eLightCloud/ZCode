@@ -1224,6 +1224,10 @@ describe("createMcpAdapter", () => {
 
   it("keeps runtime OAuth recovery alive after the triggering caller times out", async () => {
     let releaseAuthorization!: () => void;
+    let markAuthorizationReady!: () => void;
+    const authorizationReady = new Promise<void>((resolve) => {
+      markAuthorizationReady = resolve;
+    });
     const authorizationGate = new Promise<void>((resolve) => {
       releaseAuthorization = resolve;
     });
@@ -1235,6 +1239,7 @@ describe("createMcpAdapter", () => {
       const authorizationUrl = new URL("https://auth.example.test/authorize");
       authorizationUrl.searchParams.set("state", await interactiveProvider.state());
       await interactiveProvider.redirectToAuthorization(authorizationUrl);
+      markAuthorizationReady();
       await authorizationGate;
       return "AUTHORIZED" as const;
     });
@@ -1266,6 +1271,8 @@ describe("createMcpAdapter", () => {
         },
         status: "rejected",
       });
+      // caller 的 20ms 预算不保证异步 state/PKCE 已生成；按 URL 发布事件同步，不改等待预算。
+      await authorizationReady;
       await expect(adapter.status()).resolves.toMatchObject({
         runtime: {
           authorization: {

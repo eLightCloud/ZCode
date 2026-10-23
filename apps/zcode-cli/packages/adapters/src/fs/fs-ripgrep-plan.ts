@@ -1,0 +1,125 @@
+// ============================================================
+// Node FileSystem Adapter
+// ============================================================
+
+import { stat } from "node:fs/promises";
+
+import { basename, dirname } from "node:path";
+
+import type { RgArg } from "ripgrep";
+
+import {
+  type FileSystemSearchTextRequest,
+  type FileSystemTextSearchOutputMode,
+} from "@zcode/contracts";
+
+import type { RipgrepSearchPlan } from "./fs-search-contract.js";
+
+import { VCS_DIRECTORIES_TO_EXCLUDE } from "./fs-search-config.js";
+
+import { TYPE_EXTENSION_MAP } from "./fs-path-matching.js";
+
+export function createRipgrepSearchPlan(
+  path: string,
+  rootInfo: Awaited<ReturnType<typeof stat>>,
+  request: FileSystemSearchTextRequest,
+  mode: FileSystemTextSearchOutputMode,
+): RipgrepSearchPlan {
+  const outputRoot = rootInfo.isDirectory() ? path : dirname(path);
+  const target = rootInfo.isDirectory() ? "." : basename(path);
+  const args: RgArg[] = [
+    "--no-config",
+    "--hidden",
+    "--color",
+    "never",
+    "--no-heading",
+    "--with-filename",
+    "--max-columns",
+    "500",
+  ];
+
+  for (const dir of VCS_DIRECTORIES_TO_EXCLUDE) {
+    args.push("--glob", `!${dir}`, "--glob", `!**/${dir}/**`);
+  }
+
+  if (request.multiline) {
+    args.push("-U", "--multiline-dotall");
+  }
+
+  if (request.ignoreCase) {
+    args.push("-i");
+  }
+
+  if (mode === "content") {
+    args.push("--json");
+    if (request.onlyMatching) {
+      args.push("--only-matching");
+    }
+    addRipgrepContextArgs(args, request);
+  } else {
+    args.push("-c");
+  }
+
+  if (request.glob) {
+    addRipgrepGlobArgs(args, request.glob);
+  }
+  if (request.type) {
+    addRipgrepTypeArgs(args, request.type);
+  }
+
+  args.push("-e", request.pattern.trim(), "--", target);
+
+  return {
+    args,
+    outputRoot,
+    preopens: { ".": outputRoot },
+  };
+}
+
+export function addRipgrepContextArgs(args: RgArg[], request: FileSystemSearchTextRequest): void {
+  if (request.context !== undefined) {
+    args.push("-C", String(request.context));
+    return;
+  }
+  if (request.beforeContext !== undefined) {
+    args.push("-B", String(request.beforeContext));
+  }
+  if (request.afterContext !== undefined) {
+    args.push("-A", String(request.afterContext));
+  }
+}
+
+export function addRipgrepGlobArgs(args: RgArg[], glob: string): void {
+  for (const pattern of splitRipgrepGlobPatterns(glob)) {
+    args.push("--glob", pattern);
+  }
+}
+
+export function splitRipgrepGlobPatterns(glob: string): string[] {
+  const patterns: string[] = [];
+  for (const rawPattern of glob.split(/\s+/)) {
+    if (rawPattern.includes("{") && rawPattern.includes("}")) {
+      patterns.push(rawPattern);
+      continue;
+    }
+    patterns.push(...rawPattern.split(","));
+  }
+  return patterns.map((pattern) => pattern.trim()).filter(Boolean);
+}
+
+export function addRipgrepTypeArgs(args: RgArg[], type: string): void {
+  for (const pattern of fileTypeGlobPatterns(type)) {
+    args.push("--glob", pattern);
+  }
+}
+
+export function fileTypeGlobPatterns(type: string): string[] {
+  const normalized = normalizeFileType(type);
+  if (!/^[a-z0-9_+-]+$/i.test(normalized)) return [];
+  const extensions = TYPE_EXTENSION_MAP[normalized] ?? [`.${normalized}`];
+  return extensions.flatMap((extension) => [`*${extension}`, `**/*${extension}`]);
+}
+
+export function normalizeFileType(type: string): string {
+  return type.toLowerCase().replace(/^\./, "");
+}

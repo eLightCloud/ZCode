@@ -18,12 +18,20 @@ import {
   resolveWebRemoteControlWorkspaceKey,
 } from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
+import {
+  registerRemoteWorkspaceSession,
+  unregisterRemoteWorkspaceSession,
+  getRemoteWorkspaceSession,
+  bindRemoteWorkspaceIdentity,
+  bindRemoteWorkspacePath,
+} from "@zcode/ui/remote-workspace-session-store";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AppErrorBoundary,
   ensurePendingTaskDraft,
   Root,
+  logger as uiLogger,
   ZCodeIntlProvider,
   generateMobileDeviceFingerprint,
   installDocumentHiddenMotionPause,
@@ -2091,8 +2099,13 @@ async function bootstrapWebApp() {
   }
 
   try {
+    let connectionClosed = false;
+    let releaseWorkspace: (() => void) | undefined;
     const services = await connectViaWebSocket(bootstrap.wsUrl, {
-      onClose: () => {},
+      onClose: () => {
+        connectionClosed = true;
+        releaseWorkspace?.();
+      },
     });
     // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
     const conversation = conversationSessionIdSchema.safeParse(params.get("conversation"));
@@ -2105,6 +2118,31 @@ async function bootstrapWebApp() {
         workspacePath: workspace.path,
         taskId: conversation.data,
       });
+      if (!directories.workspaceIdentity || connectionClosed)
+        throw new Error("project.host-offline");
+      // 直接 Server Web 复用当前已认证的 WS，不建立另一个远程连接或放行断连代理。
+      const remoteSessionId = crypto.randomUUID();
+      registerRemoteWorkspaceSession({
+        sessionId: remoteSessionId,
+        workspacePath: directories.workspacePath,
+        workspaceIdentity: directories.workspaceIdentity,
+        services,
+      });
+      bindRemoteWorkspaceIdentity(directories.workspaceIdentity, remoteSessionId);
+      bindRemoteWorkspacePath(directories.workspacePath, remoteSessionId);
+      uiLogger.info("web.conversation.transport", {
+        connectionRef: remoteSessionId,
+        outcome: "ready",
+      });
+      releaseWorkspace = () => {
+        if (getRemoteWorkspaceSession(remoteSessionId)?.services !== services) return;
+        unregisterRemoteWorkspaceSession(remoteSessionId);
+        uiLogger.info("web.conversation.transport", {
+          connectionRef: remoteSessionId,
+          outcome: "closed",
+        });
+      };
+      window.addEventListener("pagehide", releaseWorkspace, { once: true });
       bootstrap = {
         ...bootstrap,
         initialWorkspaceAbsPath: directories.workspacePath,

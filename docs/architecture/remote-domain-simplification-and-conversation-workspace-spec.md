@@ -116,3 +116,5 @@ RCONV-01–05 等旧 connect-and-chat UI 场景是历史合同，不再用于新
 企业外部历史页完成原生同 ID 恢复后，Web 的显式进入链接只提供导航 session ID。Web 先取得当前 Host 的对话 workspace，再通过当前已连接 projectService.resolveSessionDirectories 解析已有任务的真实目录与 workspaceIdentity；不传客户端猜测的 local hostId，不从路径生成设备身份。Composer 沿原生 workspaceIdentity 选择同一 Source Server，错误身份和不可用 owner 仍拒绝。该链路不恢复旧远程 conversation entry 导航，不新增项目或 CLI 会话。
 
 回归由企业三 Core/MinIO 真链路覆盖：整份候选选择、ACK 丢失重查、显式进入后发送新的普通输入，检查同一 session 的 8 条消息和唯一接纳候选；历史只读成功不能代替新输入接纳。
+
+该直接 Web 连接在渲染前把当前已认证 WS 服务登记到现有 remote workspace session registry，并绑定 owner 返回的稳定身份；不新建 attachment、Core 或来源授权。连接关闭时撤销本次登记；迟到的旧连接只能释放自己的服务引用，页面离开也释放本次映射。导航参数不能提供 transport 或受信身份，断连后继续拒绝发送。

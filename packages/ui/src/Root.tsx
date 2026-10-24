@@ -203,32 +203,37 @@ function NativeRoot(props: RootProps) {
               initialIsRestoringOAuthSession={!props.applicationAccount}
             >
               <TabStoreProvider>
-                <ProjectDirectoryProvider isDesktop={props.isDesktop}>
-                  <DiffsWorkerPoolProvider>
-                    <WebRemoteControlFeatureProvider enabled={props.webRemoteControlFeatureEnabled}>
-                      <AssistantCodeCommentFeatureProvider
-                        enabled={props.assistantCodeCommentCardsEnabled}
+                {/* 合并时曾遗漏挂载，后台连接与设置页必须共享同一进度 owner。 */}
+                <RemoteConnectionProgressProvider>
+                  <ProjectDirectoryProvider isDesktop={props.isDesktop}>
+                    <DiffsWorkerPoolProvider>
+                      <WebRemoteControlFeatureProvider
+                        enabled={props.webRemoteControlFeatureEnabled}
                       >
-                        <NativeCloudProviders
-                          enabled={props.applicationPeripherals?.nativeCloudEnabled !== false}
-                          desktop={props.isDesktop === true}
+                        <AssistantCodeCommentFeatureProvider
+                          enabled={props.assistantCodeCommentCardsEnabled}
                         >
-                          <ApplicationPluginStoreProvider
-                            section={props.applicationPluginStoreSection}
+                          <NativeCloudProviders
+                            enabled={props.applicationPeripherals?.nativeCloudEnabled !== false}
+                            desktop={props.isDesktop === true}
                           >
-                            <ApplicationPages
-                              pages={props.applicationPages ?? []}
-                              headerPageId={props.applicationHeaderPageId}
+                            <ApplicationPluginStoreProvider
+                              section={props.applicationPluginStoreSection}
                             >
-                              <ApplicationPluginLocationEffect />
-                              <RootInner {...props} />
-                            </ApplicationPages>
-                          </ApplicationPluginStoreProvider>
-                        </NativeCloudProviders>
-                      </AssistantCodeCommentFeatureProvider>
-                    </WebRemoteControlFeatureProvider>
-                  </DiffsWorkerPoolProvider>
-                </ProjectDirectoryProvider>
+                              <ApplicationPages
+                                pages={props.applicationPages ?? []}
+                                headerPageId={props.applicationHeaderPageId}
+                              >
+                                <ApplicationPluginLocationEffect />
+                                <RootInner {...props} />
+                              </ApplicationPages>
+                            </ApplicationPluginStoreProvider>
+                          </NativeCloudProviders>
+                        </AssistantCodeCommentFeatureProvider>
+                      </WebRemoteControlFeatureProvider>
+                    </DiffsWorkerPoolProvider>
+                  </ProjectDirectoryProvider>
+                </RemoteConnectionProgressProvider>
               </TabStoreProvider>
             </StoreProvider>
           </PlatformProvider>

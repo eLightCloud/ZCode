@@ -22,6 +22,7 @@ import type { ToolExecuteOptions, ToolExecutorDeps } from "./types.js";
 import type { ExecutableToolCall } from "../types.js";
 
 import { HookRunResult } from "../../hooks/types.js";
+import { BranchEffectCheckError } from "../branch-effects.js";
 
 export async function completeFailedToolCall(
   startTime: number,
@@ -55,6 +56,7 @@ export async function completeFailedToolCall(
     error instanceof Error ? error : new Error(String(error)),
     durationMs,
   );
+  if (error instanceof BranchEffectCheckError) result.effectExecution = "not_started";
   const baseModelContent = result.error
     ? isToolHandlerFailureError(error) && typeof result.modelContent === "string"
       ? result.modelContent

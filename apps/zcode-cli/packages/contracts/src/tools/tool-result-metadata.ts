@@ -360,6 +360,7 @@ export type PersistedToolMediaLayoutEntry = z.infer<typeof persistedToolMediaLay
 
 export const completedToolPartMetadataSchema = z
   .object({
+    effectExecution: z.literal("not_started").optional(),
     // 错误结果沿用字符串内容；仅接受数组会使 V4 冷恢复丢弃整份 metadata，包括 display。
     modelContentLayout: persistedToolMediaLayoutSchema.optional(),
     readOnly: z.boolean().optional(),

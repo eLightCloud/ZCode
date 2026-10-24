@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpPort, McpToolCallResult, McpToolDescriptor } from "@zcode/contracts";
 import { conversationEffectSchema, type ConversationEffect } from "@zcode/shared";
 import type { ToolExecutionContext } from "../tool/types.js";
-import { readBranchEffects } from "../tool/branch-effects.js";
+import { BranchEffectCheckError, readBranchEffects } from "../tool/branch-effects.js";
 
 const resultSchema = z
   .object({
@@ -22,14 +22,28 @@ const decisionSchema = z
   .strict();
 
 /** One resource request, with the same identity/trace/workspace as the proposed action. */
-export async function reconcileBranchEffects(options: {
+type ReconciliationOptions = {
   descriptor: McpToolDescriptor;
   readOnly: boolean;
   arguments: Record<string, unknown>;
   port: McpPort;
   context: ToolExecutionContext;
   timeoutMs: number;
-}): Promise<McpToolCallResult | undefined> {
+};
+export async function reconcileBranchEffects(
+  options: ReconciliationOptions,
+): Promise<McpToolCallResult | undefined> {
+  try {
+    return await checkBranchEffects(options);
+  } catch (error) {
+    if (error instanceof BranchEffectCheckError) throw error;
+    // 核对阶段的传输失败不能变成目标业务调用已发生；不将资源原始错误写入普通日志。
+    throw new BranchEffectCheckError("branch_effect_result_unknown");
+  }
+}
+async function checkBranchEffects(
+  options: ReconciliationOptions,
+): Promise<McpToolCallResult | undefined> {
   const { descriptor, readOnly, port, context, timeoutMs } = options;
   if (readOnly) return;
   const effects = (await readBranchEffects(context.sessionStore, context.sessionId)).filter(
@@ -44,7 +58,7 @@ export async function reconcileBranchEffects(options: {
         tool.toolName === descriptor.effectCheckTool &&
         tool.annotations?.readOnlyHint === true,
     );
-  if (!checker) throw new Error("branch_effect_verification_required");
+  if (!checker) throw new BranchEffectCheckError("branch_effect_verification_required");
   const action = { tool: descriptor.toolName, arguments: options.arguments };
   const checked = await port.callTool(
     {
@@ -67,10 +81,11 @@ export async function reconcileBranchEffects(options: {
   );
   const parsed = decisionSchema.safeParse(checked.structuredContent);
   if (checked.isError || !parsed.success || !isDeepStrictEqual(parsed.data.action, action))
-    throw new Error("branch_effect_result_unknown");
+    throw new BranchEffectCheckError("branch_effect_result_unknown");
   const decision = parsed.data;
   if (decision.decision === "proceed") return;
-  if (decision.decision !== "replay") throw new Error("branch_effect_verification_required");
+  if (decision.decision !== "replay")
+    throw new BranchEffectCheckError("branch_effect_verification_required");
   const original = decision.result;
   const receipt = conversationEffectSchema.safeParse(original?._meta?.["zcode/effect"]);
   if (
@@ -81,7 +96,7 @@ export async function reconcileBranchEffects(options: {
     receipt.data.server !== descriptor.serverName ||
     !effects.some((effect) => sameOperation(effect, receipt.data))
   )
-    throw new Error("branch_effect_result_unknown");
+    throw new BranchEffectCheckError("branch_effect_result_unknown");
   return {
     ...original,
     _meta: { ...original._meta, "zcode/readOnly": readOnly, "zcode/effect": receipt.data },

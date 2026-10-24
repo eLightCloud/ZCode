@@ -47,6 +47,7 @@ export function completedToolPartMetadata(
     meta && typeof meta === "object" && "zcode/effect" in meta ? meta["zcode/effect"] : null,
   );
   return {
+    ...(result.effectExecution ? { effectExecution: result.effectExecution } : {}),
     ...(capability
       ? {
           readOnly: capability.readOnly,

@@ -6,6 +6,51 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { checkpointEffectReferences, textCheckpointSchema } from "@zcode/contracts";
+
+it("does not invent an external effect for a rejected check, while preserving real execution uncertainty", () => {
+  const original = checkpoint("not-started-session");
+  const metadata = {
+    schemaVersion: 1,
+    mcpReadOnly: false,
+    display: { kind: "mcp_tool", serverName: "synthetic", toolName: "send" },
+  };
+  const payload = (notStarted: boolean) =>
+    textCheckpointSchema.parse({
+      ...original,
+      version: 4,
+      messages: original.messages.map((message, index) =>
+        index !== 1
+          ? message
+          : {
+              ...message,
+              parts: [
+                ...message.parts,
+                {
+                  id: "rejected-part",
+                  type: "tool",
+                  callID: "rejected-call",
+                  tool: "mcp__synthetic__send",
+                  state: {
+                    status: "error",
+                    input: {},
+                    error: "SYNTHETIC_REJECTED",
+                    time: { start: 1, end: 2 },
+                    metadata: {
+                      ...metadata,
+                      ...(notStarted ? { effectExecution: "not_started" } : {}),
+                    },
+                  },
+                },
+              ],
+            },
+      ),
+    });
+  expect(checkpointEffectReferences(payload(true))).toEqual([]);
+  expect(checkpointEffectReferences(payload(false))).toMatchObject([
+    { server: "synthetic", operation: "rejected-call", outcome: "unknown" },
+  ]);
+});
 
 it("preserves cross-branch effects through apply, cold restart and monotonic owner refresh", async () => {
   const root = await mkdtemp(join(tmpdir(), "branch-effects-persistence-"));

@@ -470,6 +470,7 @@ export function checkpointEffectReferences(value: TextCheckpoint): ConversationE
     for (const part of message.parts) {
       if (part.type !== "tool") continue;
       const metadata = part.state.metadata ?? part.metadata;
+      if (metadata?.effectExecution === "not_started") continue;
       if (metadata?.businessEffect) {
         effects.push(conversationEffectSchema.parse(metadata.businessEffect));
         continue;

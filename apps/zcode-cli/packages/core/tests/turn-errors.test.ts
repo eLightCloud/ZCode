@@ -10,19 +10,22 @@ import {
 
 describe("turn abort outcome", () => {
   it.each([
-    [SessionEventType.TurnComplete, "success", "completed"],
-    [SessionEventType.TurnComplete, "cancelled", "interrupted"],
-    [SessionEventType.TurnError, undefined, "error"],
+    [SessionEventType.TurnComplete, "success", "completed", undefined],
+    [SessionEventType.TurnComplete, "cancelled", "interrupted", undefined],
+    [SessionEventType.TurnError, undefined, "error", undefined],
+    [SessionEventType.TurnComplete, "success", "completed", "input-current"],
+    [SessionEventType.TurnComplete, "cancelled", "interrupted", "input-current"],
+    [SessionEventType.TurnError, undefined, "error", "input-current"],
   ])(
-    "persists %s %s before publishing its terminal fact",
-    async (type, resultType, lastOutcome) => {
+    "persists %s %s as %s for %s before publishing its terminal fact",
+    async (type, resultType, lastOutcome, inputId) => {
       const order: string[] = [];
       const updateSession = vi.fn(async () => {
         order.push("persist");
       });
       const event = {
         type,
-        payload: { resultType },
+        payload: { resultType, ...(inputId ? { inputId } : {}) },
         sessionId: "s",
         timestamp: new Date(2000),
         sequenceNumber: 1,
@@ -38,7 +41,14 @@ describe("turn abort outcome", () => {
         event as never,
         { traceId: "trace" } as never,
       );
-      expect(updateSession).toHaveBeenCalledWith({ id: "s", lastOutcome, timeUpdated: 2000 });
+      expect(updateSession).toHaveBeenCalledTimes(1);
+      expect(updateSession).toHaveBeenCalledWith({
+        id: "s",
+        lastOutcome,
+        lastOutcomeInputId: inputId ?? null,
+        lastOutcomeAt: 2000,
+        timeUpdated: 2000,
+      });
       expect(order).toEqual(["persist", "publish"]);
     },
   );

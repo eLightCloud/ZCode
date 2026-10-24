@@ -2994,6 +2994,8 @@ describe("AgentRuntime session persistence", () => {
       "forced failure",
     );
     expect(failedTool?.state.status === "error" ? failedTool.state.metadata : undefined).toEqual({
+      // 此夹具执行后才返回失败，不能伪造 effectExecution=not_started。
+      schemaVersion: 1,
       modelContent: TEST_TOOL_ERROR_MODEL_CONTENT,
     });
   });

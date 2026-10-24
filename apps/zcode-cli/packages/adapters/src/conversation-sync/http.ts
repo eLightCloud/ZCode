@@ -8,6 +8,7 @@ import {
   type SyncRequest,
 } from "@zcode/contracts";
 import { digest } from "./canonical.js";
+import { conversationDeletionChoiceSchema } from "@zcode/shared";
 
 /** Trusted assembly supplies identity/qualification; browsers cannot supply barrier proofs. */
 export function createConversationSyncHttpHandler(options: {
@@ -52,7 +53,10 @@ export function createConversationSyncHttpHandler(options: {
       if (request.method === "GET" && url.pathname === "/admission") {
         await options.store.state(scope, "sync-admission-probe");
         reply(200, { admitted: true });
-      } else if (request.method === "POST" && url.pathname === "/versions") {
+      } else if (
+        request.method === "POST" &&
+        ["/versions", "/deletion-choice"].includes(url.pathname)
+      ) {
         if (request.headers["content-type"]?.split(";")[0].trim() !== "application/json")
           throw new ConversationSyncError("invalid");
         const chunks: Buffer[] = [];
@@ -68,6 +72,37 @@ export function createConversationSyncHttpHandler(options: {
           body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         } catch {
           throw new ConversationSyncError("invalid");
+        }
+        if (url.pathname === "/deletion-choice") {
+          const choice = conversationDeletionChoiceSchema.safeParse(body);
+          if (!choice.success) throw new ConversationSyncError("invalid");
+          const { session, operation, version, candidates, revision } = choice.data;
+          // Browser input cannot supply barriers, execution locations or recovery evidence.
+          const receipt = await options.store.execute(scope, {
+            session,
+            operation,
+            command: {
+              kind: "select",
+              version,
+              candidates,
+              revision,
+              location: null,
+              recoveryVerified: false,
+            },
+          });
+          logger.info("Conversation deletion selected", {
+            outcome: "selected_deleted",
+            sessionId: session,
+            operationId: operation,
+          });
+          reply(200, {
+            operation,
+            session,
+            version,
+            revision: receipt.state.revision,
+            outcome: "deleted",
+          });
+          return;
         }
         const parsed = syncRequestSchema.safeParse(body);
         if (!parsed.success || parsed.data.command.kind !== "receive")

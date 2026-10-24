@@ -197,6 +197,18 @@ text rejects instead of hiding that data. This projection repair does not import
 a recovery package; an absent deleted session needs no visible index row. The application fetches the
 version under revalidated original identity; browser input supplies only IDs.
 
+## Explicit deletion choice
+
+A browser choice is a separate CSRF-protected action, never a history read. Its
+native request contains only the original operation ID, exact session/version,
+observed revision and candidate set. The authenticated gateway constructs the
+native select command with no location or recovery evidence. Consequently only a
+tombstone can succeed, and native active/pending or in-flight handoffs still block.
+Text choice/activation stays unavailable until actual target recovery is wired.
+The same operation retries an ACK loss, new candidates make stale choices reject,
+and rejected choices never fence a runtime. Account changes are checked before
+mutation against the previous server-provided scope, which cannot grant access.
+
 ```mermaid
 sequenceDiagram
   participant B as Browser history

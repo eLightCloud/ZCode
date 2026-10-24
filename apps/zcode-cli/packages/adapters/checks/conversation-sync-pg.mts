@@ -18,6 +18,7 @@ import {
 import { events, logger, version, checkpoint } from "./sync-fixture.mjs";
 import { verifyOutbox } from "./sync-outbox.mjs";
 import { verifyHttp } from "./sync-http.mjs";
+import { verifyDeletionChoice } from "./sync-deletion-choice.mjs";
 import { verifyCapacity } from "./sync-capacity.mjs";
 import { verifyTransitions } from "./sync-transitions.mjs";
 import { verifyManaged } from "./sync-managed.mjs";
@@ -164,6 +165,7 @@ try {
   await verifyManaged(owner, runtime, scope, connection, checks);
   await verifyOutbox(reopened, scope, other, root, checks);
   await verifyHttp(reopened, scope, other, checks);
+  await verifyDeletionChoice(reopened, scope, checks);
   const limited = createConversationSyncStore({ ...options, pool: runtime, maxCheckpointBytes: 1 });
   const blocked = {
     session: "limited",

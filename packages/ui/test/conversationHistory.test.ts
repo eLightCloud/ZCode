@@ -97,3 +97,84 @@ it("clears cached body on a new identity failure and ignores old responses after
   await waitFor(() => expect(screen.queryByText("Previous account")).toBeNull());
   expect(screen.queryByText("Leaked")).toBeNull();
 });
+
+const deletionLabels = {
+  ...labels,
+  deletionChoice: {
+    action: "Choose deletion",
+    warning: "Other copies and business effects remain.",
+    confirm: "Confirm choice",
+    cancel: "Cancel",
+    retry: "Check original choice",
+    succeeded: "Deletion confirmed",
+    stale: "Refresh changed candidates",
+    blocked: "Choice blocked",
+    unavailable: "Choice unconfirmed",
+  },
+};
+function deletionReader() {
+  return {
+    history: vi.fn(async () => [
+      {
+        session: "s",
+        version: "deleted",
+        title: "Deleted candidate",
+        management: { titleOverride: null, archived: false, deleted: true, pinned: false },
+        candidates: ["deleted", "edit"],
+        selected: null,
+        revision: 4,
+      },
+    ]),
+    transcript: vi.fn(async () => ({
+      session: "s",
+      version: "deleted",
+      title: "Deleted candidate",
+      deleted: true,
+      messages: [],
+    })),
+    chooseDeletion: vi.fn<NonNullable<ConversationHistoryReader["chooseDeletion"]>>(async () => {}),
+  };
+}
+it("viewing and cancelling a deletion confirmation never submits a choice", async () => {
+  const reader = deletionReader();
+  render(
+    createElement(ConversationHistory, { reader, labels: deletionLabels, onWorkspace: vi.fn() }),
+  );
+  await screen.findByText("Deleted candidate");
+  fireEvent.click(screen.getByRole("button", { name: "View version 1" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Choose deletion" }));
+  expect(reader.chooseDeletion).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(reader.chooseDeletion).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Choose deletion" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm choice" }));
+  await screen.findByText("Deletion confirmed");
+  expect(reader.chooseDeletion).toHaveBeenCalledWith(
+    expect.objectContaining({
+      session: "s",
+      version: "deleted",
+      candidates: ["deleted", "edit"],
+      revision: 4,
+    }),
+    expect.any(AbortSignal),
+  );
+});
+it("an unconfirmed choice explicitly retries the same operation and stale candidates require refresh", async () => {
+  const { ConversationChoiceError } = await import("@zcode/shared");
+  const reader = deletionReader();
+  reader.chooseDeletion.mockRejectedValueOnce(new Error("transport lost ACK"));
+  render(
+    createElement(ConversationHistory, { reader, labels: deletionLabels, onWorkspace: vi.fn() }),
+  );
+  await screen.findByText("Deleted candidate");
+  fireEvent.click(screen.getByRole("button", { name: "View version 1" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Choose deletion" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm choice" }));
+  await screen.findByText("Choice unconfirmed");
+  const first = reader.chooseDeletion.mock.calls[0]?.[0];
+  reader.chooseDeletion.mockRejectedValueOnce(new ConversationChoiceError("stale"));
+  fireEvent.click(screen.getByRole("button", { name: "Check original choice" }));
+  await screen.findByText("Refresh changed candidates");
+  expect(reader.chooseDeletion.mock.calls[1]?.[0]).toEqual(first);
+  expect(screen.queryByRole("button", { name: "Check original choice" })).toBeNull();
+});

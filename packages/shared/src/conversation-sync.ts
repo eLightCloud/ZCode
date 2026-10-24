@@ -115,6 +115,38 @@ export const conversationTranscriptSchema = z
   })
   .strict();
 export type ConversationTranscript = z.infer<typeof conversationTranscriptSchema>;
+const choiceKey = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9_.:-]+$/);
+export const conversationDeletionChoiceSchema = z
+  .object({
+    operation: z
+      .string()
+      .uuid()
+      .transform((value) => value.toLowerCase()),
+    session: choiceKey,
+    version: choiceKey,
+    candidates: z.array(choiceKey).min(1).max(10000),
+    revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type ConversationDeletionChoice = z.infer<typeof conversationDeletionChoiceSchema>;
+export const conversationDeletionReceiptSchema = z
+  .object({
+    operation: z.string().uuid(),
+    session: choiceKey,
+    version: choiceKey,
+    revision: z.number().int().nonnegative(),
+    outcome: z.literal("deleted"),
+  })
+  .strict();
+export class ConversationChoiceError extends Error {
+  constructor(readonly code: "stale" | "blocked" | "scope" | "unavailable") {
+    super("Conversation choice: " + code);
+  }
+}
 export interface ConversationHistoryReader {
   history(after: string | null, signal: AbortSignal): Promise<ConversationHistoryItem[]>;
   transcript(
@@ -122,6 +154,7 @@ export interface ConversationHistoryReader {
     version: string,
     signal: AbortSignal,
   ): Promise<ConversationTranscript | null>;
+  chooseDeletion?(input: ConversationDeletionChoice, signal: AbortSignal): Promise<void>;
 }
 export const conversationSyncStatusSchema = z
   .object({

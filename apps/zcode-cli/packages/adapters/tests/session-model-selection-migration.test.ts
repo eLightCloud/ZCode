@@ -1,9 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SESSION_ENTRY_MODEL_SELECTION, createProjectId, createSessionId } from "@zcode/contracts";
+import { SESSION_ENTRY_MODEL_SELECTION, createSessionId } from "@zcode/contracts";
+import { SQLITE_MIGRATIONS } from "../src/storage/session-store/migrations.js";
 import { createSqliteSessionStore } from "../src/storage/session-store/sqlite-session-store.js";
 
 const sessionID = createSessionId("legacy-selection");
@@ -23,19 +25,24 @@ describe("旧 Session 当前选择的单次迁移", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "zcode-selection-migration-"));
     const dbPath = join(root, "session.sqlite");
-    store = await createSqliteSessionStore({ dbPath });
-    opened = true;
     db = new DatabaseSync(dbPath);
-    await store.createSession({
-      id: sessionID,
-      projectID: createProjectId("migration"),
-      directory: root,
-      slug: "migration",
-      title: "Old history",
-      version: "old",
-    });
-    // 此夹具只用新版建空表；删除尚未播种数据的 0020 记录，模拟升级前库。
-    db.prepare("DELETE FROM schema_migration WHERE id = ?").run("0020_provider_model_selection");
+    db.exec(
+      "CREATE TABLE schema_migration(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, app_version TEXT, time_applied INTEGER NOT NULL)",
+    );
+    // 按真实升级前 SQL 建库并播种，不能先执行新迁移再删除账本。
+    for (const migration of SQLITE_MIGRATIONS.filter((item) => item.id < "0020")) {
+      db.exec(migration.sql);
+      db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+        migration.id,
+        createHash("sha256").update(migration.sql.trim()).digest("hex"),
+        migration.appVersion,
+        1,
+      );
+    }
+    db.prepare(
+      "INSERT INTO session(id,project_id,slug,directory,title,version,time_created,time_updated) VALUES(?,?,?,?,?,?,?,?)",
+    ).run(sessionID, "migration", "migration", root, "Old history", "old", 1, 1);
+    opened = false;
   });
   const migrate = async (_input: { sessionID: typeof sessionID }) => {
     if (opened) store.close();
@@ -48,8 +55,9 @@ describe("旧 Session 当前选择的单次迁移", () => {
     if (opened) store.close();
     await rm(root, { recursive: true, force: true });
   });
-  const entry = async (data: unknown) =>
-    store.saveSessionEntry({
+  const entry = async (data: unknown) => {
+    if (!opened) return legacyEntry({ modelSelection: data });
+    return store.saveSessionEntry({
       id: `${sessionID}:runtime-model-selection`,
       sessionID,
       type: SESSION_ENTRY_MODEL_SELECTION,
@@ -57,6 +65,7 @@ describe("旧 Session 当前选择的单次迁移", () => {
       time: { created: 1, updated: 1 },
       data,
     });
+  };
   // 已发布 fixture 直接写磁盘；不能经过新版 writer 后假装是升级前数据。
   const legacyEntry = (data: unknown) => {
     db.prepare(
@@ -96,14 +105,20 @@ describe("旧 Session 当前选择的单次迁移", () => {
   it("离线迁移旧消息并固定同域个人身份；消息旧成员和任务活动时间不变", async () => {
     oldMessage();
     const before = db.prepare("select data from message").get();
-    const sessionBefore = await store.getSession(sessionID);
+    const sessionBefore = db.prepare("SELECT * FROM session").get();
     await migrate({ sessionID });
     expect(await read()).toEqual(current);
     expect(rawEntry()).toEqual({ modelSelection: current });
     expect(JSON.parse(String(db.prepare("select data from message").get()?.data))).toMatchObject(
       JSON.parse(String(before?.data)),
     );
-    expect((await store.getSession(sessionID))?.time).toEqual(sessionBefore?.time);
+    expect(db.prepare("SELECT * FROM session").get()).toEqual({
+      ...sessionBefore,
+      time_deleted: null,
+      last_outcome: null,
+      last_outcome_input_id: null,
+      last_outcome_at: null,
+    });
     await migrate({ sessionID });
     expect(await read()).toEqual(current);
   });
@@ -196,7 +211,7 @@ describe("旧 Session 当前选择的单次迁移", () => {
         note: { preserve: true },
       };
       legacyEntry(legacy);
-      expect(await read()).toBeUndefined();
+      expect(rawEntry()).not.toHaveProperty("modelSelection");
       await migrate({ sessionID });
       const migrated = {
         providerId: newProvider,

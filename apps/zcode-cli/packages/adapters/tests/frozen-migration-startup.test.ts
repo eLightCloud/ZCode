@@ -153,10 +153,44 @@ describe("Todo144：启动 runner 保持冻结迁移合同", () => {
     const db = createFixture();
     seedSelections(db);
     applyFrozen(db);
+    // 清空选择是当前原生 writer 的用户操作；旧连接只允许读取升级后的库。
+    db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
     db.exec("UPDATE session_entry SET data=json_set(data,'$.modelSelection',NULL)");
     const before = snapshot(db);
     await runSqliteSessionMigrations(db, ":memory:");
     applyFrozen(db);
+    expect(snapshot(db)).toEqual(before);
+  });
+
+  it("0026 保留旧连接只读，六表写入必须声明 v4 能力", () => {
+    const db = createFixture();
+    seedSelections(db);
+    applyFrozen(db);
+    const before = snapshot(db);
+    expect(db.prepare("SELECT count(*) AS n FROM session").get()?.n).toBeGreaterThan(0);
+    expect(
+      db
+        .prepare(
+          "SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name LIKE 'portable_context_%'",
+        )
+        .get()?.n,
+    ).toBe(18);
+    for (const table of ["session", "message", "part", "session_input", "session_entry", "todo"]) {
+      const column = String(db.prepare(`PRAGMA table_info(${table})`).get()!.name);
+      for (const sql of [
+        `INSERT INTO ${table} DEFAULT VALUES`,
+        `UPDATE ${table} SET ${column}=${column}`,
+        `DELETE FROM ${table}`,
+      ])
+        expect(() => db.exec(sql)).toThrow(/zcode_portable_context_version/);
+    }
+    db.function("zcode_portable_context_version", { deterministic: true }, () => 3);
+    expect(() => db.exec("UPDATE session SET title='must-not-write'")).toThrow(
+      /portable context writer required/,
+    );
+    expect(snapshot(db)).toEqual(before);
+    db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
+    expect(() => db.exec("UPDATE session SET title=title")).not.toThrow();
     expect(snapshot(db)).toEqual(before);
   });
 

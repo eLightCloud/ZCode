@@ -162,7 +162,7 @@ describe("DB109 会话库正式数据迁移", () => {
         "0024_session_database_identity",
       ]),
     );
-    expect(store.debugMigrationIds().at(-1)).toBe("0025_session_continuation");
+    expect(store.debugMigrationIds().at(-1)).toBe("0026_portable_context_writer");
     expect(raw("session_entry", "selection")).toEqual({
       ...oldEntry,
       modelSelection: currentSelection,
@@ -188,6 +188,8 @@ describe("DB109 会话库正式数据迁移", () => {
       ...sessionBefore,
       time_deleted: null,
       last_outcome: null,
+      last_outcome_input_id: null,
+      last_outcome_at: null,
     });
     const history = await store.messages({ sessionID });
     expect(history[0]?.info).not.toHaveProperty("model");
@@ -202,6 +204,9 @@ describe("DB109 会话库正式数据迁移", () => {
     store = await createSqliteSessionStore({ dbPath: path });
     expect(store.debugMigrationIds()).toContain(migrationId);
     store.close();
+    store = undefined;
+    // 在已升级副本中注入缺字段；这是当前 writer 的故障夹具，不代表旧 binary 可写新库。
+    db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
     db.prepare("UPDATE message SET data=json_remove(data,'$.modelSelection')").run();
     db.prepare("UPDATE session_entry SET data=json_remove(data,'$.modelSelection')").run();
     message(

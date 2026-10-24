@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -16,6 +17,20 @@ const open = (path = ":memory:") => {
   const db = new DatabaseSync(path);
   dbs.push(db);
   return db;
+};
+const seedLegacy = (db: DatabaseSync) => {
+  db.exec(
+    "CREATE TABLE schema_migration(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, app_version TEXT, time_applied INTEGER NOT NULL)",
+  );
+  for (const migration of SQLITE_MIGRATIONS.filter((item) => item.id < "0020")) {
+    db.exec(migration.sql);
+    db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+      migration.id,
+      createHash("sha256").update(migration.sql.trim()).digest("hex"),
+      migration.appVersion,
+      1,
+    );
+  }
 };
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -203,13 +218,12 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
       .sort()
       .at(-1),
   });
-  // 接续迁移 0025 新增实体表；构造旧库必须同时退回实际 schema，不能只删迁移账本。
-  db.exec(
-    "DROP TABLE session_continuation_receipt; DROP TABLE session_continuation; DELETE FROM schema_migration WHERE id >= '0020'",
-  );
+  // 升级分支从真实 0019 schema 开始，不在最新 schema 上只回退账本。
+  const upgrading = open();
+  seedLegacy(upgrading);
   const failed: SqliteMigrationProgress[] = [];
   await expect(
-    runSqliteSessionMigrationsAsync(db, ":memory:", {
+    runSqliteSessionMigrationsAsync(upgrading, ":memory:", {
       onProgress: async (s) => {
         failed.push(s);
         if (s.phase === "committing") throw new Error("commit barrier failed");
@@ -221,11 +235,7 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
   // 旧 schema 已真实退回 0019；失败事务不能把本轮未提交迁移报告为已应用。
   expect(failed.at(-1)?.migration?.lastAppliedMigrationId).toBe("0019_dwf_journal");
   expect(
-    db
-      .prepare(
-        "SELECT 1 FROM schema_migration WHERE id >= '0020'",
-      )
-      .get(),
+    upgrading.prepare("SELECT 1 FROM schema_migration WHERE id >= '0020'").get(),
   ).toBeUndefined();
 });
 
@@ -234,11 +244,10 @@ it("SILENTDB-03: another writer can finish the observed migrations without this 
   dirs.push(dir);
   const path = join(dir, "db.sqlite");
   const holder = open(path);
-  await runSqliteSessionMigrations(holder, path);
-  // 与上例保持真实旧 schema，等待者仍须由另一 writer 完成完整迁移。
-  holder.exec(
-    "DROP TABLE session_continuation_receipt; DROP TABLE session_continuation; DELETE FROM schema_migration WHERE id >= '0020'; BEGIN IMMEDIATE",
-  );
+  seedLegacy(holder);
+  // 测试的是观察账本后的迁移写锁等待，WAL 设置须在持锁前完成。
+  holder.exec("PRAGMA journal_mode=WAL");
+  holder.exec("BEGIN IMMEDIATE");
   const waiter = open(path);
   const states: SqliteMigrationProgress[] = [];
   const exec = vi.spyOn(waiter, "exec");

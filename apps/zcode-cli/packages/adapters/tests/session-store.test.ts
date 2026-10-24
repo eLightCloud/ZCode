@@ -137,6 +137,7 @@ describe("virtual project CLI session facts", () => {
       JSON.stringify({ type: "text", text: "正文保留" }),
     );
     const oldSession = db.prepare("SELECT * FROM session").get();
+    const upgradedSession = { ...oldSession, last_outcome_input_id: null, last_outcome_at: null };
     try {
       const store = await createSqliteSessionStore({ dbPath });
       try {
@@ -149,7 +150,7 @@ describe("virtual project CLI session facts", () => {
             own.id,
           ]),
         );
-        expect(db.prepare("SELECT * FROM session").get()).toEqual(oldSession);
+        expect(db.prepare("SELECT * FROM session").get()).toEqual(upgradedSession);
         expect(await store.listSessions()).toEqual([]);
         expect((await store.messages({ sessionID }))[0]).toMatchObject({
           info: { modelSelection: { providerId: "legacy-p", modelId: "legacy-m" } },
@@ -170,7 +171,7 @@ describe("virtual project CLI session facts", () => {
       const reopened = await createSqliteSessionStore({ dbPath });
       reopened.close();
       expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(before);
-      expect(db.prepare("SELECT * FROM session").get()).toEqual(oldSession);
+      expect(db.prepare("SELECT * FROM session").get()).toEqual(upgradedSession);
     } finally {
       db.close();
       await rm(root, { recursive: true, force: true });
@@ -507,7 +508,7 @@ describe("SQLite session store", () => {
   it("keeps the existing in-memory session store path working", async () => {
     const store = await createSqliteSessionStore({ dbPath: ":memory:" });
     try {
-      expect(store.debugMigrationIds()).toHaveLength(25);
+      expect(store.debugMigrationIds()).toHaveLength(26);
     } finally {
       store.close();
     }
@@ -648,6 +649,7 @@ describe("SQLite session store", () => {
       "0023_session_soft_delete_outcome",
       "0024_session_database_identity",
       "0025_session_continuation",
+      "0026_portable_context_writer",
     ];
 
     try {
@@ -687,6 +689,7 @@ describe("SQLite session store", () => {
         "0.16.9",
         "0.16.9",
         "0.16.9",
+        "0.17.0",
       ]);
 
       db.close();
@@ -724,7 +727,7 @@ describe("SQLite session store", () => {
         ]),
       );
       expect(attempts.flat().filter((result) => !result.ok)).toEqual([]);
-      expect(attempts.flat().every((result) => result.migrationIds?.length === 25)).toBe(true);
+      expect(attempts.flat().every((result) => result.migrationIds?.length === 26)).toBe(true);
     },
     CONCURRENT_STARTUP_TEST_TIMEOUT_MS,
   );
@@ -951,7 +954,8 @@ describe("SQLite session store", () => {
         "0022_backfilled_session_reasoning",
         "0023_session_soft_delete_outcome",
         "0024_session_database_identity",
-      "0025_session_continuation",
+        "0025_session_continuation",
+        "0026_portable_context_writer",
       ]);
       store.close();
     } finally {
@@ -2117,6 +2121,8 @@ describe("SQLite session store", () => {
 
       const db = new DatabaseSync(dbPath);
       try {
+        // 当前 schema 的损坏注入，明确使用当前 writer 能力，不冒充旧库。
+        db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
         db.prepare("update part set data = ? where id = ?").run("{", unrelatedPartID);
       } finally {
         db.close();
@@ -2140,7 +2146,7 @@ describe("SQLite session store", () => {
   it("keeps a legacy NULL-sequence message in place when it is re-saved", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "zcode-session-null-seq-"));
     const dbPath = join(tempRoot, "session.sqlite");
-    const store = await createSqliteSessionStore({ dbPath });
+    let store: Awaited<ReturnType<typeof createSqliteSessionStore>> | undefined;
     const sessionID = createSessionId("null-seq-resave");
     const created = 1_700_000_000_000;
     const messageIDs = [
@@ -2163,27 +2169,45 @@ describe("SQLite session store", () => {
       }) as const;
 
     try {
-      await store.createSession({
-        id: sessionID,
-        projectID: createProjectId("null-seq-resave"),
-        slug: "null-seq-resave",
-        directory: tempRoot,
-        title: "null seq resave",
-        version: "0.1.0",
-        time: { created, updated: created },
-      });
-      await store.saveMessage(userMessage(messageIDs[0], created));
-      await store.saveMessage(userMessage(messageIDs[1], created + 1));
-      await store.saveMessage(userMessage(messageIDs[2], created + 2));
-
-      // 模拟迁移遗漏/旧二进制写入：前两条失去 sequence（AFTER INSERT 触发器不拦 UPDATE）。
+      // 真实 0026 前 schema，旧 writer 的 NULL sequence 先于新版写保护存在。
       const db = new DatabaseSync(dbPath);
       try {
+        db.exec(
+          "CREATE TABLE schema_migration(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, app_version TEXT, time_applied INTEGER NOT NULL)",
+        );
+        for (const migration of SQLITE_MIGRATIONS.filter((item) => item.id < "0026")) {
+          db.exec(migration.sql);
+          db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+            migration.id,
+            createHash("sha256").update(migration.sql.trim()).digest("hex"),
+            migration.appVersion,
+            1,
+          );
+        }
+        db.prepare(
+          "INSERT INTO session(id,project_id,slug,directory,title,version,time_created,time_updated) VALUES(?,?,?,?,?,?,?,?)",
+        ).run(
+          sessionID,
+          "null-seq-resave",
+          "null-seq-resave",
+          tempRoot,
+          "null seq resave",
+          "0.1.0",
+          created,
+          created,
+        );
+        for (const [index, id] of messageIDs.entries()) {
+          const { id: _, sessionID: _session, ...data } = userMessage(id, created + index);
+          db.prepare(
+            "INSERT INTO message(id,session_id,time_created,time_updated,data,sequence) VALUES(?,?,?,?,?,?)",
+          ).run(id, sessionID, created + index, created + index, JSON.stringify(data), index + 1);
+        }
         db.prepare("update message set sequence = null where id = ?").run(messageIDs[0]);
         db.prepare("update message set sequence = null where id = ?").run(messageIDs[1]);
       } finally {
         db.close();
       }
+      store = await createSqliteSessionStore({ dbPath });
 
       // 读序基线：非空 sequence 在前，NULL 块按 time_created 兜底。
       const before = await store.messages({ sessionID });
@@ -2213,7 +2237,7 @@ describe("SQLite session store", () => {
         verify.close();
       }
     } finally {
-      store.close();
+      store?.close();
       await rm(tempRoot, { force: true, recursive: true });
     }
   });

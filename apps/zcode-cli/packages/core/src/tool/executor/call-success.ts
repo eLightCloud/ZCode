@@ -18,7 +18,7 @@ import type { ToolExecutionResult } from "../types.js";
 
 import type { ToolEntry } from "../types.js";
 
-import type { BackgroundTaskTracker } from "./background-tasks.js";
+import type { BackgroundTaskTrackerApi as BackgroundTaskTracker } from "./background-tracker-api.js";
 
 import { emitToolCallResult } from "./events.js";
 

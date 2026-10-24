@@ -1,11 +1,10 @@
-import type { ProductProjection } from "./product-projection.js";
 import type { ProductProjectionContext } from "./projection-context.js";
 
 // 保留原子投影副本的字段级复制与 adoption，不复制 owner 或引入第二状态。
 export function cloneProjectionState(
   this: ProductProjectionContext,
   prototype: object,
-): ProductProjection {
+): ProductProjectionContext {
   const clone = Object.create(prototype) as ProductProjectionContext;
   clone.snapshot = this.snapshot;
   clone.rowIndexById = new Map(this.rowIndexById);
@@ -69,7 +68,7 @@ export function cloneProjectionState(
   clone.configModeTouchedByEvent = this.configModeTouchedByEvent;
   clone.droppedContentStreamEventCount = this.droppedContentStreamEventCount;
   clone.normalizationDiagnostics = [...this.normalizationDiagnostics];
-  return clone as unknown as ProductProjection;
+  return clone;
 }
 
 export function adoptProjectionState(

@@ -1,6 +1,6 @@
 import type { TraceSpan, TraceSpanLane, TraceSpanStatus } from "../src/shared.js";
 
-import { stringValue } from "./sources.js";
+import { stringValue } from "./observation-record-values.js";
 
 import type { EventRecord, LoadedObservation, LogRecord } from "./types.js";
 

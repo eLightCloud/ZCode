@@ -1,6 +1,6 @@
 import type { SessionEventStorePort, SessionEventStoreStats } from "../interfaces/session.port.js";
 import type { SessionId } from "../interfaces/shared.js";
-import type { SessionEvent } from "./session.events.js";
+import type { SessionEvent } from "./session-event-identity.js";
 import {
   createSessionEventRetentionPolicy,
   isTransientSessionEvent,

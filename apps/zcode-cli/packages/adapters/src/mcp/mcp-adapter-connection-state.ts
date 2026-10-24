@@ -55,8 +55,8 @@ export function appConnectionSnapshot(
 export function nextConnectionGeneration(this: NodeMcpAdapterContext, name: string): number {
   const generation = (this.connectionGenerations.get(name) ?? 0) + 1;
   this.connectionGenerations.set(name, generation);
-  // eslint-disable-next-line unicorn/no-useless-spread -- 回调可能增删监听器，本次通知必须固定接收者。
-  for (const listener of [...(this.appConnectionListeners.get(name) ?? [])]) listener();
+  // 回调可能增删监听器；先固定本次通知的接收者。
+  for (const listener of Array.from(this.appConnectionListeners.get(name) ?? [])) listener();
   return generation;
 }
 

@@ -1,5 +1,5 @@
-import type { ModelId } from "./request-identity.js";
-import type { ModelProviderId } from "./request-identity.js";
+import type { ModelId } from "./model-identity.js";
+import type { ModelProviderId } from "./model-identity.js";
 import type { ModelToolReferenceContentBlock } from "../tools/tool-search.js";
 // ============================================================
 // Model Protocol - provider-neutral model contracts

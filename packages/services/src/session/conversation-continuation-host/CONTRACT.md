@@ -15,3 +15,5 @@
 未知 ACK 重查原意图，取消遵循原生授予边界；本模块不根据超时重授予，
 不修改历史模型事实、provider 配置或其它会话。真实双向交接与恢复另由
 隔离 Core / Host / Nginx / Web 纵切证明。
+
+同一 Host 接合同时覆盖既有 createConversationSyncHost 的捕获/索引恢复 façade；只有 TaskIndexRepo 和 Core 原 writer 写入，仍没有新增 Host 或接纳队列。该源路径纳管不改实现。

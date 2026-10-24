@@ -2,18 +2,11 @@ import { ModelId, ModelProviderId } from "@zcode/contracts";
 
 import { traceContextToLogContext } from "../deps.js";
 
-import type {
-  ModelReasoningContentBlock,
-  ModelStreamEvent,
-  ModelStreamingPayload,
-  ModelToolCall,
-  ModelUsage,
-  ToolCallId,
-} from "../deps.js";
+import type { ModelReasoningContentBlock, ModelStreamEvent, ModelStreamingPayload, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
 
 import { normalizeModelToolCallsForRuntime, normalizeStreamError } from "../helpers/index.js";
 
-import type { RunModelTextRequestOptions } from "../types.js";
+import type { RunModelTextRequestOptions } from "../model-execution-types.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 

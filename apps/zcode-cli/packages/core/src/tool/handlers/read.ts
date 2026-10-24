@@ -25,7 +25,7 @@ import { createReadFileStateKey } from "../read-file-state.js";
 
 import { inferImageMimeFromPath, readImageFile } from "./read-image.js";
 
-import { inferVideoMimeFromPath } from "../../runtime/helpers/attachment-video.js";
+import { inferVideoMimeFromPath } from "../../agent/video-input.js";
 
 import { readVideoFile } from "./read-video.js";
 

@@ -1,3 +1,8 @@
+import { type DynamicWorkflowActivationSource, type DynamicWorkflowActivationEntryData } from "./dynamic-workflow-activation-types.js";
+export type {
+  DynamicWorkflowActivationSource,
+  DynamicWorkflowActivationEntryData,
+} from "./dynamic-workflow-activation-types.js";
 // ============================================================
 // 动态工作流工具面的按需激活（docs/dynamic-workflow/launch.md「On demand: activation」）
 // ============================================================
@@ -10,30 +15,12 @@
 // 状态 owner 是 runtime（dynamicWorkflowToolsActivated），不是 config：AgentRuntime 构造时把
 // config 拷了一份，装配层闭包里那个 runtimeConfig 对象看不到运行期的翻转。
 
-import {
-  SESSION_ENTRY_DYNAMIC_WORKFLOW_ACTIVATION,
-  type MessageWithParts,
-  type SessionEntryInfo,
-  type SessionId,
-  type TraceContext,
-} from "@zcode/contracts";
+import { SESSION_ENTRY_DYNAMIC_WORKFLOW_ACTIVATION, type MessageWithParts, type SessionEntryInfo, type SessionId, type TraceContext } from "@zcode/contracts";
 import { traceContextToLogContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { AgentRuntimeConfig } from "../types.js";
 import { isDynamicWorkflowToolName } from "../../tool/index.js";
 import { refreshBranchAwareBuiltInTools } from "./embedded-search-branch.js";
-
-/** 激活的来源，落进 session entry 供排查；行为上四者等价。 */
-export type DynamicWorkflowActivationSource =
-  | "command"
-  | "run_control"
-  | "resume_entry"
-  | "resume_history";
-
-export interface DynamicWorkflowActivationEntryData {
-  activated: true;
-  source: DynamicWorkflowActivationSource;
-}
 
 /**
  * 内置 `/workflow` 命令名（bootstrap/src/builtin-workflow-command.ts 的 BUILTIN_WORKFLOW_COMMAND_NAME）。

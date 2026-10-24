@@ -1,6 +1,6 @@
 import { type SessionEvent } from "@zcode/contracts";
 
-import type { ColdEventMergeDiagnostic } from "./cold-event-merge.js";
+import type { ColdEventMergeDiagnostic } from "./cold-event-merge-types.js";
 
 export function recordDiagnostic(
   diagnostics: Map<ColdEventMergeDiagnostic["code"], ColdEventMergeDiagnostic>,

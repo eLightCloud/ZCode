@@ -41,7 +41,7 @@ import {
 import { compileProgram } from "./dynamic-workflow-run-compile.js";
 import { mapFillDiagnostics, unboundFillModelDiagnostics } from "./dynamic-workflow-run-holes.js";
 import type { RunRegistryEntry } from "./dynamic-workflow-run-observation.js";
-import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-run-service.js";
+import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-service-contract.js";
 
 /** 本模块借用的 service 内部状态；全是引用，本文件不持有任何自己的状态。 */
 export interface DynamicWorkflowRunFillContext {

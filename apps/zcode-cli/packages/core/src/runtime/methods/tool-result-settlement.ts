@@ -1,4 +1,5 @@
-import { COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION, traceContextToLogContext, TurnMachineImpl } from "../deps.js";
+import { COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION } from "@zcode/contracts";
+import { traceContextToLogContext, TurnMachineImpl } from "../deps.js";
 import type {
   MessageId,
   PartId,
@@ -18,7 +19,7 @@ import {
 } from "../helpers/index.js";
 import { persistToolResultMediaAttachments } from "../helpers/tool-result-media-persistence.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { StreamedToolExecutionResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../model-execution-types.js";
 import { createRuntimeToolResultEntry } from "../../agent/message-history.js";
 import { recordBrowserTurnToolResult } from "../../repl/browser-turn-state.js";
 import { completedToolPartMetadata, mcpToolPartMetadata } from "./tool-part-metadata.js";

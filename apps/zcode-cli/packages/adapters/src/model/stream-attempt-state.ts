@@ -1,6 +1,7 @@
 import type { AiSdkModelTextRequest } from "./runner-runtime.js";
 
-import type { ModelStatusContext } from "./runner-status.js";
+
+import type { ModelStatusContext } from "./model-status-context.js";
 
 import { createLinkedAbortController } from "./stream-idle-timeout.js";
 

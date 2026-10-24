@@ -4,13 +4,9 @@
 // 因此与 prompt-turn.ts、record-access.ts 并列放在 commands/ 下，
 // 而不是寄居在某一个 handler 文件里。
 import type { SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
-import {
-  isHighspeedProviderId,
-  resolveExecutionState,
-  type ModelSelection,
-} from "@zcode/shared";
+import { isHighspeedProviderId, resolveExecutionState, type ModelSelection } from "@zcode/shared";
 import type { TurnAttachment } from "@zcode/core";
-import type { SteerTurnOptions } from "../../app/types.js";
+import type { SteerTurnOptions } from "../../app/app-option-types.js";
 import { parseProviderQualifiedModelSelection } from "../../app/provider-registry-selection.js";
 import type { V4CommandCoreHost, V4SessionRecordView } from "./types.js";
 

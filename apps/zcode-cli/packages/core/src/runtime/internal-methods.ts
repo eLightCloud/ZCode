@@ -1,68 +1,9 @@
-import type {
-  CollaborationMode,
-  Model,
-  ModelInputMessage,
-  ModelSelection,
-  ModelSelectionOrigin,
-  ModelUsageSummary,
-  ModelStreamingPayload,
-  ModelToolCall,
-  ModelToolContract,
-  MessageId,
-  ProjectId,
-  SessionEvent,
-  SessionEventSink,
-  SkillLoadOutcome,
-  SubagentPort,
-  TodoItem,
-  SessionGoal,
-  McpConnectionSnapshot,
-  TargetChangedPayload,
-  DynamicWorkflowRunProgressPayload,
-  UserInputAutoResolutionUpdatedPayload,
-  TraceContext,
-  TurnSteerInput,
-  TurnInputIntentMetadata,
-  TurnSteerRejectReason,
-  TurnSteerResult,
-  TurnId,
-  ContextSourceSnapshot,
-  TurnState,
-  ToolSchedule,
-  ToolExecutor,
-  ToolRegistry,
-  ContextBuilder,
-  ExecutionShellSelection,
-} from "./deps.js";
+import type { CollaborationMode, Model, ModelInputMessage, ModelSelection, ModelSelectionOrigin, ModelUsageSummary, ModelStreamingPayload, ModelToolCall, ModelToolContract, MessageId, ProjectId, SessionEvent, SessionEventSink, SkillLoadOutcome, SubagentPort, TodoItem, SessionGoal, McpConnectionSnapshot, TargetChangedPayload, DynamicWorkflowRunProgressPayload, UserInputAutoResolutionUpdatedPayload, TraceContext, TurnSteerInput, TurnInputIntentMetadata, TurnSteerRejectReason, TurnSteerResult, TurnId, ContextSourceSnapshot, TurnState, ToolSchedule, ToolExecutor, ToolRegistry, ContextBuilder, ExecutionShellSelection } from "./deps.js";
 import type { BackgroundResultOriginMeta, ContextUsageBreakdownItem } from "@zcode/contracts";
 import type { RuntimeCommand, RuntimeCommandId } from "./command-queue.js";
 import type { RuntimeMessageEntry } from "../agent/message-history.js";
-import type {
-  ActiveTurnInfo,
-  AcquireForegroundPromotionLeaseResult,
-  ActiveTurnKind,
-  ActiveTurnSteeringState,
-  AgentRuntimeConfig,
-  AgentRuntimeDeps,
-  ContextUsageCategory,
-  ContextUsageConfidence,
-  ContextUsageMetric,
-  ContextUsageMessageRoleBreakdown,
-  ContextUsageSkillDetail,
-  ContextUsageToolDetail,
-  ContinueActiveTargetLoopOptions,
-  DrainedPendingInputDiagnostics,
-  ForegroundPromotionLeaseMode,
-  EnqueueSubagentMessageInput,
-  ResumeSessionOptions,
-  ResumeSessionResult,
-  RunModelTextRequestOptions,
-  RuntimeModelTextResult,
-  SealBackgroundTaskNotificationsInput,
-  StopActiveForegroundExecutionOptions,
-  StopActiveForegroundExecutionResult,
-  TurnResult,
-} from "./types.js";
+import type { ActiveTurnInfo, AcquireForegroundPromotionLeaseResult, ActiveTurnKind, ActiveTurnSteeringState, AgentRuntimeConfig, AgentRuntimeDeps, ContinueActiveTargetLoopOptions, DrainedPendingInputDiagnostics, ForegroundPromotionLeaseMode, EnqueueSubagentMessageInput, ResumeSessionOptions, ResumeSessionResult, SealBackgroundTaskNotificationsInput, StopActiveForegroundExecutionOptions, StopActiveForegroundExecutionResult, TurnResult } from "./types.js";
+import type { ContextUsageCategory, ContextUsageConfidence, ContextUsageMetric, ContextUsageMessageRoleBreakdown, ContextUsageSkillDetail, ContextUsageToolDetail, RunModelTextRequestOptions, RuntimeModelTextResult } from "./model-execution-types.js";
 
 export interface AgentRuntimeCoreMethods {
   updateConfig(

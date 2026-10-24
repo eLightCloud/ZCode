@@ -1,6 +1,6 @@
 import { READ_DEFAULT_MAX_LINES, type ModelMessageContentBlock } from "@zcode/contracts";
 
-import { formatReadTextOutput } from "../tool/handlers/read-text.js";
+import { formatReadTextOutput } from "../tool/session-tools-api.js";
 import { wrapSystemReminderForSource } from "./source.js";
 
 export interface PromptAttachmentReminderInput {

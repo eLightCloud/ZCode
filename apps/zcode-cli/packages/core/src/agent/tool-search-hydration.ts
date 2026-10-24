@@ -4,7 +4,7 @@ import {
   compactBoundaryPayloadSchema,
   type Logger,
 } from "@zcode/contracts";
-import { compactDiscoveryMetadata } from "../tool/search/history.js";
+import { compactDiscoveryMetadata } from "../tool/model-surface-api.js";
 
 export function hydrateToolSearchContent(value: unknown, logger?: Logger) {
   if (value === undefined) return undefined;

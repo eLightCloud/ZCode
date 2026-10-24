@@ -38,7 +38,10 @@ function resolveZCodeIcon(): Electron.NativeImage {
   if (cachedZCodeIcon && !cachedZCodeIcon.isEmpty()) return cachedZCodeIcon;
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, "icon.png")
-    : join(process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "..", "..", "build"), "icon.png");
+    : join(
+        process.env.ZCODE_APPLICATION_ICON_DIR || join(import.meta.dirname, "..", "..", "build"),
+        "icon.png",
+      );
   const image = nativeImage.createFromPath(iconPath);
   cachedZCodeIcon = image.isEmpty()
     ? nativeImage.createFromDataURL(CUA_HELPER_DRAG_ICON_DATA_URL)

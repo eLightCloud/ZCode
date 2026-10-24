@@ -11,19 +11,13 @@ import {
 import {
   resolveAmendMaxConcurrency,
   resolveAmendSubagentModelChoice,
-} from "../../tool/handlers/amend-workflow-resolve.js";
-import { resolveKeptScriptFile } from "../../tool/handlers/amend-workflow-source.js";
-import { parseWorkflowSubagentModel } from "../../tool/handlers/model-reference.js";
-import {
-  boundGraphOfAnalysis,
-  displayOfAnalysis,
-} from "../../tool/handlers/workflow-analysis-display.js";
-import {
-  resolveWorkflowDraftName,
-  writeWorkflowDraft,
-} from "../../tool/handlers/workflow-drafts.js";
-import { analyzeScript } from "../../tool/handlers/workflow-script-analysis.js";
-import { bindScriptModels } from "../../tool/handlers/workflow-script-models.js";
+} from "../../tool/workflow-host-api.js";
+import { resolveKeptScriptFile } from "../../tool/workflow-host-api.js";
+import { parseWorkflowSubagentModel } from "../../tool/workflow-host-api.js";
+import { boundGraphOfAnalysis, displayOfAnalysis } from "../../tool/workflow-host-api.js";
+import { resolveWorkflowDraftName, writeWorkflowDraft } from "../../tool/workflow-host-api.js";
+import { analyzeScript } from "../../tool/workflow-host-api.js";
+import { bindScriptModels } from "../../tool/workflow-host-api.js";
 import type { ExecutableToolCall } from "../../tool/types.js";
 import { traceContextToLogContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";

@@ -1,5 +1,5 @@
-import type { SessionEvent } from "./session.events.js";
-import { SessionEventType } from "./session.events.js";
+import type { SessionEvent } from "./session-event-identity.js";
+import { SessionEventType } from "./session-event-identity.js";
 
 /**
  * 与消息流同频的瞬态事件。

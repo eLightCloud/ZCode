@@ -1,38 +1,20 @@
+import { type ProjectMemoryUpdate } from "./project-memory-dream-types.js";
+export type { ProjectMemoryUpdate } from "./project-memory-dream-types.js";
 import { basename, join, resolve } from "node:path";
 
 import type { SessionInfo, TraceContext } from "../deps.js";
-import {
-  systemReminderAttachmentEntry,
-  type RuntimeAttachmentEntry,
-} from "../../agent/message-history.js";
-import {
-  acquireDreamLock,
-  buildMemoryDreamPrompt,
-  collectDreamTouchedPaths,
-  evaluateAutoDreamTiming,
-  readDreamLastConsolidatedAt,
-  restoreDreamLockAfterFailure,
-} from "../../memory/dream.js";
+import { systemReminderAttachmentEntry, type RuntimeAttachmentEntry } from "../../agent/message-history.js";
+import { acquireDreamLock, buildMemoryDreamPrompt, collectDreamTouchedPaths, evaluateAutoDreamTiming, readDreamLastConsolidatedAt, restoreDreamLockAfterFailure } from "../../memory/dream.js";
 import { runMemoryAgentLoop } from "../../memory/memory-agent-loop.js";
 import { findLatestReadFileState } from "../../tool/read-file-state.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import {
-  prepareProjectMemoryAgentRequest,
-  captureProjectMemoryAgentContext,
-  createProjectMemoryAgentToolExecutor,
-  type ProjectMemoryAgentContext,
-} from "./project-memory-agent.js";
+import { prepareProjectMemoryAgentRequest, captureProjectMemoryAgentContext, createProjectMemoryAgentToolExecutor } from "./project-memory-agent.js";
+import { type ProjectMemoryAgentContext } from "./project-memory-agent-types.js";
 import { invalidateProjectMemoryRecallPaths } from "./project-memory-recall.js";
 import { isMainMemoryTaskType, resolveEnabledProjectMemoryRoot } from "./project-memory.js";
 
 const DREAM_MINIMUM_TRANSCRIPT_SESSIONS = 5;
 const DREAM_MAX_TURNS = 50;
-export interface ProjectMemoryUpdate {
-  inContextPaths: string[];
-  paths: string[];
-  source: "dream";
-  summary: string;
-}
 
 export function selectProjectDreamSessions(input: {
   currentSessionId: AgentRuntimeInternal["sessionId"];

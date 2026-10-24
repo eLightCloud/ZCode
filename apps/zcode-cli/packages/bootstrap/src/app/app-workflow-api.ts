@@ -31,7 +31,7 @@ import type {
 
 import type { BackgroundBashOutputResult } from "@zcode/shared";
 
-import type { PromptInput, SubmitPromptOptions } from "./types.js";
+import type { PromptInput, SubmitPromptOptions } from "./app-option-types.js";
 export interface AppWorkflowApi {
   readBackgroundBashOutput(workId: string, sessionId?: string): Promise<BackgroundBashOutputResult>;
 

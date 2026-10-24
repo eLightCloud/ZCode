@@ -1,3 +1,4 @@
+export { compareDateDesc } from "./network-request-index.js";
 import "vis-timeline/styles/vis-timeline-graph2d.min.css";
 
 import type {
@@ -204,10 +205,6 @@ export function formatTime(value?: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
-}
-
-export function compareDateDesc(left?: string, right?: string): number {
-  return new Date(right ?? 0).getTime() - new Date(left ?? 0).getTime();
 }
 
 export function compareDateAsc(left?: string, right?: string): number {

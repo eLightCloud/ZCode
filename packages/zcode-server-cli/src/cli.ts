@@ -30,6 +30,7 @@ import {
   runLocalArchiveUpdateCommand,
   runUpdateCommand,
   type UpdateDaemonHandoff,
+  type UpdateCliIO,
 } from "./runtime/updateCommand.js";
 import { DataRootLock } from "./runtime/lock.js";
 import { ReleaseManager } from "./runtime/releaseManager.js";
@@ -49,8 +50,7 @@ import {
 } from "./runtime/serviceInstallation.js";
 import { ProxyStdioError, runProxyStdio } from "./server-core/proxyStdio.js";
 
-export interface CliIO {
-  stdout?: { write(value: string): void };
+export interface CliIO extends UpdateCliIO {
   stderr?: { write(value: string): void };
   confirm?: (prompt: string) => Promise<string>;
   legacyDelegate?: (argv: readonly string[]) => Promise<number>;
@@ -58,6 +58,8 @@ export interface CliIO {
 
 export interface ServerCliRuntimeOptions {
   bundledAgentWiring?: BundledAgentWiring | null;
+  /** Trusted assembly display metadata; does not change technical product identity. */
+  applicationName?: string;
   proxyStdioStreams?: { input: Readable; output: Writable };
   workspaceAliasRepo?: Pick<SourceServerWorkspaceAliasRepo, "retryFailedWorkspace">;
   /** process/service manager 是更新协调器的外部边界；测试可注入受控实现。 */
@@ -113,6 +115,16 @@ export async function runServerCli(
 ): Promise<number> {
   const json = argv.includes("--json");
   try {
+    const applicationName = runtimeOptions.applicationName ?? io.applicationName;
+    if (
+      applicationName !== undefined &&
+      (!applicationName.trim() ||
+        applicationName.length > 128 ||
+        /[\u0000-\u001f\u007f]/.test(applicationName))
+    ) {
+      throw new Error("application-brand.invalid-display-name");
+    }
+    io = { ...io, applicationName };
     const parsed = parseServerCliArguments(argv);
     const command = parsed.argv[0];
     if (command === "version" || command === "--version") {
@@ -200,7 +212,7 @@ export async function runServerCli(
       case "update": {
         const updateLock = await acquireLifecycleCommandLock(
           layout,
-          "Another ZCode Server update is already running",
+          `Another ${io.applicationName ?? "ZCode"} Server update is already running`,
         );
         const updateDaemonHandoff =
           runtimeOptions.updateDaemonHandoff ?? createUpdateDaemonHandoff();
@@ -230,7 +242,7 @@ export async function runServerCli(
       case "uninstall": {
         const uninstallLock = await acquireLifecycleCommandLock(
           layout,
-          "A ZCode Server update is already running",
+          `A ${io.applicationName ?? "ZCode"} Server update is already running`,
         );
         try {
           return await runUninstall(io, json, layout);
@@ -312,7 +324,7 @@ async function runServe(
         else
           stdout(
             io,
-            `ZCode Server ${existing.state} at ${existing.host ?? ""}:${existing.port ?? ""}`,
+            `${io.applicationName ?? "ZCode"} Server ${existing.state} at ${existing.host ?? ""}:${existing.port ?? ""}`,
           );
         return 0;
       }
@@ -394,7 +406,11 @@ async function runServe(
       serviceStarted,
     );
     if (json) stdout(io, started);
-    else stdout(io, `ZCode Server ${started.state} at ${started.host ?? ""}:${started.port ?? ""}`);
+    else
+      stdout(
+        io,
+        `${io.applicationName ?? "ZCode"} Server ${started.state} at ${started.host ?? ""}:${started.port ?? ""}`,
+      );
     process.stdin.pause();
     process.stdin.destroy();
     return 0;
@@ -471,7 +487,11 @@ async function runServe(
       return 0;
     }
     if (json) stdout(io, status);
-    else stdout(io, `ZCode Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`);
+    else
+      stdout(
+        io,
+        `${io.applicationName ?? "ZCode"} Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`,
+      );
     await new Promise<void>((resolve) => {
       foregroundStopped = resolve;
     });
@@ -600,8 +620,9 @@ async function runUninstall(
   json: boolean,
   layout: ReturnType<typeof resolveServerLayout>,
 ): Promise<number> {
-  const first = await (io.confirm?.("Type DELETE to uninstall ZCode Server: ") ??
-    Promise.resolve(""));
+  const first = await (io.confirm?.(
+    `Type DELETE to uninstall ${io.applicationName ?? "ZCode"} Server: `,
+  ) ?? Promise.resolve(""));
   if (first !== "DELETE") throw new Error("Uninstall cancelled");
   const second = await (io.confirm?.("Type DELETE again to confirm: ") ?? Promise.resolve(""));
   if (second !== "DELETE") throw new Error("Uninstall cancelled");

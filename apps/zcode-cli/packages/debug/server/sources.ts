@@ -1,3 +1,5 @@
+import { isRecord, stringValue, numberValue } from "./observation-record-values.js";
+export { isRecord, stringValue, numberValue } from "./observation-record-values.js";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -176,10 +178,13 @@ function toEventRecord(record: JsonRecord): EventRecord | null {
   if (!type) return null;
 
   return {
-    id: stringValue(value.id) ?? stringValue(value.eventId) ?? `${record.sourcePath}:${record.line}`,
+    id:
+      stringValue(value.id) ?? stringValue(value.eventId) ?? `${record.sourcePath}:${record.line}`,
     type,
     timestamp:
-      stringValue(value.timestamp) ?? stringValue(value.occurredAt) ?? stringValue(value.recordedAt),
+      stringValue(value.timestamp) ??
+      stringValue(value.occurredAt) ??
+      stringValue(value.recordedAt),
     traceId: stringValue(value.traceId),
     sessionId: stringValue(value.sessionId),
     turnId: stringValue(value.turnId),
@@ -278,16 +283,4 @@ function parseData(value: unknown): Record<string, unknown> {
 function millisToIso(value: unknown): string | undefined {
   const millis = numberValue(value);
   return millis === undefined ? undefined : new Date(millis).toISOString();
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-export function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-export function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }

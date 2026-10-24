@@ -1,3 +1,5 @@
+import { type CompiledDynamicWorkflowScript } from "./workflow-compilation-types.js";
+export type { CompiledDynamicWorkflowScript } from "./workflow-compilation-types.js";
 // ============================================================
 // Dynamic Workflow Run 的启动执行体（submit 与 resume 的共享半身）
 // ============================================================
@@ -22,11 +24,9 @@ import {
 import type { AgentRuntime } from "@zcode/core";
 import { parseModelPickerValue, type ModelSelection } from "@zcode/shared/model-selection";
 import {
-  type ActorSubmitProfile,
   refToString,
   validate,
   type ActorRef,
-  type AskSpec,
   type Caps,
   type ImportedRunCache,
   type JournalStorePort,
@@ -36,7 +36,7 @@ import {
 } from "@zcode/dynamic-workflow";
 import { runWorkflowScript } from "@zcode/dynamic-workflow-runtime";
 import { createJournalSequenceCapture } from "./dynamic-workflow-run-sequence-capture.js";
-import type { CompiledHole } from "./dynamic-workflow-run-holes.js";
+
 import { toProgressPayload } from "./dynamic-workflow-run-progress-payload.js";
 import {
   readRunLaunchAnchor,
@@ -46,41 +46,18 @@ import {
   type RunLaunch,
 } from "./dynamic-workflow-run-launch-anchor.js";
 import { resolveWorkflowDefaultConcurrency } from "./workflow-default-concurrency.js";
-import type { ActorSessionQuiescence } from "./workflow-driver-quiescence.js";
+import type { ActorSessionQuiescence } from "./workflow-quiescence-contract.js";
 import { resolveActorPersonaModel } from "./workflow-actor-model.js";
 import { createAgentRuntimeWorkflowDriver } from "./workflow-driver.js";
 import type { WorkflowEscalationRegistry } from "./workflow-escalation-registry.js";
 import { runBoundTarget, type WorkflowRunControl } from "./workflow-run-control.js";
 import { createWorkflowRunSeatGate } from "./workflow-seat-gate.js";
-import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-run-service.js";
+import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-service-contract.js";
 
 export { toProgressPayload, toProtocolEvent } from "./dynamic-workflow-run-progress-payload.js";
 
 /** 适配包内校验器到引擎的 ValidateFn 契约（launch 是 runWorkflowScript 的唯一调用点）。 */
 const validateFn: ValidateFn = (schema, value) => validate(schema as JsonSchema, value);
-
-/** 一次编译的全部产物。四个消费者共用同一个 ts.Program（编译一次，见 run service 不变式 2）。 */
-export interface CompiledDynamicWorkflowScript {
-  lowered: string;
-  scriptHash: string;
-  askSpecs: Map<string, AskSpec>;
-  /** 每个 actor 站点的 submit profile。 */
-  actorSubmitProfiles: ReadonlyMap<string, ActorSubmitProfile>;
-  /** 站点 → 词法出生阶段名（docs/execution-engine.md「Identity: sites, ordinals, phases」）。 */
-  sitePhases: ReadonlyMap<string, string>;
-  /**
-   * 已补全留白的函数体文本（站点 id → `(async () => { … })`；docs/execution-engine.md「The text
-   * that runs」）。补全服务把 `holeBodies[siteId]` 交给引擎作为那处留白的 `code`。
-   */
-  holeBodies: Readonly<Record<string, string>>;
-  /** 脚本里每处留白的编译期事实（开放与已补全都在，源码序）：快照与进度载荷的 type / line 来源。 */
-  holes: readonly CompiledHole[];
-  /**
-   * 按控制流投影取的阶段表与其中开放留白的下标（`collectPhaseNames`）。补全服务用它给引擎
-   * `fillHole` 的 `phaseNames` / `holes`；launch 的声明表仍来自提交方（工具层从同一份投影算）。
-   */
-  phases: { phaseNames: string[]; holes: number[] };
-}
 
 interface LaunchDynamicWorkflowRunInput {
   caps: Caps;

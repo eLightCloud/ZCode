@@ -4,7 +4,7 @@ import { isTaskListSessionType } from "../zcode-protocol-v4/task-list-session-me
 import { cloneModelSelection } from "./fork-model-selection.js";
 import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
 import { resolveSessionModelContextWindow } from "./workspace-model-runtime.js";
-import { readSessionContextUsage } from "./server-operations.js";
+import { readSessionContextUsage } from "./protocol-session-queries.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 import { sessionUsageSeedFromRuntimeContextUsage } from "./v4-bridge-session-facts.js";
 

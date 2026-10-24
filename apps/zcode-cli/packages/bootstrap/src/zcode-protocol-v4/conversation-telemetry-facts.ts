@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- 八类 strict telemetry fact 的同源归一集中维护，避免 privacy allowlist 分叉。 */
+// 八类 strict telemetry fact 的同源归一集中维护，避免 privacy allowlist 分叉。
 import type {
   CompactLifecyclePayload,
   DynamicWorkflowRunProgressPayload,

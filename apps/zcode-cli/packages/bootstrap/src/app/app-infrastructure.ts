@@ -18,7 +18,7 @@ import { Logger } from "@zcode/contracts";
 import { McpServerConfig } from "@zcode/contracts";
 import { SessionStorePort } from "@zcode/contracts";
 import { StartupTimer } from "../startup-logging.js";
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 import { isMessageEnabled } from "./app-config-options.js";
 import { getCliStorageRoot } from "./paths.js";
 import { asInputHistoryStore } from "./session-store.js";

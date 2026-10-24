@@ -13,7 +13,8 @@
  */
 
 import { ModelErrorCode, ModelFailureReason } from "@zcode/contracts";
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { isRetryableFailure } from "./failure-classifier.js";
 import type { ModelRetryBudget } from "@zcode/contracts";
 import { isUnboundedRetryBudget } from "./retry-budget.js";

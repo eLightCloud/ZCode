@@ -2,7 +2,7 @@ import type { SessionId } from "@zcode/contracts";
 import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
 import { cloneModelSelection } from "./fork-model-selection.js";
 import { resolveWorkspaceRefFromId } from "./mapper.js";
-import { createSessionRecordForV4 } from "./server-operations.js";
+import { createSessionRecordForV4 } from "./protocol-session-lifecycle.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 import { registerCommittedForkBestEffort } from "./v4-bridge-fork-commit.js";
 

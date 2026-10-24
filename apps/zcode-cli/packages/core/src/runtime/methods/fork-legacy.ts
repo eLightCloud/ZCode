@@ -1,15 +1,6 @@
 import { buildExecutionStateEntry, readRuntimeExecutionState } from "../execution-state.js";
 
-import {
-  CoreErrorType,
-  RewindStrategy,
-  SessionEventType,
-  createCoreError,
-  createMessageId,
-  createPartId,
-  createSessionId,
-  traceContextToLogContext,
-} from "../deps.js";
+import { CoreErrorType, RewindStrategy, SessionEventType, createCoreError, createMessageId, createPartId, createSessionId, traceContextToLogContext } from "../deps.js";
 
 import type { MessageId, SessionId, SessionInfo, TraceContext } from "../deps.js";
 
@@ -17,18 +8,13 @@ import { formatConversationForkNoticeBody } from "../helpers/index.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type { StableConversationForkChildMetadata, WorkspaceForkResult } from "../types.js";
+import type { StableConversationForkChildMetadata, WorkspaceForkResult } from "../workspace-recovery-types.js";
 
 import { buildForkedSessionInput } from "./fork-identity.js";
 
 import { stableForkError } from "./fork-model-selection.js";
 
-import {
-  buildForkHistoryMessages,
-  conversationHistoryBeforeInput,
-  forkSourceMessagesForSession,
-  resolveForkHistoryEndIndex,
-} from "./fork-history.js";
+import { buildForkHistoryMessages, conversationHistoryBeforeInput, forkSourceMessagesForSession, resolveForkHistoryEndIndex } from "./fork-history.js";
 
 import { copyGoalStateForFork } from "./fork-goals.js";
 

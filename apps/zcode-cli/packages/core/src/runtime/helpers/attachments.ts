@@ -12,10 +12,10 @@ import type {
   TurnState,
   TurnId,
 } from "../deps.js";
-import { readTextFileForModel } from "../../tool/handlers/read-text.js";
+import { readTextFileForModel } from "../../tool/session-tools-api.js";
 import type { ResolvedTurnAttachment } from "../types.js";
 import { readInlineAttachmentContent } from "./attachment-artifacts.js";
-import { parseDataUrlHeader } from "./attachment-data-url.js";
+import { parseDataUrlHeader } from "../../agent/attachment-data-url.js";
 import {
   resolveInlineMediaAttachment,
   resolveLocalMediaAttachment,

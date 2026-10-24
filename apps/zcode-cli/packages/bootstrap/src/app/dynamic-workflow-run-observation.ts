@@ -37,8 +37,8 @@ import {
 } from "./dynamic-workflow-run-launch-anchor.js";
 import { resolveDynamicWorkflowRunLabel } from "./dynamic-workflow-run-label.js";
 import { lineageFields, supersededByOf } from "./dynamic-workflow-run-lineage.js";
-import type { CompiledHole } from "./dynamic-workflow-run-holes.js";
-import type { ActorSessionQuiescence } from "./workflow-driver-quiescence.js";
+import type { CompiledHole } from "./dynamic-workflow-hole-contract.js";
+import type { ActorSessionQuiescence } from "./workflow-quiescence-contract.js";
 import type { WorkflowRunControl } from "./workflow-run-control.js";
 
 /**

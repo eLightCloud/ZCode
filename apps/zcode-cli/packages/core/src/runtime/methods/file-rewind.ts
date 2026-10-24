@@ -1,16 +1,10 @@
-import {
-  RewindScope,
-  RewindStrategy,
-  SessionEventType,
-  getCurrentTraceContext,
-  traceContextToLogContext,
-} from "../deps.js";
+import { RewindScope, RewindStrategy, SessionEventType, getCurrentTraceContext, traceContextToLogContext } from "../deps.js";
 
 import type { MessageId, TraceContext, TurnId } from "../deps.js";
 
 import { throwIfTurnAborted } from "../helpers/index.js";
 
-import type { WorkspaceFileRewindApplyResult, WorkspaceFileRewindPreview } from "../types.js";
+import type { WorkspaceFileRewindApplyResult, WorkspaceFileRewindPreview } from "../workspace-recovery-types.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 

@@ -4,7 +4,7 @@
  */
 export const workflowToolEntrypointsModule = {
   id: "workflow-tool-entrypoints",
-  requires: ["zcode-cli"],
+  requires: ["cli-tool-runtime", "zcode-cli"],
   provides: ["workflow-tool-entrypoints"],
   publicEntrypoints: [
     "../handlers/amend-workflow.ts",

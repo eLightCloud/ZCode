@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- workspace 模型协议与兼容请求处理仍集中在本文件。 */
+// workspace 模型协议与兼容请求处理仍集中在本文件。
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
 import {
@@ -6,7 +6,8 @@ import {
   zcodeWorkspaceReadPresentationParamsSchema,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
-import type { ZCodeApp, ZCodeAppOptions } from "../app/types.js";
+import type { ZCodeApp } from "../app/types.js";
+import type { ZCodeAppOptions } from "../app/app-option-types.js";
 import { listProtocolSlashCommands } from "./slash-commands.js";
 import {
   parseParams,

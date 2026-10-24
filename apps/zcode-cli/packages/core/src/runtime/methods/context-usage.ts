@@ -1,33 +1,11 @@
 import { modelMessageContentToText, traceContextToLogContext, estimateTokens } from "../deps.js";
 import type { ModelInputMessage, ModelToolContract, TraceContext } from "../deps.js";
 import type { ContextUsageBreakdownItem } from "@zcode/contracts";
-import {
-  measureUtf8Bytes,
-  findLatestUserMessageFromEnd,
-  stringifyForEstimation,
-  parseMcpToolName,
-  isMetaUserContextMessage,
-} from "../helpers/index.js";
-import {
-  buildCategoryBreakdown,
-  messageRoleContributor,
-  sectionContributor,
-  skillContributor,
-  toolContributor,
-  type ContextUsageCategoryBreakdown,
-} from "../helpers/context-usage-breakdown.js";
+import { measureUtf8Bytes, findLatestUserMessageFromEnd, stringifyForEstimation, parseMcpToolName, isMetaUserContextMessage } from "../helpers/index.js";
+import { buildCategoryBreakdown, messageRoleContributor, sectionContributor, skillContributor, toolContributor, type ContextUsageCategoryBreakdown } from "../helpers/context-usage-breakdown.js";
 import { compactContextUsageSnapshot } from "./context-usage-log-compact.js";
-import type {
-  ActiveTurnSteeringState,
-  DrainedPendingInputDiagnostics,
-  RunModelTextRequestOptions,
-  ContextUsageConfidence,
-  ContextUsageMetric,
-  ContextUsageCategory,
-  ContextUsageToolDetail,
-  ContextUsageSkillDetail,
-  ContextUsageMessageRoleBreakdown,
-} from "../types.js";
+import type { ActiveTurnSteeringState, DrainedPendingInputDiagnostics } from "../types.js";
+import type { RunModelTextRequestOptions, ContextUsageConfidence, ContextUsageMetric, ContextUsageCategory, ContextUsageToolDetail, ContextUsageSkillDetail, ContextUsageMessageRoleBreakdown } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 
 type ContextUsageBreakdownSource = ContextUsageCategory["source"];

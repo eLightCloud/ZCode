@@ -6,7 +6,8 @@ import { ModelErrorCode, type ModelCacheControl } from "@zcode/contracts";
 
 import { AiSdkModelAdapterError } from "./errors.js";
 
-import type { AiSdkMessageTransformOptions, AiSdkProviderOptions } from "./transform.js";
+
+import type { AiSdkMessageTransformOptions, AiSdkProviderOptions } from "./message-transform-contract.js";
 
 export function shouldStripStoredReasoningForOpenAiResponsesStatelessReplay(
   options: AiSdkMessageTransformOptions,

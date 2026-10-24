@@ -1,3 +1,5 @@
+import { type AssistantErrorInfo, type TokenUsageInfo } from "./session-message-values.js";
+export type { AssistantErrorInfo, TokenUsageInfo } from "./session-message-values.js";
 // Session Store Port：为会话输入、消息和投影提供稳定的存储边界。
 
 // ============================================================
@@ -10,7 +12,7 @@ import type { SessionGoal } from "../tools/target.js";
 
 import type { EnvInfo } from "./context-source.port.js";
 
-import type { FileDiff } from "./session-metadata.js";
+import type { FileDiff } from "./session-file-diff.js";
 
 import type { MessagePart } from "./session-message-parts.js";
 
@@ -150,22 +152,6 @@ export interface UserMessageInfo {
   semantics?: MessageSemantics;
   anchor?: MessageProjectionAnchor;
   metadata?: Record<string, unknown>;
-}
-
-export interface AssistantErrorInfo {
-  name: string;
-  data?: Record<string, unknown>;
-}
-
-export interface TokenUsageInfo {
-  total?: number;
-  input: number;
-  output: number;
-  reasoning: number;
-  cache: {
-    read: number;
-    write: number;
-  };
 }
 
 export interface AssistantMessageInfo {

@@ -44,6 +44,12 @@ function validatePolicy(raw, cwd) {
     if (!Array.isArray(module.roots) || module.roots.length === 0) {
       throw new Error(`模块 ${module.id} 必须声明 roots`);
     }
+    for (const [layer, paths] of Object.entries(module.layers ?? {})) {
+      const entries = Array.isArray(paths) ? paths : [paths];
+      if (!entries.length || entries.some((entry) => typeof entry !== "string" || !entry.trim())) {
+        throw new Error(`模块 ${module.id} 的层 ${layer} 必须包含非空路径`);
+      }
+    }
     return {
       id: module.id,
       roots: module.roots.map((root) => path.resolve(cwd, root)),
@@ -112,10 +118,12 @@ function validatePolicy(raw, cwd) {
 export function layerForFile(file, module) {
   const matches = module.roots
     .flatMap((root) =>
-      Object.entries(module.layers).map(([name, directory]) => ({
-        name,
-        directory: path.resolve(root, directory),
-      })),
+      Object.entries(module.layers).flatMap(([name, directories]) =>
+        (Array.isArray(directories) ? directories : [directories]).map((directory) => ({
+          name,
+          directory: path.resolve(root, directory),
+        })),
+      ),
     )
     .filter(({ directory }) => file === directory || file.startsWith(`${directory}${path.sep}`))
     .sort((a, b) => b.directory.length - a.directory.length);
@@ -165,15 +173,17 @@ export async function loadPolicy(cwd = process.cwd()) {
 }
 
 export function moduleForFile(file, policy) {
+  const matchingRootLength = (module) =>
+    Math.max(
+      ...module.roots
+        .filter((root) => file === root || file.startsWith(`${root}${path.sep}`))
+        .map((root) => root.length),
+    );
   const candidates = policy.modules
     .filter((module) =>
       module.roots.some((root) => file === root || file.startsWith(`${root}${path.sep}`)),
     )
-    .sort(
-      (a, b) =>
-        Math.max(...b.roots.map((root) => root.length)) -
-        Math.max(...a.roots.map((root) => root.length)),
-    );
+    .sort((a, b) => matchingRootLength(b) - matchingRootLength(a));
   return candidates[0] ?? null;
 }
 

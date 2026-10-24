@@ -18,7 +18,8 @@ import {
   isRetryableProviderBusinessTimeoutFailure,
 } from "./failure-provider-business-codes.js";
 
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 export const PROVIDER_BUSINESS_ERROR_WRAPPER_CODE = "PROVIDER_BUSINESS_ERROR";
 

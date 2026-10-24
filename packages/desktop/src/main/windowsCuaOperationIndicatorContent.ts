@@ -11,13 +11,25 @@ const INDICATOR_CARD_HEIGHT = 38;
 export const INDICATOR_CARD_TOP_OFFSET = 12;
 export const INDICATOR_SHADOW_INSET = { top: 6, right: 8, bottom: 12, left: 8 } as const;
 
-export function indicatorCopy(locale: Locale, applicationName = "ZCode"): { text: string; width: number } {
+export function indicatorCopy(
+  locale: Locale,
+  applicationName = "ZCode",
+): { text: string; width: number } {
   return locale === "zh-CN"
-    ? { text: `${applicationName} 正在操作电脑`, width: 234 + Math.max(0, applicationName.length - 5) * 13 }
-    : { text: `${applicationName} is controlling your computer`, width: 308 + Math.max(0, applicationName.length - 5) * 8 };
+    ? {
+        text: `${applicationName} 正在操作电脑`,
+        width: 234 + Math.max(0, applicationName.length - 5) * 13,
+      }
+    : {
+        text: `${applicationName} is controlling your computer`,
+        width: 308 + Math.max(0, applicationName.length - 5) * 8,
+      };
 }
 
-export function indicatorWindowSize(locale: Locale, applicationName = "ZCode"): { width: number; height: number } {
+export function indicatorWindowSize(
+  locale: Locale,
+  applicationName = "ZCode",
+): { width: number; height: number } {
   const { width } = indicatorCopy(locale, applicationName);
   return {
     width: width + INDICATOR_SHADOW_INSET.left + INDICATOR_SHADOW_INSET.right,

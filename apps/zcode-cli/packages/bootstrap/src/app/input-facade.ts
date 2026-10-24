@@ -16,7 +16,8 @@ import {
   normalizePromptInput,
   projectInputHistoryAttachments,
 } from "./prompt-input.js";
-import type { PrepareUserExecutionBoundary, SubmitPromptOptions, ZCodeApp } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { PrepareUserExecutionBoundary, SubmitPromptOptions } from "./app-option-types.js";
 import type { CliDefaultSelection } from "./cli-default-selection.js";
 
 type InputFacade = Pick<

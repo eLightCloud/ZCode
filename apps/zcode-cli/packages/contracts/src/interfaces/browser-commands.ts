@@ -1,4 +1,4 @@
-import type { BrowserViewportSize } from "./browser-control.port.js";
+import type { BrowserViewportSize } from "./browser-geometry.js";
 
 export type BrowserCommandMethod =
   | "navigate"

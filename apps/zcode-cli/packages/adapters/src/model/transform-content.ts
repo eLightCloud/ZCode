@@ -4,9 +4,12 @@ import type { ModelMessageContentBlock } from "@zcode/contracts";
 import { toStructuredToolResultText } from "./tool-result-media-projection.js";
 import { dataUrlToDataContent } from "./media-transform-policy.js";
 import { unsupportedInputMediaText } from "./media-transform-policy.js";
-import type { AiSdkMessageTransformOptions } from "./transform.js";
-import type { AiSdkToolResultOutput } from "./transform.js";
-import type { AiSdkUserContent } from "./transform.js";
+
+import type { AiSdkMessageTransformOptions } from "./message-transform-contract.js";
+
+import type { AiSdkToolResultOutput } from "./message-transform-contract.js";
+
+import type { AiSdkUserContent } from "./message-transform-contract.js";
 import { ModelErrorCode } from "@zcode/contracts";
 import { AiSdkModelAdapterError } from "./errors.js";
 // ============================================================

@@ -22,7 +22,7 @@ import {
   type ToolPermissionSpec,
 } from "@zcode/contracts";
 import type { ToolEntry, ToolExecutionContext, ToolHandler } from "../types.js";
-import { writeApprovedPlanFile } from "../../runtime/helpers/plan-file-continuity.js";
+import { writeApprovedPlanFile } from "../../agent/plan-file-continuity.js";
 import {
   ENTER_PLAN_MODE_PROVIDER_DESCRIPTION,
   createEnterPlanModeProviderDescription,

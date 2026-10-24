@@ -5,7 +5,7 @@ import {
   type CompletedToolPartMetadata,
   type ToolExecutionResult,
 } from "../deps.js";
-import { createMcpToolDisplay } from "../../tool/executor/result-display.js";
+import { createMcpToolDisplay } from "../../tool/execution-host-api.js";
 
 export function mcpToolPartMetadata(
   presentation: { readOnly?:boolean; serverName: string; toolName: string; description?: string } | undefined,

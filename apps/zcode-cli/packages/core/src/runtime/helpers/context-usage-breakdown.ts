@@ -1,10 +1,4 @@
-import type {
-  ContextUsageCategory,
-  ContextUsageMetric,
-  ContextUsageMessageRoleBreakdown,
-  ContextUsageSkillDetail,
-  ContextUsageToolDetail,
-} from "../types.js";
+import type { ContextUsageCategory, ContextUsageMetric, ContextUsageMessageRoleBreakdown, ContextUsageSkillDetail, ContextUsageToolDetail } from "../model-execution-types.js";
 
 type ContextUsageContributorKind = "context_section" | "tool_schema" | "skill" | "message_role";
 

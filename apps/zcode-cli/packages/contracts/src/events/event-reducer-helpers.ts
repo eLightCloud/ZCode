@@ -6,17 +6,17 @@ import type { CompactBoundaryPayload } from "../compact/index.js";
 import { parseCompactBoundaryPayload } from "../compact/index.js";
 import type {
   ActiveToolCall,
-  CollaborationMode,
   PendingPermission,
   PendingSteerInputInfo,
   SessionProjection,
   SessionStatus,
 } from "../interfaces/session.port.js";
+import type { CollaborationMode } from "../interfaces/session-execution-types.js";
 import type {
   BackgroundTaskCompletedPayload,
   BackgroundTaskStartedPayload,
   BackgroundTaskUpdatedPayload,
-} from "./session.events.js";
+} from "./tool-execution-payloads.js";
 import type {
   StreamRecoveryAnchorPayload,
   StreamingToolLedgerPayload,

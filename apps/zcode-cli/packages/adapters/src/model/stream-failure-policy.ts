@@ -2,11 +2,8 @@ import type { ModelRetryBudget } from "@zcode/contracts";
 
 import { ModelFailureReason as ModelFailureReasonValue } from "@zcode/contracts";
 
-import {
-  findProviderBusinessError,
-  inspectProviderFailure,
-  type ClassifiedModelFailure,
-} from "./failure-classifier.js";
+import { findProviderBusinessError, inspectProviderFailure } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 import { getErrorCode, getHttpResponseStatus, unwrapRetryError } from "./failure-inspection.js";
 

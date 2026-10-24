@@ -4,11 +4,8 @@ import {
   type ModelFailureExceptionKind,
 } from "@zcode/contracts";
 import { APICallError } from "ai";
-import {
-  findProviderBusinessError,
-  inspectProviderFailure,
-  type ClassifiedModelFailure,
-} from "./failure-classifier.js";
+import { findProviderBusinessError, inspectProviderFailure } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 const MODEL_API_ERROR_PHASES = new Set<ModelApiErrorPhase>([
   "prepare",

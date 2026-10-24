@@ -1,4 +1,3 @@
-import type { ModelToolReferenceContentBlock } from "../tools/tool-search.js";
 // ============================================================
 // Model Protocol - provider-neutral model contracts
 // ============================================================
@@ -104,3 +103,5 @@ export * from "./invocation-context.js";
 export type { ModelToolCall as ToolCall };
 
 export * from "./content-protection.js";
+
+export { withModelInvocationContext } from "./invocation-wrapper.js";

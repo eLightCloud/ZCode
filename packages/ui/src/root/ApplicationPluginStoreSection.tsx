@@ -24,9 +24,7 @@ export interface ApplicationPluginStoreSection {
   managedMarketplacePrefix?: string;
 }
 
-const Context = createContext<ApplicationPluginStoreSection | undefined>(
-  undefined,
-);
+const Context = createContext<ApplicationPluginStoreSection | undefined>(undefined);
 export function ApplicationPluginStoreProvider({
   section,
   children,

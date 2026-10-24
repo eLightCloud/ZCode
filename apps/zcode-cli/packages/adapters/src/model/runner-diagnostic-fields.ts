@@ -1,7 +1,8 @@
 import type { ModelUsage } from "@zcode/contracts";
 import { asRecord } from "./runner-record.js";
 import { stringProperty } from "./runner-record.js";
-import type { StreamDiagnostics } from "./runner-diagnostics.js";
+
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 import { ModelErrorCode } from "@zcode/contracts";
 import { AiSdkModelAdapterError } from "./errors.js";
 

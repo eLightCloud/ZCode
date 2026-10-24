@@ -6,7 +6,7 @@ import type { QueryId, SessionId, TraceId, TurnId } from "../interfaces/shared.j
 
 import type { ModelApiErrorPhase, ResolvedModelApiCallObservation } from "../telemetry/index.js";
 
-import type { ModelId, ModelProviderId } from "./request-identity.js";
+import type { ModelId, ModelProviderId } from "./model-identity.js";
 
 import type { ModelUsage } from "./usage.js";
 

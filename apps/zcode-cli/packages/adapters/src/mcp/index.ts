@@ -1,3 +1,4 @@
+import type { NodeMcpAdapterContext } from "./mcp-adapter-context.js";
 import type { NodeMcpAdapterApi } from "./mcp-adapter-api.js";
 import * as implementation0 from "./mcp-adapter-connection-api.js";
 import * as implementation2 from "./mcp-adapter-connection-cleanup.js";
@@ -9,30 +10,13 @@ import * as implementation7 from "./mcp-adapter-stdio-auth.js";
 import * as implementation4 from "./mcp-adapter-tool-api.js";
 import * as implementation5 from "./mcp-adapter-tool-execution.js";
 
-import type {
-  Logger,
-  McpElicitationPort,
-  McpElicitationTrace,
-  McpNotificationPort,
-  McpPort,
-  McpServerStatus,
-} from "@zcode/contracts";
+import type { McpElicitationTrace, McpPort, McpServerStatus } from "@zcode/contracts";
 
 import { type OfficialMcpAuthFailureKind } from "@zcode/shared";
 
 import { randomUUID } from "node:crypto";
 
-import { type SharedZCodeCredentialStore } from "../auth/shared-credentials.js";
-
-import { type NetworkEgressEnvPolicy } from "./network.js";
-
-import { type McpOAuthRuntimeOptions } from "./oauth.js";
-
-import {
-  createMcpConnectionPool,
-  type McpConnectionContext,
-  type McpConnectionPool,
-} from "./pool.js";
+import { createMcpConnectionPool, type McpConnectionPool } from "./pool.js";
 
 import { McpResourceSubscriptionRegistry } from "./resource-subscriptions.js";
 
@@ -102,24 +86,30 @@ class NodeMcpAdapter implements McpPort {
   declare unsubscribeResourcesBySubscriber: NodeMcpAdapterApi["unsubscribeResourcesBySubscriber"];
   declare resourceSubscriptionCounts: NodeMcpAdapterApi["resourceSubscriptionCounts"];
 
-  private readonly adapterInstanceId = randomUUID();
-  private readonly clientName: string;
-  private readonly clientVersion: string;
-  private readonly connectionContext?: McpConnectionContext;
-  private readonly env?: NodeJS.ProcessEnv;
-  private readonly logger?: Logger;
-  private readonly mcpOAuth?: McpOAuthRuntimeOptions;
-  private readonly network?: NetworkEgressEnvPolicy;
-  private readonly officialMcpAuth?: CreateMcpAdapterOptions["officialMcpAuth"];
-  private readonly telemetry?: McpTelemetryTracker;
-  private readonly connectionGenerations = new Map<string, number>();
-  private credentialStore?: SharedZCodeCredentialStore;
+  private readonly adapterInstanceId: NodeMcpAdapterContext["adapterInstanceId"] = randomUUID();
+  private readonly clientName: NodeMcpAdapterContext["clientName"];
+  private readonly clientVersion: NodeMcpAdapterContext["clientVersion"];
+  private readonly connectionContext?: NodeMcpAdapterContext["connectionContext"];
+  private readonly env?: NodeMcpAdapterContext["env"];
+  private readonly logger?: NodeMcpAdapterContext["logger"];
+  private readonly mcpOAuth?: NodeMcpAdapterContext["mcpOAuth"];
+  private readonly network?: NodeMcpAdapterContext["network"];
+  private readonly officialMcpAuth?: NodeMcpAdapterContext["officialMcpAuth"];
+  private readonly telemetry?: NodeMcpAdapterContext["telemetry"];
+  private readonly connectionGenerations: NodeMcpAdapterContext["connectionGenerations"] = new Map<
+    string,
+    number
+  >();
+  private credentialStore?: NodeMcpAdapterContext["credentialStore"];
   /**
    * 官方鉴权失败分类的暂存槽。不能从 error 对象读——SDK 的 version
    * negotiation 会把 OfficialMcpAuthError 重新包装成普通 Error，instanceof 失效；
    * 也不允许按错误文本反解。因此在抛出点写入，failConnection 取用后立即清除。
    */
-  private readonly lastOfficialAuthKind = new Map<string, OfficialMcpAuthFailureKind>();
+  private readonly lastOfficialAuthKind: NodeMcpAdapterContext["lastOfficialAuthKind"] = new Map<
+    string,
+    OfficialMcpAuthFailureKind
+  >();
   /**
    * span → 服务端 request id。只有官方 MCP 会写入（唯一能看到响应头的地方是 auth fetch
    * wrapper），供 in-band 失败（HTTP 200 + `isError`）把 id 带回 tool result。
@@ -130,21 +120,26 @@ class NodeMcpAdapter implements McpPort {
    * 有界并即取即删：拿不到匹配的 span（如 initialize / tools/list，它们没有 `_meta`）
    * 就让条目自然被挤出，绝不"取最近一次"兜底——那会把上一次调用的 id 贴到这一次的失败上。
    */
-  private readonly serverRequestIdBySpan = new Map<string, string>();
-  private readonly connectionDiagnosticByServer = new Map<
+  private readonly serverRequestIdBySpan: NodeMcpAdapterContext["serverRequestIdBySpan"] = new Map<
     string,
-    Pick<McpServerStatus, "failureKind" | "serverRequestId">
+    string
   >();
-  private readonly records = new Map<string, McpServerRecord>();
-  private readonly workingDirectory?: string;
-  private readonly elicitation?: McpElicitationPort;
-  private readonly notifications?: McpNotificationPort;
+  private readonly connectionDiagnosticByServer: NodeMcpAdapterContext["connectionDiagnosticByServer"] =
+    new Map<string, Pick<McpServerStatus, "failureKind" | "serverRequestId">>();
+  private readonly records: NodeMcpAdapterContext["records"] = new Map<string, McpServerRecord>();
+  private readonly workingDirectory?: NodeMcpAdapterContext["workingDirectory"];
+  private readonly elicitation?: NodeMcpAdapterContext["elicitation"];
+  private readonly notifications?: NodeMcpAdapterContext["notifications"];
   /** 资源订阅登记表 serverName → uri → subscriberKey；唯一 owner，连接层计数。 */
-  private readonly resourceSubscriptions = new McpResourceSubscriptionRegistry();
+  private readonly resourceSubscriptions: NodeMcpAdapterContext["resourceSubscriptions"] =
+    new McpResourceSubscriptionRegistry();
   /** tools/list_changed 累计次数，runtime 按此判断是否需要重注册。 */
-  private toolListRevisionCounter = 0;
+  private toolListRevisionCounter: NodeMcpAdapterContext["toolListRevisionCounter"] = 0;
   /** 每个 server 当前正在执行的工具调用 trace；elicitation 借此归属到会话 / 工具行。 */
-  private readonly activeCallTraces = new Map<string, McpElicitationTrace>();
+  private readonly activeCallTraces: NodeMcpAdapterContext["activeCallTraces"] = new Map<
+    string,
+    McpElicitationTrace
+  >();
 
   constructor(options: CreateMcpAdapterOptions) {
     this.clientName = options.clientName ?? "zcode";
@@ -333,7 +328,8 @@ class NodeMcpAdapter implements McpPort {
     typeof implementation2.terminateStdioProcessTree
   >;
 
-  private readonly appConnectionListeners = new Map<string, Set<() => void>>();
+  private readonly appConnectionListeners: NodeMcpAdapterContext["appConnectionListeners"] =
+    new Map<string, Set<() => void>>();
 
   declare private nextConnectionGeneration: OmitThisParameter<
     typeof implementation3.nextConnectionGeneration
@@ -364,8 +360,6 @@ class NodeMcpAdapter implements McpPort {
     return this.isCurrentConnection(name, generation) ? this.appConnectionSnapshot(name) : null;
   }
 }
-
-export type InternalNodeMcpAdapter = NodeMcpAdapter;
 
 // 与 owner 共享原型和 this；保持方法不可枚举，clone/继承沿原路径工作。
 for (const methods of [

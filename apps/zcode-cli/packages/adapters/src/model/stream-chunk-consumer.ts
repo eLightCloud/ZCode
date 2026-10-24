@@ -1,7 +1,8 @@
 import { createLinkedAbortController } from "./stream-idle-timeout.js";
 import type { ModelStreamEvent } from "@zcode/contracts";
 import { readNextWithStreamIdleTimeout } from "./stream-idle-timeout.js";
-import { StreamDiagnostics } from "./runner-diagnostics.js";
+
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 import { isZeroOutputModelCompletion } from "./runner-diagnostics.js";
 import { canRetryEmptyCompletion } from "./empty-completion-retry.js";
 import type { AttemptAdmission } from "./request-admission.js";

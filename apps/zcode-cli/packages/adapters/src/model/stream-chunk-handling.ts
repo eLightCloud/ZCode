@@ -1,74 +1,11 @@
-import type { AiSdkModelTextRequest } from "./runner-runtime.js";
-
-import type { TextStreamPart, ToolSet } from "ai";
-
-import type { Logger, ModelStatusSink, ModelStreamEvent } from "@zcode/contracts";
-
-import {
-  createStreamDiagnostics,
-  logIgnoredStreamChunk,
-  recordStreamChunkDiagnostic,
-} from "./runner-diagnostics.js";
-import { AiSdkModelAdapterError } from "./errors.js";
-
-import { type AttemptAdmission } from "./request-admission.js";
-
+import type { StreamChunkInput, StreamChunkResult } from "./stream-chunk-contract.js";
+import { logIgnoredStreamChunk, recordStreamChunkDiagnostic } from "./runner-diagnostics.js";
 import { toModelStreamEvent } from "./runner-normalization.js";
-
 import { detectProviderBusinessFinishError } from "./provider-finish-business-error.js";
-
-import { TerminalStreamChunkError } from "./runner-retry.js";
-
-import { createStatusContext } from "./runner-status.js";
-
-import { StreamingToolCallAssembler } from "./streaming-tool-call-assembler.js";
-
-import type { ResolvedAiSdkModelRetryOptions } from "./retry-policy.js";
-
-import type { ResolvedAiSdkModel } from "./runner-runtime.js";
-
-import {
-  applyStreamEventsToRetryBoundary,
-  isRawProviderRetryBoundaryEvent,
-  streamChunkResult,
-  toProviderStreamBoundaryEvent,
-} from "./stream-retry-boundaries.js";
-
+import { applyStreamEventsToRetryBoundary, isRawProviderRetryBoundaryEvent, streamChunkResult, toProviderStreamBoundaryEvent } from "./stream-retry-boundaries.js";
 import { handleStreamErrorEvent } from "./stream-error-event.js";
 
-export async function handleStreamChunk(input: {
-  /** 本次尝试的准入：错误块的退避 sleep 之前先归还。 */
-  admission: AttemptAdmission;
-  attempt: number;
-  chunk: TextStreamPart<ToolSet>;
-  diagnostics: ReturnType<typeof createStreamDiagnostics>;
-  emittedRetryBoundaryEvent: boolean;
-  input: {
-    logger?: Logger;
-    request: AiSdkModelTextRequest;
-    resolved: ResolvedAiSdkModel;
-    retry: ResolvedAiSdkModelRetryOptions;
-    statusSink?: ModelStatusSink;
-  };
-  pendingRetrySafeEvents: ModelStreamEvent[];
-  repairThinkingSignatureRejection: (error: unknown) => boolean;
-  canRecoverProjectToken: (error: unknown) => boolean;
-  retryBudgetAttempt: number;
-  requestHeaderCount: number;
-  requestHeaders: Record<string, string>;
-  startedAt: number;
-  statusContext: ReturnType<typeof createStatusContext>;
-  toolCallAssembler: StreamingToolCallAssembler;
-}): Promise<{
-  emittedError: boolean;
-  emittedEvent: boolean;
-  emittedRetryBoundaryEvent: boolean;
-  retryScheduled: boolean;
-  /** off-peak 排队重试：外层 for 冻结 attempt 预算。 */
-  offPeakQueueHold: boolean;
-  terminalError?: TerminalStreamChunkError;
-  visibleEvents: ModelStreamEvent[];
-}> {
+export async function handleStreamChunk(input: StreamChunkInput): Promise<StreamChunkResult> {
   recordStreamChunkDiagnostic(input.diagnostics, input.chunk);
   const providerEventObserved =
     input.input.request.preserveProviderStreamBoundaries === true &&

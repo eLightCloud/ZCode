@@ -11,7 +11,7 @@ import { createTurnAgentDefinitions } from "../subagent/definitions.js";
 import type { GetAgentDefinitions } from "../subagent/definitions.js";
 import { projectPersistentAgentMemoryTools } from "../subagent/persistent-memory.js";
 import { RuntimeTelemetryFacade } from "../telemetry/runtime-telemetry.js";
-import { disposeNodeReplSession } from "../tool/handlers/node-repl.js";
+import { disposeNodeReplSession } from "../tool/session-tools-api.js";
 import type { AgentRuntimeExecutionApi } from "./agent-runtime-execution-api.js";
 import type { AgentRuntimeInputApi } from "./agent-runtime-input-api.js";
 import type { AgentRuntimeSessionApi } from "./agent-runtime-session-api.js";
@@ -60,13 +60,13 @@ import { MessageHistoryImpl } from "./deps.js";
 import { PermissionService } from "./deps.js";
 import { ToolScheduler } from "./deps.js";
 import { traceContextToLogContext } from "./deps.js";
-import type { ProjectMemoryUpdate } from "./helpers/project-memory-dream.js";
-import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction.js";
-import type { ProjectMemoryRecallPrefetch } from "./helpers/project-memory-recall.js";
+import type { ProjectMemoryUpdate } from "./helpers/project-memory-dream-types.js";
+import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction-types.js";
+import type { ProjectMemoryRecallPrefetch } from "./helpers/project-memory-recall-types.js";
 import { initializeRuntimeTooling } from "./helpers/runtime-tools.js";
 import type { AgentRuntimeInternal } from "./internal.js";
 import { resolveInitialDynamicWorkflowToolsActivated } from "./methods/dynamic-workflow-activation.js";
-import type { DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation.js";
+import type { DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation-types.js";
 import { installAgentRuntimeMethods } from "./methods/index.js";
 import { cloneModelSelection } from "./model-selection.js";
 import type { ActiveForegroundExecutionState } from "./types.js";
@@ -82,7 +82,7 @@ import { controlOffPeakRuntime } from "./off-peak/runtime.js";
 import type { WorkflowBlockedReminderClock } from "../runtime-task/workflow-blocked-reminder.js";
 import { createWorkflowBlockedReminder } from "./methods/dynamic-workflow-blocked-reminder.js";
 
-// oxlint-disable typescript-eslint/no-unsafe-declaration-merging
+// 既有公开 API 接口与唯一原型安装器共同描述此 owner。
 export class AgentRuntime {
   controlOffPeakExecution(
     input: import("@zcode/shared").OffPeakControlParams,
@@ -304,6 +304,15 @@ export class AgentRuntime {
       this.contextInitialized = true;
     }
     runtime.startMcpStartup(this.rootTraceContext);
+  }
+
+  /** 子代理只请求本 owner 构造同一原生实现，不反向导入安装器的宿主类。 */
+  private createChildRuntime(
+    sessionId: SessionId,
+    config: AgentRuntimeConfig,
+    deps: AgentRuntimeDeps,
+  ): AgentRuntimeInternal {
+    return new AgentRuntime(sessionId, config, deps) as unknown as AgentRuntimeInternal;
   }
 
   async closeBrowserSession(): Promise<void> {

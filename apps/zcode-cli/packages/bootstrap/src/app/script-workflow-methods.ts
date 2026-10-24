@@ -1,4 +1,5 @@
-import type { SubmitPromptOptions, ZCodeApp } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { SubmitPromptOptions } from "./app-option-types.js";
 import {
   ScriptWorkflowRuntime,
   type ScriptWorkflowRuntimeDeps,
@@ -22,10 +23,7 @@ type ScriptWorkflowBridgeDeps = Omit<ScriptWorkflowRuntimeDeps, "runtime"> & {
   getRuntime: () => ScriptWorkflowRuntimeDeps["runtime"];
 };
 
-type ScriptWorkflowRuntimeOptions = Pick<
-  SubmitPromptOptions,
-  "abortSignal" | "traceContext"
-> & {
+type ScriptWorkflowRuntimeOptions = Pick<SubmitPromptOptions, "abortSignal" | "traceContext"> & {
   onEvent?: (event: unknown) => void | Promise<void>;
 };
 

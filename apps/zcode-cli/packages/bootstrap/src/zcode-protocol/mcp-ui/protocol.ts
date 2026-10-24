@@ -19,8 +19,8 @@ import {
   ProtocolRequestError,
   parseParams,
   requireSession,
-  type ZCodeProtocolAgentServerContext,
-} from "../server-types.js";
+  type McpUiProtocolHost as ZCodeProtocolAgentServerContext,
+} from "../contract.js";
 import { getMcpUiAppToolRegistry } from "./appToolsProtocol.js";
 import {
   McpUiNotSupportedError,

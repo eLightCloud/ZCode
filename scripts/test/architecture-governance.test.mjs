@@ -270,3 +270,82 @@ test("expired exceptions are global blocking violations", async () => {
     },
   );
 });
+
+test("multiple precise paths in one layer all enforce direction and domain IO", async () => {
+  const policy = `version: 1
+modules:
+  - id: alpha
+    roots: [src/alpha]
+    managed: true
+    layers:
+      domain: [first.ts, second.ts]
+      app: [store.ts, index.ts]
+`;
+  await fixture(
+    {
+      "architecture-policy.yaml": policy,
+      "src/alpha/first.ts": 'import "./store.js"; import "node:fs";\n',
+      "src/alpha/second.ts": 'import "./index.js"; import "node:net";\n',
+      "src/alpha/store.ts": "export const state = new Map();\n",
+      "src/alpha/index.ts": 'export { state } from "./store.js";\n',
+    },
+    async (cwd) => {
+      const { violations } = await checkArchitecture({ cwd });
+      assert.deepEqual(
+        violations
+          .filter((v) => v.rule === "layer-direction")
+          .map((v) => v.file)
+          .sort(),
+        ["src/alpha/first.ts", "src/alpha/second.ts"],
+      );
+      assert.deepEqual(
+        violations
+          .filter((v) => v.rule === "domain-io")
+          .map((v) => v.file)
+          .sort(),
+        ["src/alpha/first.ts", "src/alpha/second.ts"],
+      );
+    },
+  );
+});
+
+test("invalid layer path arrays fail policy loading instead of silently dropping checks", async () => {
+  for (const value of ["[]", "[app, 12]", "['']"]) {
+    await fixture(
+      {
+        "architecture-policy.yaml": `version: 1\nmodules:\n  - id: alpha\n    roots: [src/alpha]\n    layers:\n      app: ${value}\n`,
+      },
+      async (cwd) => {
+        await assert.rejects(loadPolicy(cwd), /必须包含非空路径/);
+      },
+    );
+  }
+});
+
+test("unmatched long parent roots cannot shadow a managed child owner or its rules", async () => {
+  const policy = `version: 1
+modules:
+  - id: parent
+    roots: [src/package, src/package/deep/unrelated/configuration-entry.ts]
+    managed: true
+    layers: { adapters: . }
+  - id: child
+    roots: [src/package/http]
+    managed: true
+    layers: { domain: . }
+`;
+  await fixture(
+    {
+      "architecture-policy.yaml": policy,
+      "src/package/http/domain.ts": 'import "node:fs";\n',
+      "src/package/deep/unrelated/configuration-entry.ts": "export {};\n",
+    },
+    async (cwd) => {
+      const { violations } = await checkArchitecture({ cwd });
+      const violation = violations.find(
+        (v) => v.rule === "domain-io" && v.file === "src/package/http/domain.ts",
+      );
+      assert.equal(violation?.module, "child");
+    },
+  );
+});

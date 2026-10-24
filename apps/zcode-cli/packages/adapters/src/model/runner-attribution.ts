@@ -12,7 +12,8 @@ import type {
 import { ModelApiActorKind, ModelApiOperation, ModelRequestSessionType } from "@zcode/contracts";
 import { isOpenCodeGoBaseUrl } from "./opencode-session.js";
 import { MODEL_QUERY_SOURCE_HEADER } from "./model-request-headers.js";
-import type { ModelStatusContext } from "./runner-status.js";
+
+import type { ModelStatusContext } from "./model-status-context.js";
 
 const MODEL_TRACE_HEADER = "x-zcode-trace-id";
 const MODEL_REQUEST_HEADER = "x-request-id";

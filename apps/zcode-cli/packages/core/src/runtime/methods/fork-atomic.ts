@@ -4,57 +4,23 @@ import { buildExecutionStateEntry, readRuntimeExecutionState } from "../executio
 
 import { type ForkCommitBundle } from "@zcode/contracts";
 
-import {
-  RewindStrategy,
-  SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
-  SessionEventType,
-  createMessageId,
-  createSessionId,
-  traceContextToLogContext,
-} from "../deps.js";
+import { RewindStrategy, SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION, SessionEventType, createMessageId, createSessionId, traceContextToLogContext } from "../deps.js";
 
-import type {
-  MessageId,
-  MessageWithParts,
-  SessionId,
-  SessionInfo,
-  TraceContext,
-  TurnId,
-} from "../deps.js";
+import type { MessageId, MessageWithParts, SessionId, SessionInfo, TraceContext, TurnId } from "../deps.js";
 
 import { cloneMessageForFork, clonePartForFork } from "../helpers/index.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type {
-  SelectionSideChatCreateOptions,
-  StableConversationForkGoalBoundary,
-  StableConversationForkTarget,
-  WorkspaceForkResult,
-} from "../types.js";
+import type { SelectionSideChatCreateOptions, StableConversationForkGoalBoundary, StableConversationForkTarget, WorkspaceForkResult } from "../workspace-recovery-types.js";
 
 import type { ModelSelection } from "@zcode/contracts";
 
-import {
-  buildModelSelectionEntry,
-  resolveForkModelSelection,
-  stableForkError,
-} from "./fork-model-selection.js";
+import { buildModelSelectionEntry, resolveForkModelSelection, stableForkError } from "./fork-model-selection.js";
 
-import {
-  buildAtomicForkNotice,
-  buildSelectionSideChatBoundary,
-  withoutSelectionSideChatGoalBoundary,
-} from "./fork-notice.js";
+import { buildAtomicForkNotice, buildSelectionSideChatBoundary, withoutSelectionSideChatGoalBoundary } from "./fork-notice.js";
 
-import {
-  buildForkedSessionInput,
-  cloneVerifierEntryForAtomicFork,
-  collectForkGoalSnapshots,
-  collectVerifierEntryIds,
-  createForkIdentityMap,
-  remapGoalForFork,
-} from "./fork-identity.js";
+import { buildForkedSessionInput, cloneVerifierEntryForAtomicFork, collectForkGoalSnapshots, collectVerifierEntryIds, createForkIdentityMap, remapGoalForFork } from "./fork-identity.js";
 
 import { forkSourceMessagesForSession } from "./fork-history.js";
 

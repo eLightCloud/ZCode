@@ -2,7 +2,8 @@ import { AgentRuntime, type AmendWorkflowRunSettingsInput } from "@zcode/core";
 
 import { type TraceContext } from "@zcode/contracts";
 
-import type { PrepareUserExecutionBoundary, ZCodeApp } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { PrepareUserExecutionBoundary } from "./app-option-types.js";
 
 import { createDynamicWorkflowRunService } from "./dynamic-workflow-run-service.js";
 

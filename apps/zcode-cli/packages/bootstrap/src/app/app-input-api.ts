@@ -1,6 +1,6 @@
 import type { TraceContext, TurnSteerResult } from "@zcode/contracts";
 
-import type { SteerTurnOptions } from "./types.js";
+import type { SteerTurnOptions } from "./app-option-types.js";
 export interface AppInputApi {
   /**
    * v4 deferred queue：busy 但没有 steerable active turn（compact / goal verifier /

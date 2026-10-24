@@ -1,6 +1,7 @@
 import { ModelRetryReason } from "@zcode/contracts";
 
-import { classifyModelFailure, type ClassifiedModelFailure } from "./failure-classifier.js";
+import { classifyModelFailure } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 import { getResponseHeaders, unwrapRetryError } from "./failure-inspection.js";
 
@@ -24,7 +25,7 @@ import { isRequestVerificationRejection } from "./request-security-edition/recov
 
 import { modelFailureStatusFields } from "./runner-telemetry.js";
 
-import type { handleStreamChunk } from "./stream-chunk-handling.js";
+import type { StreamChunkInput, StreamChunkResult } from "./stream-chunk-contract.js";
 
 import { resolveStreamFailureDecision } from "./stream-failure-policy.js";
 
@@ -33,9 +34,9 @@ import { publishRetryScheduledStatus, statusPublishOptions } from "./stream-stat
 import { streamChunkResult } from "./stream-retry-boundaries.js";
 
 export async function handleStreamErrorEvent(
-  input: Parameters<typeof handleStreamChunk>[0],
+  input: StreamChunkInput,
   error: unknown,
-): Promise<Awaited<ReturnType<typeof handleStreamChunk>>> {
+): Promise<StreamChunkResult> {
   if (isRequestVerificationRejection(error) || input.canRecoverProjectToken(error)) throw error;
   const retryWithRepairedHistory =
     !input.emittedRetryBoundaryEvent && input.repairThinkingSignatureRejection(error);

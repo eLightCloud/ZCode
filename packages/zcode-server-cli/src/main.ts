@@ -25,6 +25,7 @@ void runServerCli(
   },
   {
     bundledAgentWiring,
+    applicationName: process.env.ZCODE_APPLICATION_NAME,
     updateDaemonHandoff: createUpdateDaemonHandoff(),
   },
 ).then((exitCode) => {

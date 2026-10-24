@@ -8,9 +8,9 @@
 
 客户端优先消费 `packages/ui/src/assets/plugin-icons/` 的固定打包原图。解析使用受信构建的 `BUNDLED_PLUGIN_MARKETPLACE_ID`，并识别上游原始身份；不能按插件裸名称覆盖任意个人市场图标。已知官方图标 URL 也映射到相同本地字节，推荐项没有 pluginId 时仍可使用原图。个人插件其他 HTTPS 图标继续沿原受信图片规则显示，不新增任意本地地址白名单或后台 URL 代理。
 
-| 图标集合 | 本地文件 |
-| --- | --- |
-| 已有独立图标 | documents、pdf、presentations、spreadsheets、image-search、plugin-creator |
+| 图标集合       | 本地文件                                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 已有独立图标   | documents、pdf、presentations、spreadsheets、image-search、plugin-creator                                                        |
 | 保存的上游原图 | android-emulator、browser-use、document-skills、ios-simulator、restore-legacy-sessions、skill-creator、zcode-guide、computer-use |
 
 新增保存原图的来源、SHA-256 与字节数见同目录 `sources.json`，原图未经重绘，随 Desktop / Web 静态构建交付，运行时不请求这些图标的官方 CDN。产品分发身份不改变原作者、来源、版权或许可证。

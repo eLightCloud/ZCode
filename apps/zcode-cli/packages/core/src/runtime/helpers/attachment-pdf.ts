@@ -1,4 +1,4 @@
-import { base64PayloadByteLength, isStrictBase64Payload } from "./attachment-data-url.js";
+import { base64PayloadByteLength, isStrictBase64Payload } from "../../agent/attachment-data-url.js";
 
 export const PDF_INPUT_MAX_BYTES = 20 * 1024 * 1024;
 

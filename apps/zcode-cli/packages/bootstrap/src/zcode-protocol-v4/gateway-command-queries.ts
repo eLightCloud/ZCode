@@ -1,3 +1,7 @@
+import type {
+  ConversationRowTargetResolution,
+  StableForkCandidateResolution,
+} from "./product-projection-contract.js";
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
 // + v4/command → CommandInbox → 宿主 executor 的收口。
@@ -124,7 +128,7 @@ export function resolveRowActionTarget(
   sessionId: string,
   target: ConversationRowTarget,
   action: ConversationRowTargetAction,
-) {
+): ConversationRowTargetResolution | null {
   return this.publishers.get(sessionId)?.resolveRowActionTarget(target, action) ?? null;
 }
 
@@ -152,7 +156,7 @@ export function resolveStableForkCandidate(
   this: ConversationV4GatewayMethodsContext,
   sessionId: string,
   rowId: number,
-) {
+): StableForkCandidateResolution | null {
   return this.publishers.get(sessionId)?.resolveStableForkCandidate(rowId) ?? null;
 }
 

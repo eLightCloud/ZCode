@@ -7,7 +7,7 @@ import { toolsEventHandlers } from "./event-reducer-tools.js";
 
 import type { SessionProjection } from "../interfaces/session.port.js";
 import { initialSessionProjection } from "./event-reducer-helpers.js";
-import type { SessionEvent } from "./session.events.js";
+import type { SessionEvent } from "./session-event-identity.js";
 
 // -----------------------------------------------
 // Event Reducer

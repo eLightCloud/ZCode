@@ -1,3 +1,5 @@
+import { type PermissionResponderRaceOutcome } from "./permission-race-outcome.js";
+export type { PermissionResponderRaceOutcome } from "./permission-race-outcome.js";
 // PermissionRequest hook 链与交互 broker 的并发竞速。
 //
 // 旧路径在 emitPermissionRequested 之后串行 await hook
@@ -28,11 +30,6 @@ export interface PermissionResponderRaceInput {
   signal?: AbortSignal;
   /** hook 链抛错且竞速尚未收口时回调（调用方记 warn 日志）。 */
   onHookFailure?: (error: unknown) => void;
-}
-
-export interface PermissionResponderRaceOutcome {
-  result: PermissionBrokerResult;
-  source: "hook" | "broker";
 }
 
 export async function racePermissionResponders(

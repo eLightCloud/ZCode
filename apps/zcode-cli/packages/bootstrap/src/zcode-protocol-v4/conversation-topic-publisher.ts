@@ -1,3 +1,4 @@
+import type { ConversationTopicPublisherMethodsContext } from "./topic-publisher-context.js";
 import type { ConversationTopicPublisherApi } from "./topic-publisher-api.js";
 import type * as implementation2 from "./topic-publisher-events.js";
 import type * as implementation4 from "./topic-publisher-flush.js";
@@ -11,7 +12,7 @@ import { ProductProjection } from "./product-projection.js";
 import { ProjectionPayloadTooLargeError } from "./topic-publisher-support.js";
 import { nonNegativeHardBound } from "./topic-publisher-support.js";
 import type { ConversationTopicPublisherOptions } from "./topic-publisher-support.js";
-import type { LogEntry } from "./topic-publisher-support.js";
+
 import type { Subscription } from "./topic-publisher-support.js";
 import type { ConversationDelta } from "@zcode/shared/zcode-protocol-v4";
 import { statePatchSchema } from "@zcode/shared/zcode-protocol-v4";
@@ -81,22 +82,24 @@ export class ConversationTopicPublisher {
   declare resyncReserved: ConversationTopicPublisherApi["resyncReserved"];
   declare resync: ConversationTopicPublisherApi["resync"];
 
-  readonly topic: string;
-  private projection: ProductProjection;
-  private readonly now: () => number;
-  private readonly retention: number;
-  private readonly subscriberBufferMaxOps: number;
-  private readonly subscriberBufferMaxBytes: number;
+  readonly topic: ConversationTopicPublisherMethodsContext["topic"];
+  private projection: ConversationTopicPublisherMethodsContext["projection"];
+  private readonly now: ConversationTopicPublisherMethodsContext["now"];
+  private readonly retention: ConversationTopicPublisherMethodsContext["retention"];
+  private readonly subscriberBufferMaxOps: ConversationTopicPublisherMethodsContext["subscriberBufferMaxOps"];
+  private readonly subscriberBufferMaxBytes: ConversationTopicPublisherMethodsContext["subscriberBufferMaxBytes"];
   /** 有界日志：seq 升序；resume 只在 (floorSeq, currentSeq] 内合法。 */
-  private readonly log: LogEntry[] = [];
+  private readonly log: ConversationTopicPublisherMethodsContext["log"] = [];
   /** 保留窗下界：base.seq < floorSeq 的恢复请求已无法无损续传 → 只能 snapshot。 */
-  private floorSeq = 0;
-  private readonly subscriptions = new Map<string, Subscription>();
-  private readonly subscriptionIdByConnection = new Map<string, string>();
-  private nextSubscriptionSerial = 1;
-  private nextLogicalFrameSerial = 1;
+  private floorSeq: ConversationTopicPublisherMethodsContext["floorSeq"] = 0;
+  private readonly subscriptions: ConversationTopicPublisherMethodsContext["subscriptions"] =
+    new Map<string, Subscription>();
+  private readonly subscriptionIdByConnection: ConversationTopicPublisherMethodsContext["subscriptionIdByConnection"] =
+    new Map<string, string>();
+  private nextSubscriptionSerial: ConversationTopicPublisherMethodsContext["nextSubscriptionSerial"] = 1;
+  private nextLogicalFrameSerial: ConversationTopicPublisherMethodsContext["nextLogicalFrameSerial"] = 1;
   /** 当前 snapshot logical frame 的保守上界；流式追加只累计增量，逼近上限才精确序列化。 */
-  private wireSnapshotBytesUpperBound: number;
+  private wireSnapshotBytesUpperBound: ConversationTopicPublisherMethodsContext["wireSnapshotBytesUpperBound"];
 
   constructor(
     private readonly sessionId: string,

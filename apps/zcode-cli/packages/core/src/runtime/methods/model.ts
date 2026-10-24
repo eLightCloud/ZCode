@@ -4,22 +4,9 @@ import { runWithModelInvocationContext, traceContextToLogContext } from "../deps
 
 import type { ModelReasoningContentBlock, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
 
-import {
-  buildSuspiciousEmptyDiagnostics,
-  finalizeSuspiciousEmptyModelResult,
-  isContextExceededFinishReason,
-  isSuspiciousEmptyModelResult,
-  logMediaBudgetProjection,
-  logMediaCapabilityProjection,
-  logModelRequestMediaSummary,
-  normalizeModelToolCallsForRuntime,
-  projectMessagesForInputFormat,
-  projectMessagesForMediaBudget,
-  projectMessagesWithMediaAttachmentPaths,
-  readRawFinishReason,
-} from "../helpers/index.js";
+import { buildSuspiciousEmptyDiagnostics, finalizeSuspiciousEmptyModelResult, isContextExceededFinishReason, isSuspiciousEmptyModelResult, logMediaBudgetProjection, logMediaCapabilityProjection, logModelRequestMediaSummary, normalizeModelToolCallsForRuntime, projectMessagesForInputFormat, projectMessagesForMediaBudget, projectMessagesWithMediaAttachmentPaths, readRawFinishReason } from "../helpers/index.js";
 
-import type { RunModelTextRequestOptions, RuntimeModelTextResult } from "../types.js";
+import type { RunModelTextRequestOptions, RuntimeModelTextResult } from "../model-execution-types.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 

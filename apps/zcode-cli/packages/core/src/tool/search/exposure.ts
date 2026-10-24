@@ -11,7 +11,7 @@ import {
 } from "@zcode/contracts";
 import type { ToolRegistry } from "../registry.js";
 import type { ToolMetadata } from "../types.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history-contract.js";
 import { collectToolSearchHistory, projectToolReferences } from "./history.js";
 
 const ADDED_TOOLS_NOTICE = `The following deferred tools are now available via ${TOOL_SEARCH_NAME}. Their schemas are NOT loaded — calling them directly will fail with InputValidationError. Use ${TOOL_SEARCH_NAME} with query "select:<name>[,<name>...]" to load tool schemas before calling them:`;

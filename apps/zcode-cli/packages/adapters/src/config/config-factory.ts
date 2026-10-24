@@ -20,7 +20,7 @@ import {
   resolveWorkspaceHookRuntimeRoot,
   type WorkspaceHookRuntimeRoot,
 } from "@zcode/shared/workspace-hook-discovery";
-import { createConfigPort } from "./index.js";
+import { createConfigPort } from "./config-port.js";
 import { loadFileConfig, getDefaultConfigPath, type LoadedConfig } from "./file-config.adapter.js";
 import { parseEnvConfig } from "./env-config.adapter.js";
 import { mergeConfigs, createPrioritizedConfig } from "./config-merger.js";

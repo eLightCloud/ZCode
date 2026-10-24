@@ -70,17 +70,14 @@ import { executeArtifactPublish } from "./workflow-artifact-publish.js";
 import { qualityEpilogue } from "./workflow-ask-epilogue.js";
 import { ensureSubmitProfileFits } from "./workflow-driver-submit-profile.js";
 import { executeWorldRead } from "./workflow-world-read.js";
-import {
-  createActorModelActivity,
-  createRunStallClock,
-  type RunStallClock,
-} from "./workflow-driver-concurrency.js";
+import { createActorModelActivity, createRunStallClock } from "./workflow-driver-concurrency.js";
+import { type RunStallClock } from "./workflow-activity-contract.js";
 import { handleModelTurnFailure, type ModelFailureHost } from "./workflow-driver-model-failure.js";
 import {
   createActorSessionQuiescence,
   releaseActorSessions,
-  type ActorSessionQuiescenceLedger,
 } from "./workflow-driver-quiescence.js";
+import { type ActorSessionQuiescenceLedger } from "./workflow-quiescence-contract.js";
 import {
   makeSessionEscalatePort,
   respondToParkedEscalation,
@@ -98,10 +95,7 @@ import {
   schemaEpilogue,
   toWorkflowError,
 } from "./workflow-driver-helpers.js";
-import {
-  makeSessionSubmitPort,
-  type SubmitBridgeHost,
-} from "./workflow-driver-submit-bridge.js";
+import { makeSessionSubmitPort, type SubmitBridgeHost } from "./workflow-driver-submit-bridge.js";
 import {
   countSessionTranscript,
   journalAskMessageBoundary,
@@ -290,7 +284,12 @@ class AgentRuntimeWorkflowDriver implements WorkflowDriver {
         : { modelRequestAdmission: modelActivity.admission }),
     });
     if (seed !== undefined) {
-      await seedActorSession(this.deps, { journaledSessionId: journaled, runtime, seed, sessionId });
+      await seedActorSession(this.deps, {
+        journaledSessionId: journaled,
+        runtime,
+        seed,
+        sessionId,
+      });
     }
     state = {
       ref,

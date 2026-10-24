@@ -1,60 +1,15 @@
-import {
-  ModelErrorCode,
-  ModelFailureReason as ModelFailureReasonValue,
-  ModelRetryReason as ModelRetryReasonValue,
-  type ModelErrorCode as ModelErrorCodeType,
-  type ModelFailureReason,
-  type ModelRetryReason,
-} from "@zcode/contracts";
-
-import {
-  getApiCallResponseBody,
-  getErrorCode,
-  getResponseHeaders,
-  getStatusCode,
-  isAbortFailure,
-  isContextExceededFailure,
-  isNetworkFailure,
-  isProviderMarkedRetryable,
-  isProxyFailure,
-  isTimeoutFailure,
-  parseRetryAfterMs,
-  unwrapRetryError,
-} from "./failure-inspection.js";
-
+import type { ClassifiedModelFailure, ProviderFailureDetails } from "./failure-contract.js";
+import { ModelErrorCode, ModelFailureReason as ModelFailureReasonValue, ModelRetryReason as ModelRetryReasonValue } from "@zcode/contracts";
+import { getApiCallResponseBody, getErrorCode, getResponseHeaders, getStatusCode, isAbortFailure, isContextExceededFailure, isNetworkFailure, isProviderMarkedRetryable, isProxyFailure, isTimeoutFailure, parseRetryAfterMs, unwrapRetryError } from "./failure-inspection.js";
 import { readMappedAiSdkProviderBusinessError } from "./failure-ai-sdk-provider-error.js";
-
 import { isTlsFailure } from "./failure-tls.js";
-
 import { readProviderBusinessFailureFromBody } from "./model-execution.js";
-
 import { isModelStreamIdleTimeoutError } from "./stream-idle-timeout.js";
+import { classifyProviderBusinessFailure, classifyProviderBusinessFailureFromApiCallBody, findProviderBusinessError, providerBusinessMessage, resolveProviderBusinessCode } from "./provider-business-failure.js";
 
-import {
-  classifyProviderBusinessFailure,
-  classifyProviderBusinessFailureFromApiCallBody,
-  findProviderBusinessError,
-  providerBusinessMessage,
-  resolveProviderBusinessCode,
-} from "./provider-business-failure.js";
+export type { ClassifiedModelFailure, ProviderFailureDetails } from "./failure-contract.js";
 
 export { findProviderBusinessError } from "./provider-business-failure.js";
-
-export interface ClassifiedModelFailure {
-  code: ModelErrorCodeType;
-  message: string;
-  reason: ModelFailureReason;
-  retryReason: ModelRetryReason;
-  retryable: boolean;
-  retryAfterMs?: number;
-  statusCode?: number;
-}
-
-export interface ProviderFailureDetails {
-  providerErrorCode?: string;
-  providerErrorMessage?: string;
-  providerRequestId?: string;
-}
 
 export function inspectProviderFailure(error: unknown): ProviderFailureDetails {
   const unwrapped = unwrapRetryError(error);

@@ -3,12 +3,14 @@ import type { StreamReplayState } from "./stream-attempt-contract.js";
 import { ModelFailureReason as ModelFailureReasonValue } from "@zcode/contracts";
 import { ModelRetryReason } from "@zcode/contracts";
 import { classifyModelFailure } from "./failure-classifier.js";
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { getResponseHeaders } from "./failure-inspection.js";
 import { unwrapRetryError } from "./failure-inspection.js";
 import { offPeakTicketExpiredMessage } from "./offpeak-retry.js";
 import { resolveOffPeakFailureDecision } from "./offpeak-retry.js";
-import { StreamDiagnostics } from "./runner-diagnostics.js";
+
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 import { logStreamFailureDiagnostics } from "./runner-diagnostics.js";
 import { sanitizeModelNetworkHeaders } from "./runner-network-headers.js";
 import type { AttemptAdmission } from "./request-admission.js";

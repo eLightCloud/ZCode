@@ -12,7 +12,7 @@ import {
 import type { TraceContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { isValidPluginStableId } from "../../plugin-reference/index.js";
-import { renderSkillContent } from "../../tool/handlers/skill.js";
+import { renderSkillContent } from "../../tool/session-tools-api.js";
 
 const PREFIX = "Required plugin entry: ";
 const DESTINATIONS = /\[(?:\\.|[^\\\]])*\]\((?:<([^>]+)>|([^\s)]+))\)/g;

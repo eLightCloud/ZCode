@@ -2,7 +2,7 @@ import { createPartId } from "../deps.js";
 import type { MessageId, TraceContext } from "../deps.js";
 import { toTokenUsageInfo } from "../helpers/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { RuntimeModelTextResult } from "../types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 
 export async function persistToolModelStepFinish(

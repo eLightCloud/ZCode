@@ -22,7 +22,7 @@ import { randomUUID } from "node:crypto";
 
 import type { ToolRegistry } from "../tool/registry.js";
 
-import { createToolRuleNameSet } from "../tool/tool-visibility.js";
+import { createToolRuleNameSet } from "../tool/model-surface-api.js";
 
 import type { ToolEntry } from "../tool/types.js";
 

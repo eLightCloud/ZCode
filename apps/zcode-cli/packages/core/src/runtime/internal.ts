@@ -1,69 +1,27 @@
 import { PermissionService, ToolScheduler } from "./deps.js";
-import type {
-  Logger,
-  ModelSelection,
-  EventReducer,
-  MessageId,
-  TurnId,
-  ModelToolContract,
-  PermissionBrokerPort,
-  SessionEventSink,
-  SessionEventStorePort,
-  SessionId,
-  SessionMailboxPort,
-  SessionStorePort,
-  ContextSourcePort,
-  ContextSourceSnapshot,
-  ExecutionPort,
-  FileSystemPort,
-  HookRunner,
-  ImageProcessorPort,
-  PdfDocumentPort,
-  McpConnectionSnapshot,
-  SkillLoadOutcome,
-  SkillPort,
-  McpPort,
-  DynamicWorkflowRunPort,
-  ModelCatalogPort,
-  SubagentPort,
-  ToolArtifactStorePort,
-  TraceContext,
-  MessageHistory,
-  ReadFileStateMap,
-  ToolExecutor,
-  ToolRegistry,
-  ContextBuilder,
-  ContextBuildResult,
-} from "./deps.js";
-import type {
-  ActiveTurnSteeringState,
-  ActiveTurnStartReservation,
-  ActiveForegroundExecutionState,
-  ForegroundPromotionLeaseState,
-  AgentRuntimeConfig,
-  AgentRuntimeDeps,
-  BackgroundTaskNotificationSealReason,
-  PendingModelChangeTimeline,
-  ProviderRuntimeHeadersPort,
-  MainTurnCacheHitAggregate,
-  RuntimeTurnFileChangeMap,
-} from "./types.js";
+import type { Logger, ModelSelection, EventReducer, MessageId, TurnId, ModelToolContract, PermissionBrokerPort, SessionEventSink, SessionEventStorePort, SessionId, SessionMailboxPort, SessionStorePort, ContextSourcePort, ContextSourceSnapshot, ExecutionPort, FileSystemPort, HookRunner, ImageProcessorPort, PdfDocumentPort, McpConnectionSnapshot, SkillLoadOutcome, SkillPort, McpPort, DynamicWorkflowRunPort, ModelCatalogPort, SubagentPort, ToolArtifactStorePort, TraceContext, MessageHistory, ReadFileStateMap, ToolExecutor, ToolRegistry, ContextBuilder, ContextBuildResult } from "./deps.js";
+import type { ActiveTurnSteeringState, ActiveTurnStartReservation, ActiveForegroundExecutionState, ForegroundPromotionLeaseState, AgentRuntimeConfig, AgentRuntimeDeps, BackgroundTaskNotificationSealReason, PendingModelChangeTimeline, ProviderRuntimeHeadersPort, MainTurnCacheHitAggregate, RuntimeTurnFileChangeMap } from "./types.js";
 import type { RuntimeCommandQueue } from "./command-queue.js";
 import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type { WorkflowBlockedReminderClock } from "../runtime-task/workflow-blocked-reminder.js";
-import type { DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation.js";
+import type { DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation-types.js";
 import type { AgentRuntimeCoreMethods } from "./internal-methods.js";
 import type { AgentRuntimeTurnMethods } from "./internal-turn-methods.js";
 import type { AgentRuntimeHookMethods } from "./internal-hook-methods.js";
 import type { MemoryRecallState } from "../memory/recall/index.js";
-import type { ProjectMemoryRecallPrefetch } from "./helpers/project-memory-recall.js";
-import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction.js";
-import type { ProjectMemoryUpdate } from "./helpers/project-memory-dream.js";
+import type { ProjectMemoryRecallPrefetch } from "./helpers/project-memory-recall-types.js";
+import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction-types.js";
+import type { ProjectMemoryUpdate } from "./helpers/project-memory-dream-types.js";
 import type { RuntimeTelemetryFacade } from "../telemetry/runtime-telemetry.js";
 import type { WorkspaceHookRuntimeAdmissionPort } from "../hooks/workspace-hook-runtime-admission.js";
 
 export interface AgentRuntimeInternal
   extends AgentRuntimeCoreMethods, AgentRuntimeTurnMethods, AgentRuntimeHookMethods {
+  createChildRuntime(
+    sessionId: SessionId,
+    config: AgentRuntimeConfig,
+    deps: AgentRuntimeDeps,
+  ): AgentRuntimeInternal;
   sessionId: SessionId;
   turnNumber: number;
   config: AgentRuntimeConfig;

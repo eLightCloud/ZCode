@@ -18,18 +18,29 @@ it("gracefully closes the real SQLite worker and permits the next owner", async 
     const next = await tryAcquireKernelFileLock(path);
     expect(next).not.toBeNull();
     if (next) await releaseKernelFileLock(next);
-  } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
+  } finally {
+    await worker.terminate();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 it("bounds release when an unresponsive worker ignores the close message", async () => {
-  const worker = new Worker(new URL("data:text/javascript," + encodeURIComponent(
-    "import {parentPort} from 'node:worker_threads';parentPort.on('message',()=>{});parentPort.postMessage('ready');",
-  )), { execArgv: [] });
+  const worker = new Worker(
+    new URL(
+      "data:text/javascript," +
+        encodeURIComponent(
+          "import {parentPort} from 'node:worker_threads';parentPort.on('message',()=>{});parentPort.postMessage('ready');",
+        ),
+    ),
+    { execArgv: [] },
+  );
   await once(worker, "message");
   const started = Date.now();
   try {
     await releaseKernelFileLock(worker);
     expect(worker.threadId).toBe(-1);
     expect(Date.now() - started).toBeLessThan(4000);
-  } finally { await worker.terminate(); }
+  } finally {
+    await worker.terminate();
+  }
 });

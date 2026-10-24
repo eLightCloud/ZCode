@@ -1,13 +1,13 @@
 import type { SessionProjection } from "../interfaces/session.port.js";
 import type {
-  SessionEvent,
   TurnSteerDeliveryChangedPayload,
   TurnSteerDiscardedPayload,
   TurnSteerDrainedPayload,
   TurnSteerQueuedPayload,
   TurnSteerReorderedPayload,
 } from "./session.events.js";
-import { SessionEventType as EventTypes } from "./session.events.js";
+import type { SessionEvent } from "./session-event-identity.js";
+import { SessionEventType as EventTypes } from "./session-event-identity.js";
 export const inputEventHandlers: Record<
   string,
   (projection: SessionProjection, event: SessionEvent) => SessionProjection

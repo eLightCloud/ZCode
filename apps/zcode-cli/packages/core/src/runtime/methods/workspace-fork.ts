@@ -1,32 +1,8 @@
-import {
-  CoreErrorType,
-  RewindStrategy,
-  SessionEventType,
-  createCoreError,
-  createMessageId,
-  createPartId,
-  parseWorkspaceCheckpointArtifact,
-} from "../deps.js";
-import type {
-  MessageId,
-  SessionId,
-  TraceContext,
-  WorkspaceCheckpointArtifact,
-} from "../deps.js";
-import {
-  selectCheckpointsForMessages,
-  formatWorkspaceForkAtMessageNoticeBody,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
-import {
-  buildForkHistoryMessages,
-  copyGoalStateForFork,
-  createForkedSession,
-  forkConversationFromMessage,
-  forkSourceMessagesForSession,
-  resolveForkHistoryEndIndex,
-} from "./session-fork.js";
-import type { WorkspaceRewindRestoredFile, WorkspaceForkResult } from "../types.js";
+import { CoreErrorType, RewindStrategy, SessionEventType, createCoreError, createMessageId, createPartId, parseWorkspaceCheckpointArtifact } from "../deps.js";
+import type { MessageId, SessionId, TraceContext, WorkspaceCheckpointArtifact } from "../deps.js";
+import { selectCheckpointsForMessages, formatWorkspaceForkAtMessageNoticeBody, throwIfTurnAborted } from "../helpers/index.js";
+import { buildForkHistoryMessages, copyGoalStateForFork, createForkedSession, forkConversationFromMessage, forkSourceMessagesForSession, resolveForkHistoryEndIndex } from "./session-fork.js";
+import type { WorkspaceRewindRestoredFile, WorkspaceForkResult } from "../workspace-recovery-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 
 export async function restoreWorkspaceCheckpointFiles(

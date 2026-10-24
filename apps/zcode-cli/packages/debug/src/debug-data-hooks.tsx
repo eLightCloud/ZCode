@@ -11,9 +11,9 @@ import type {
   ObservationSourceErrorEvent,
 } from "./shared";
 
-import type { ObservationEventState, SourceInputs } from "./debug-view-config.js";
+import type { ObservationEventState, SourceInputs } from "./debug-client-state.js";
 
-import { mergeNetworkRequest } from "./debug-network-data.js";
+import { mergeNetworkRequest } from "./network-request-index.js";
 
 export function useObservationEvents(query: string, onChange: () => void): ObservationEventState {
   const onChangeRef = useRef(onChange);

@@ -1,3 +1,4 @@
+import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
 import type { ConversationV4GatewayApi } from "./gateway-api.js";
 import type * as implementation14 from "./gateway-attachment-binary.js";
 import type * as implementation13 from "./gateway-attachment-media.js";
@@ -138,81 +139,108 @@ export class ConversationV4Gateway {
   declare dispose: ConversationV4GatewayApi["dispose"];
   declare updateSharedContextImport: ConversationV4GatewayApi["updateSharedContextImport"];
 
-  private readonly publishers = new Map<string, ConversationTopicPublisher>();
+  private readonly publishers: ConversationV4GatewayMethodsContext["publishers"] = new Map<
+    string,
+    ConversationTopicPublisher
+  >();
   /** sessions-index：workspaceId → 列表 publisher（与 conversation 并列，独立 seq/logEpoch）。 */
-  private readonly indexPublishers = new SessionsIndexPublisherRegistry();
+  private readonly indexPublishers: ConversationV4GatewayMethodsContext["indexPublishers"] =
+    new SessionsIndexPublisherRegistry();
   /** workspace-config：workspaceId → 配置目录 publisher（conflated 整体替换态）。 */
-  private readonly configPublishers = new Map<string, WorkspaceConfigPublisher>();
+  private readonly configPublishers: ConversationV4GatewayMethodsContext["configPublishers"] =
+    new Map<string, WorkspaceConfigPublisher>();
   /** 已完成首次 hydration 的 session（避免重复重建 / 双计，见 hydratePublisher）。 */
-  private readonly hydratedSessions = new Set<string>();
+  private readonly hydratedSessions: ConversationV4GatewayMethodsContext["hydratedSessions"] =
+    new Set<string>();
   /** 首次 hydration 按 session 单飞；并发 pane 共享同一份重建结果。 */
-  private readonly hydrationInFlight = new Map<string, Promise<ConversationTopicPublisher>>();
+  private readonly hydrationInFlight: ConversationV4GatewayMethodsContext["hydrationInFlight"] =
+    new Map<string, Promise<ConversationTopicPublisher>>();
   /** cold activation 到 hydration 的 READY 水位；只阻塞本次恢复期间的 command/query。 */
-  private readonly historyOpenings = new Map<
+  private readonly historyOpenings: ConversationV4GatewayMethodsContext["historyOpenings"] =
+    new Map<
+      string,
+      {
+        history: Promise<ConversationTopicPublisher>;
+        start: () => void;
+        cancel: () => void;
+      }
+    >();
+  private readonly readyFlights: ConversationV4GatewayMethodsContext["readyFlights"] = new Map<
     string,
-    {
-      history: Promise<ConversationTopicPublisher>;
-      start: () => void;
-      cancel: () => void;
-    }
+    Promise<ConversationTopicPublisher>
   >();
-  private readonly readyFlights = new Map<string, Promise<ConversationTopicPublisher>>();
   /** load await 窗口内的 raw accepted events；重建后按 cursor/eventId 补回。 */
-  private readonly hydrationBuffers = new Map<string, HydrationBuffer>();
+  private readonly hydrationBuffers: ConversationV4GatewayMethodsContext["hydrationBuffers"] =
+    new Map<string, HydrationBuffer>();
   /** transcript 合成序列与 runtime raw 序列之间的 per-session 单调映射。 */
-  private readonly rawSequenceStates = new Map<string, RawSequenceState>();
+  private readonly rawSequenceStates: ConversationV4GatewayMethodsContext["rawSequenceStates"] =
+    new Map<string, RawSequenceState>();
   /** connection-independent；command admission 与 transport subscription 生命周期解耦。 */
-  private readonly projectionEventCommitWaiters = new Map<
-    string,
-    Map<string, Set<ProjectionEventCommitWaiter>>
-  >();
+  private readonly projectionEventCommitWaiters: ConversationV4GatewayMethodsContext["projectionEventCommitWaiters"] =
+    new Map<string, Map<string, Set<ProjectionEventCommitWaiter>>>();
   /** 没有独立 bootstrap record、但由父 runtime 持续转发 raw events 的 live child。 */
-  private readonly detachedLiveSessions = new Set<string>();
+  private readonly detachedLiveSessions: ConversationV4GatewayMethodsContext["detachedLiveSessions"] =
+    new Set<string>();
   /**
    * detached subagent child 的父 record 归属与终态时间。child 没有自己的 record，publisher 只能随父 record 释放，
    * 或在 turn 结束且无订阅者、超过 grace 后由低频 tick 释放；否则会驻留到进程退出。
    */
-  private readonly detachedChildParent = new Map<string, string>();
-  private readonly detachedChildrenByParent = new Map<string, Set<string>>();
-  private readonly detachedTerminalAt = new Map<string, number>();
+  private readonly detachedChildParent: ConversationV4GatewayMethodsContext["detachedChildParent"] =
+    new Map<string, string>();
+  private readonly detachedChildrenByParent: ConversationV4GatewayMethodsContext["detachedChildrenByParent"] =
+    new Map<string, Set<string>>();
+  private readonly detachedTerminalAt: ConversationV4GatewayMethodsContext["detachedTerminalAt"] =
+    new Map<string, number>();
   /** 冷恢复协调器（既有 activation 单飞 + 错误分型）。 */
-  private readonly coldResume: ColdSessionResumeCoordinator;
+  private readonly coldResume: ConversationV4GatewayMethodsContext["coldResume"];
   /** 订阅 → flush 调度状态（publisher 内部不持有定时器，调度归网关）。 */
-  private readonly flushStates = new Map<string, FlushState>();
+  private readonly flushStates: ConversationV4GatewayMethodsContext["flushStates"] = new Map<
+    string,
+    FlushState
+  >();
   /** ACK/outbox 尚未 admission 的 control reservation 禁止被 online flush 抢先发送。 */
-  private readonly controlReservations = new WeakSet<object>();
+  private readonly controlReservations: ConversationV4GatewayMethodsContext["controlReservations"] =
+    new WeakSet<object>();
   /** transport high-water pause 只按 trusted connectionId 隔离，不改变 ingest/publisher 真值。 */
-  private readonly pausedConnections = new Set<string>();
+  private readonly pausedConnections: ConversationV4GatewayMethodsContext["pausedConnections"] =
+    new Set<string>();
   /** 一个越界周期只触发一次 runtime stop；终态事件到达后解除。 */
-  private readonly projectionFaultedSessions = new Set<string>();
-  private readonly inbox: CommandInbox;
-  private readonly attachmentUploads: AttachmentUploadRegistry;
-  private readonly binaryReadCache = new Map<string, BinaryReadCacheEntry>();
-  private binaryReadCacheBytes = 0;
-  private readonly localTtft = new LocalTtftRecorder(
-    localTtftNow,
-    () => {
-      this.host.onError?.(
-        "v4.localTtft.completedCapacity",
-        new Error("TTFT completed record capacity exceeded"),
-      );
-    },
-    (facts) => {
-      const parsed = localTtftFactsSchema.safeParse(facts);
-      if (parsed.success) this.host.emitLocalTtftFacts?.(parsed.data);
-    },
-  );
+  private readonly projectionFaultedSessions: ConversationV4GatewayMethodsContext["projectionFaultedSessions"] =
+    new Set<string>();
+  private readonly inbox: ConversationV4GatewayMethodsContext["inbox"];
+  private readonly attachmentUploads: ConversationV4GatewayMethodsContext["attachmentUploads"];
+  private readonly binaryReadCache: ConversationV4GatewayMethodsContext["binaryReadCache"] =
+    new Map<string, BinaryReadCacheEntry>();
+  private binaryReadCacheBytes: ConversationV4GatewayMethodsContext["binaryReadCacheBytes"] = 0;
+  private readonly localTtft: ConversationV4GatewayMethodsContext["localTtft"] =
+    new LocalTtftRecorder(
+      localTtftNow,
+      () => {
+        this.host.onError?.(
+          "v4.localTtft.completedCapacity",
+          new Error("TTFT completed record capacity exceeded"),
+        );
+      },
+      (facts) => {
+        const parsed = localTtftFactsSchema.safeParse(facts);
+        if (parsed.success) this.host.emitLocalTtftFacts?.(parsed.data);
+      },
+    );
   /** 高频进度事件的 index fan-out 节流（14-sessions-index「事件 fan-out 节奏」）。 */
-  private readonly indexFanoutThrottle = new SessionsIndexFanoutThrottle({
-    publish: (sessionId) => this.publishCurrentSummaryToIndex(sessionId),
-  });
-  private readonly attachmentPruneTimer: ReturnType<typeof setInterval>;
-  private readonly now: () => number;
-  private readonly createLogEpoch: (sessionId: string) => string;
-  private readonly telemetryNormalizer = new ConversationTelemetryFactNormalizer();
-  private readonly cuaPermissionNormalizer = new CuaPermissionObservationNormalizer();
-  private readonly telemetryEventIds = new Set<string>();
-  private disposed = false;
+  private readonly indexFanoutThrottle: ConversationV4GatewayMethodsContext["indexFanoutThrottle"] =
+    new SessionsIndexFanoutThrottle({
+      publish: (sessionId) => this.publishCurrentSummaryToIndex(sessionId),
+    });
+  private readonly attachmentPruneTimer: ConversationV4GatewayMethodsContext["attachmentPruneTimer"];
+  private readonly now: ConversationV4GatewayMethodsContext["now"];
+  private readonly createLogEpoch: ConversationV4GatewayMethodsContext["createLogEpoch"];
+  private readonly telemetryNormalizer: ConversationV4GatewayMethodsContext["telemetryNormalizer"] =
+    new ConversationTelemetryFactNormalizer();
+  private readonly cuaPermissionNormalizer: ConversationV4GatewayMethodsContext["cuaPermissionNormalizer"] =
+    new CuaPermissionObservationNormalizer();
+  private readonly telemetryEventIds: ConversationV4GatewayMethodsContext["telemetryEventIds"] =
+    new Set<string>();
+  private disposed: ConversationV4GatewayMethodsContext["disposed"] = false;
 
   /** session entry 状态变更后的轻量 metadata 更新，不重放 conversation event。 */
 

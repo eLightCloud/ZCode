@@ -1,3 +1,4 @@
+import type { ZCodeProtocolAgentServerMethodsContext } from "./protocol-server-context.js";
 import type { ZCodeProtocolAgentServerApi } from "./protocol-server-api.js";
 import type * as implementation5 from "./protocol-server-client-requests.js";
 import type * as implementation3 from "./protocol-server-dispatch.js";
@@ -6,7 +7,7 @@ import { installZCodeProtocolAgentServerMethods } from "./protocol-server-method
 import type * as implementation4 from "./protocol-server-operation-signals.js";
 import { createNodeNetworkCapture } from "@zcode/shared/node";
 import { zcodeProtocolNotifications } from "@zcode/shared";
-import type { BrowserControlPort } from "@zcode/contracts";
+
 import { InMemoryWorkspaceHookPolicyProvider } from "@zcode/core";
 import type { ZCodeProtocolMethod } from "@zcode/shared";
 import type { ZCodeProtocolRequest } from "@zcode/shared";
@@ -32,7 +33,7 @@ import { MAX_CLIENT_REQUEST_REANNOUNCE_INTERVAL_MS } from "./protocol-server-sup
 import { getOperationId } from "./protocol-server-support.js";
 import { getPluginOperationId } from "./protocol-server-support.js";
 import type { PendingClientRequest } from "./protocol-server-support.js";
-import type { ZCodeProtocolOutboundMessage } from "./protocol-server-support.js";
+
 import type { ZCodeProtocolPostResponseBatch } from "./protocol-server-support.js";
 import { requestMcpElicitation } from "./interaction-broker.js";
 
@@ -59,15 +60,16 @@ export class ZCodeProtocolAgentServer {
   declare requestMcpElicitation: ZCodeProtocolAgentServerApi["requestMcpElicitation"];
   declare handleMcpNotification: ZCodeProtocolAgentServerApi["handleMcpNotification"];
 
-  private readonly networkCapture = createNodeNetworkCapture("cli", (batch) => {
-    this.messageSink?.({
-      method: zcodeProtocolNotifications.processNetworkRequests,
-      params: batch,
+  private readonly networkCapture: ZCodeProtocolAgentServerMethodsContext["networkCapture"] =
+    createNodeNetworkCapture("cli", (batch) => {
+      this.messageSink?.({
+        method: zcodeProtocolNotifications.processNetworkRequests,
+        params: batch,
+      });
     });
-  });
-  private readonly runtimeResources: ProtocolRuntimeResources;
-  private shutdownPromise?: Promise<void>;
-  readonly browserControlPort: BrowserControlPort;
+  private readonly runtimeResources: ZCodeProtocolAgentServerMethodsContext["runtimeResources"];
+  private shutdownPromise?: ZCodeProtocolAgentServerMethodsContext["shutdownPromise"];
+  readonly browserControlPort: ZCodeProtocolAgentServerMethodsContext["browserControlPort"];
   /**
    * 官方 MCP 身份头端口所需的最小上下文。
    * MCP 连接池的构造早于 server，需要在 server 就绪后回填闭包持有的引用——
@@ -81,22 +83,23 @@ export class ZCodeProtocolAgentServer {
     return this.context;
   }
 
-  private messageSink?: (message: ZCodeProtocolOutboundMessage) => void;
-  private clientDisconnectError?: Error;
-  private readonly context: ZCodeProtocolAgentServerContext;
-  private readonly logger;
-  private readonly pendingClientRequests = new Map<string, PendingClientRequest<unknown>>();
-  private readonly pluginOperationControllers = new Map<string, AbortController>();
-  private readonly workspaceGenerateTextControllers = new Map<string, AbortController>();
+  private messageSink?: ZCodeProtocolAgentServerMethodsContext["messageSink"];
+  private clientDisconnectError?: ZCodeProtocolAgentServerMethodsContext["clientDisconnectError"];
+  private readonly context: ZCodeProtocolAgentServerMethodsContext["context"];
+  private readonly logger: ZCodeProtocolAgentServerMethodsContext["logger"];
+  private readonly pendingClientRequests: ZCodeProtocolAgentServerMethodsContext["pendingClientRequests"] =
+    new Map<string, PendingClientRequest<unknown>>();
+  private readonly pluginOperationControllers: ZCodeProtocolAgentServerMethodsContext["pluginOperationControllers"] =
+    new Map<string, AbortController>();
+  private readonly workspaceGenerateTextControllers: ZCodeProtocolAgentServerMethodsContext["workspaceGenerateTextControllers"] =
+    new Map<string, AbortController>();
   /**
    * subscribe initial frame 按 JSON-RPC request id 隔离。connection 必须先 take，
    * 再写 response line，最后按数组顺序写 notification，不能靠 microtask 猜时序。
    */
-  private readonly postResponseOutbox = new Map<
-    ZCodeProtocolRequestId,
-    ZCodeProtocolPostResponseBatch
-  >();
-  private nextClientRequestId = 1;
+  private readonly postResponseOutbox: ZCodeProtocolAgentServerMethodsContext["postResponseOutbox"] =
+    new Map<ZCodeProtocolRequestId, ZCodeProtocolPostResponseBatch>();
+  private nextClientRequestId: ZCodeProtocolAgentServerMethodsContext["nextClientRequestId"] = 1;
 
   constructor(deps: ZCodeProtocolAgentDependencies) {
     this.runtimeResources = new ProtocolRuntimeResources(deps.createZCodeApp);

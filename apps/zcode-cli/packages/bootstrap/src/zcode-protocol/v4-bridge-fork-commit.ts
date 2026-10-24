@@ -17,7 +17,7 @@ import { SessionEventType, createEventId } from "@zcode/contracts";
 
 import type { SessionEvent, SessionId } from "@zcode/contracts";
 
-import { registerForkedSession } from "./server-operations.js";
+import { registerForkedSession } from "./protocol-session-fork.js";
 
 import type {
   ZCodeProtocolAgentServerContext,

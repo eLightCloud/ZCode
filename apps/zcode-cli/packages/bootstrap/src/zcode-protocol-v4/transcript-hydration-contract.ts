@@ -15,7 +15,7 @@ import { CoreErrorType, ModelErrorCode, SessionEventType } from "@zcode/contract
 
 import { type ErrorAttribution } from "@zcode/shared/zcode-protocol-v4";
 
-import type { HydratedGoalVerificationEntry } from "./transcript-goal-events.js";
+import type { HydratedGoalVerificationEntry } from "./transcript-goal-contract.js";
 
 export const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
 

@@ -84,6 +84,27 @@ async function createTestReleaseArchive(
 describe("Server CLI routing", () => {
   const noUpdateDaemonHandoff = { converge: async (): Promise<void> => undefined };
 
+  it("brands uninstall confirmation without changing the version protocol or admitting unsafe names", async () => {
+    const root = await mkdtemp(join(tmpdir(), "server-cli-display-"));
+    const confirm = vi.fn(async () => "");
+    const write = vi.fn();
+    const io = { stdout: { write }, stderr: { write: vi.fn() }, confirm };
+    expect(
+      await runServerCli(["uninstall", "--server-root", root], io, {
+        applicationName: "Test Workspace",
+      }),
+    ).toBe(1);
+    expect(confirm).toHaveBeenCalledWith("Type DELETE to uninstall Test Workspace Server: ");
+    expect(
+      await runServerCli(["version", "--json"], io, { applicationName: "Test Workspace" }),
+    ).toBe(0);
+    expect(JSON.parse(write.mock.calls.at(-1)![0])).toEqual({
+      product: "zcode-server",
+      version: ZCODE_VERSION,
+    });
+    expect(await runServerCli(["version"], io, { applicationName: "unsafe\nname" })).toBe(1);
+  });
+
   it("budgets apply-update timeout for the complete bounded rollback path", () => {
     // 旧 Core 停止、新 Core ready、新 Core 回滚停止、旧 Core ready、旧 Core ready 超时后的再次停止。
     expect(APPLY_UPDATE_TIMEOUT_MS).toBeGreaterThan(
@@ -191,65 +212,76 @@ describe("Server CLI routing", () => {
     await expect(access(layout.pendingFile)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it.each([false, true])("reports online update progress only when requested (%s) and waits for convergence", async (progress) => {
-    const root = await mkdtemp(join(process.platform === "win32" ? tmpdir() : "/tmp", "zuh-"));
-    const serverRoot = join(root, "server");
-    const layout = resolveServerLayout(serverRoot);
-    const releases = new ReleaseManager(layout);
-    await releases.ensure();
-    const oldReleaseDir = join(layout.releasesDir, "release-a");
-    await mkdir(oldReleaseDir, { recursive: true });
-    await releases.writePending({
-      version: "3.8.0",
-      releaseDir: oldReleaseDir,
-      releaseId: "release-a",
-    });
-    await releases.applyPending();
-    const { archivePath } = await createTestReleaseArchive(root, "3.9.0");
-    const commands: string[] = [];
-    const control = await createControlServer(layout.controlEndpoint, async (request) => {
-      commands.push(request.command);
-      if (request.command === "prepare-update") {
-        return { status: "ready", runningTaskCount: 0 };
-      }
-      if (request.command === "apply-update") {
-        const applied = await releases.applyPending();
-        return { applied: true, version: applied.version };
-      }
-      throw new Error(`Unexpected control command: ${request.command}`);
-    });
-    const output: string[] = [];
-    const converge = vi.fn(async () => {
-      expect(await releases.readCurrent()).toMatchObject({ version: "3.9.0" });
-      if (progress) {
-        expect(output.map((line) => JSON.parse(line))).toEqual([
-          { type: "source-server-install-progress", phase: "verify-archive" },
-          { type: "source-server-install-progress", phase: "extract" },
-          { type: "source-server-install-progress", phase: "verify" },
-          { type: "source-server-install-progress", phase: "restart" },
-        ]);
-      } else {
-        expect(output).toEqual([]);
-      }
-    });
-    try {
-      const exit = await runServerCli(
-        ["update", "--from-archive", archivePath, "--server-root", serverRoot, "--json", ...(progress ? ["--progress"] : [])],
-        { stdout: { write: (value) => output.push(value) } },
-        { updateDaemonHandoff: { converge } } as never,
-      );
-
-      expect(exit).toBe(0);
-      expect(commands).toEqual(["prepare-update", "prepare-update", "apply-update"]);
-      expect(converge).toHaveBeenCalledOnce();
-      expect(JSON.parse(output.at(-1)!)).toMatchObject({
-        applied: true,
-        version: "3.9.0",
+  it.each([false, true])(
+    "reports online update progress only when requested (%s) and waits for convergence",
+    async (progress) => {
+      const root = await mkdtemp(join(process.platform === "win32" ? tmpdir() : "/tmp", "zuh-"));
+      const serverRoot = join(root, "server");
+      const layout = resolveServerLayout(serverRoot);
+      const releases = new ReleaseManager(layout);
+      await releases.ensure();
+      const oldReleaseDir = join(layout.releasesDir, "release-a");
+      await mkdir(oldReleaseDir, { recursive: true });
+      await releases.writePending({
+        version: "3.8.0",
+        releaseDir: oldReleaseDir,
+        releaseId: "release-a",
       });
-    } finally {
-      await control.close();
-    }
-  });
+      await releases.applyPending();
+      const { archivePath } = await createTestReleaseArchive(root, "3.9.0");
+      const commands: string[] = [];
+      const control = await createControlServer(layout.controlEndpoint, async (request) => {
+        commands.push(request.command);
+        if (request.command === "prepare-update") {
+          return { status: "ready", runningTaskCount: 0 };
+        }
+        if (request.command === "apply-update") {
+          const applied = await releases.applyPending();
+          return { applied: true, version: applied.version };
+        }
+        throw new Error(`Unexpected control command: ${request.command}`);
+      });
+      const output: string[] = [];
+      const converge = vi.fn(async () => {
+        expect(await releases.readCurrent()).toMatchObject({ version: "3.9.0" });
+        if (progress) {
+          expect(output.map((line) => JSON.parse(line))).toEqual([
+            { type: "source-server-install-progress", phase: "verify-archive" },
+            { type: "source-server-install-progress", phase: "extract" },
+            { type: "source-server-install-progress", phase: "verify" },
+            { type: "source-server-install-progress", phase: "restart" },
+          ]);
+        } else {
+          expect(output).toEqual([]);
+        }
+      });
+      try {
+        const exit = await runServerCli(
+          [
+            "update",
+            "--from-archive",
+            archivePath,
+            "--server-root",
+            serverRoot,
+            "--json",
+            ...(progress ? ["--progress"] : []),
+          ],
+          { stdout: { write: (value) => output.push(value) } },
+          { updateDaemonHandoff: { converge } } as never,
+        );
+
+        expect(exit).toBe(0);
+        expect(commands).toEqual(["prepare-update", "prepare-update", "apply-update"]);
+        expect(converge).toHaveBeenCalledOnce();
+        expect(JSON.parse(output.at(-1)!)).toMatchObject({
+          applied: true,
+          version: "3.9.0",
+        });
+      } finally {
+        await control.close();
+      }
+    },
+  );
 
   it("allows only one update command to own the daemon handoff", async () => {
     const root = await mkdtemp(join(process.platform === "win32" ? tmpdir() : "/tmp", "zul-"));

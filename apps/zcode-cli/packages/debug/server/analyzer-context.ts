@@ -9,7 +9,7 @@ import type {
   ContextUsageToolDetail,
 } from "../src/shared.js";
 
-import { isRecord, numberValue, stringValue } from "./sources.js";
+import { isRecord, numberValue, stringValue } from "./observation-record-values.js";
 
 import type { DbObservation, LoadedObservation, LogRecord } from "./types.js";
 

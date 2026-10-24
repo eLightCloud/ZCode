@@ -1,6 +1,7 @@
 import { ModelRetryReason } from "@zcode/contracts";
 
-import { classifyModelFailure, type ClassifiedModelFailure } from "./failure-classifier.js";
+import { classifyModelFailure } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 import { unwrapRetryError } from "./failure-inspection.js";
 

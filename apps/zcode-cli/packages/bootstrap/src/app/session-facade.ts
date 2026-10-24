@@ -5,7 +5,7 @@ import { type GoalStatus, type TurnInputIntentMetadata } from "@zcode/contracts"
 
 import { resolveLocale } from "@zcode/i18n";
 
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
 
 import {
   resolveRegistryModelSelection,

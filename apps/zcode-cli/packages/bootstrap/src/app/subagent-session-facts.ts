@@ -1,6 +1,6 @@
 import { createSessionId, type ToolPart } from "@zcode/contracts";
 
-import type { SubagentCandidate, SubagentEventRelation } from "./subagent-session-query.js";
+import type { SubagentCandidate, SubagentEventRelation } from "./subagent-session-contract.js";
 
 export const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
 

@@ -14,7 +14,9 @@ void runServerCore(generation).catch((error: unknown) => {
   }
   try {
     process.send(
-      { type: "fatal", message: error instanceof Error ? error.message : String(error),
+      {
+        type: "fatal",
+        message: error instanceof Error ? error.message : String(error),
         ...(error instanceof DataRootLockWaitTimeout ? { reason: "writer-lock-timeout" } : {}),
       },
       exit,

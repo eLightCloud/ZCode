@@ -1,55 +1,19 @@
-import type {
-  Logger,
-  ModelRequestObservationStatusEvent,
-  ModelNetworkStatusEvent,
-  ModelReasoningCallHint,
-  ModelStatusSink,
-  ModelTransportKind,
-  ModelRequestSessionType as ModelRequestSessionTypeValue,
-  QueryId,
-  ResolvedModelApiCallObservation,
-  TraceId,
-} from "@zcode/contracts";
-import {
-  ModelFailureReason as ModelFailureReasonValue,
-  createTraceId,
-  resolveModelApiCallObservation,
-} from "@zcode/contracts";
+import type { ModelStatusContext } from "./model-status-context.js";
+import type { Logger, ModelRequestObservationStatusEvent, ModelNetworkStatusEvent, ModelReasoningCallHint, ModelStatusSink, ModelTransportKind, QueryId, ResolvedModelApiCallObservation, TraceId } from "@zcode/contracts";
+import { ModelFailureReason as ModelFailureReasonValue, createTraceId, resolveModelApiCallObservation } from "@zcode/contracts";
 import { UNBOUNDED_RETRY_MAX_ATTEMPTS } from "./retry-budget.js";
-// 请求归因 header 一族住在 runner-attribution.ts（max-lines 拆分）；公开面仍从本文件导出，
-// 既有 importer 不必改路径。
 import { resolveModelRequestSessionType } from "./runner-attribution.js";
 import type { AiSdkModelTextRequest, ResolvedAiSdkModel } from "./runner-runtime.js";
 import type { ModelRequestObservationSource } from "./request-security.js";
 import { stringMetadata } from "./runner-record.js";
+
+export type { ModelStatusContext } from "./model-status-context.js";
 
 export {
   createModelRequestAttributionHeaders,
   normalizeModelSessionIdForAttribution,
   resolveModelRequestSessionType,
 } from "./runner-attribution.js";
-
-export interface ModelStatusContext {
-  traceId: TraceId;
-  queryId?: QueryId;
-  sessionId?: ModelNetworkStatusEvent["sessionId"];
-  turnId?: ModelNetworkStatusEvent["turnId"];
-  parentSessionId?: ModelNetworkStatusEvent["parentSessionId"];
-  toolCallId?: string;
-  spanId?: string;
-  parentSpanId?: string;
-  querySource?: string;
-  requestId: string;
-  providerId: ResolvedAiSdkModel["providerId"];
-  modelId: ResolvedAiSdkModel["modelId"];
-  modelRequestSessionType: ModelRequestSessionTypeValue;
-  baseURL?: string;
-  providerKind?: string;
-  transport: ModelTransportKind;
-  maxAttempts: number;
-  streamRecovery?: ModelNetworkStatusEvent["streamRecovery"];
-  modelCall: ResolvedModelApiCallObservation;
-}
 
 export function createStatusContext(input: {
   maxAttempts: number;

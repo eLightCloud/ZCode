@@ -1,25 +1,10 @@
 import type { BackgroundBashOutputResult } from "@zcode/shared";
 
-import type {
-  BackgroundTaskCancelResult,
-  MessageId,
-  PermissionBrokerRequest,
-  SessionEvent,
-  SessionId,
-  SessionProjection,
-  ToolCall,
-  ToolCallId,
-  ToolExecutionResult,
-  ToolSchedule,
-  TraceContext,
-} from "./deps.js";
+import type { BackgroundTaskCancelResult, MessageId, PermissionBrokerRequest, SessionEvent, SessionId, SessionProjection, ToolCall, ToolCallId, ToolExecutionResult, ToolSchedule, TraceContext } from "./deps.js";
 
 import type { ExecuteToolsOptions, ExecuteToolsResult, PermissionDecisionResult } from "./types.js";
 
-import type {
-  RuntimeBackgroundStopOptions,
-  RuntimeBackgroundStopResult,
-} from "./methods/background.js";
+import type { RuntimeBackgroundStopOptions, RuntimeBackgroundStopResult } from "./methods/background-stop-types.js";
 
 export interface InternalTurnToolMethods {
   scheduleTools(toolCalls: ToolCall[]): Promise<ToolSchedule>;

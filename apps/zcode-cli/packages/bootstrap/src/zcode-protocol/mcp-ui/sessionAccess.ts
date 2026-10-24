@@ -1,4 +1,4 @@
-import type { ZCodeProtocolSessionRecord } from "../server-types.js";
+import type { McpUiSessionRecord as ZCodeProtocolSessionRecord } from "../contract.js";
 import type { McpUiPluginScope, McpUiSessionAccess } from "./contract.js";
 import { mcpUiInstances } from "./instances.js";
 

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.server.json && vite build",
     "dev": "tsx scripts/dev.ts",
-    "lint": "oxlint src server scripts tests",
+    "lint": "oxlint src server scripts tests contract.ts contract.example.ts contract.test.ts module.ts",
     "lint:fix": "oxlint --write src server scripts tests",
     "start": "node dist-server/server/index.js",
     "test": "vitest run",

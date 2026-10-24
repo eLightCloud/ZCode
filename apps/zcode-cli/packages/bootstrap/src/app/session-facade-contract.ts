@@ -13,8 +13,8 @@ import type { TraceContext } from "@zcode/contracts";
 import type { UiLocale } from "@zcode/contracts";
 import type { AgentRuntime } from "@zcode/core";
 import type { ModelSelection } from "@zcode/provider";
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
-import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
+import type { PrepareUserExecutionBoundary } from "./app-option-types.js";
 import type { ZCodeApp } from "./types.js";
 import type { CliDefaultSelection } from "./cli-default-selection.js";
 

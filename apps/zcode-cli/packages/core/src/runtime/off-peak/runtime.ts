@@ -2,7 +2,8 @@ import type { ModelRequestAuth, ModelSelection, SessionEventSink } from "@zcode/
 import type { OffPeakControlParams, OffPeakControlResult } from "@zcode/shared";
 import { isTerminalRuntimeTask } from "../../runtime-task/registry.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { ExecuteTurnOptions, ModelExecutionContext } from "../types.js";
+import type { ExecuteTurnOptions } from "../types.js";
+import type { ModelExecutionContext } from "../model-execution-types.js";
 import { OffPeakLifecycle, type OffPeakLifecycleEvent, type OffPeakOutcome } from "./lifecycle.js";
 import { OffPeakTicketAuthority, type OffPeakModelBinding } from "./model-binding.js";
 

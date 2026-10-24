@@ -31,7 +31,7 @@ export function readAttachmentPayload(
   mime: string,
   messageId?: string,
   attachmentIndex?: number,
-  allowGeneric = false,
+  allowGeneric: boolean = false,
 ): Promise<{ bytes: Uint8Array; mediaType: string }> {
   const now = this.now();
   this.pruneBinaryReadCache(now);
@@ -93,7 +93,7 @@ export function readAttachmentPayload(
 
 export function pruneBinaryReadCache(
   this: ConversationV4GatewayMethodsContext,
-  now = this.now(),
+  now: number = this.now(),
 ): void {
   for (const [key, entry] of this.binaryReadCache) {
     if (now - entry.accessedAt > PROTOCOL_V4_LIMITS.attachmentReadCacheTtlMs) {

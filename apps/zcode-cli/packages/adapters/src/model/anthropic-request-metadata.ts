@@ -1,6 +1,7 @@
 import { ensureCliDeviceMid } from "../device/cli-device-mid.js";
 import type { EnvRecord } from "./model-execution.js";
-import { normalizeModelSessionIdForAttribution, type ModelStatusContext } from "./runner-status.js";
+import { normalizeModelSessionIdForAttribution } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 
 const REDACTED_METADATA_USER_ID = "[REDACTED]";
 

@@ -2,7 +2,7 @@ import type { McpConnectOptions, McpServerConfig } from "@zcode/contracts";
 
 import { randomUUID } from "node:crypto";
 
-import type { McpConnectionContext } from "./pool.js";
+import type { McpConnectionContext } from "./pool-contract.js";
 
 export function createConnectionContext(input: {
   config: McpServerConfig;

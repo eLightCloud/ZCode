@@ -2,19 +2,11 @@ import type { MessageId } from "../deps.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type {
-  ConversationBeforeInputForkOptions,
-  StableConversationForkOptions,
-  WorkspaceForkResult,
-} from "../types.js";
+import type { ConversationBeforeInputForkOptions, StableConversationForkOptions, WorkspaceForkResult } from "../workspace-recovery-types.js";
 
 import { stableForkError } from "./fork-model-selection.js";
 
-import {
-  conversationHistoryBeforeInput,
-  forkSourceMessagesForSession,
-  stableForkHistoryMessages,
-} from "./fork-history.js";
+import { conversationHistoryBeforeInput, forkSourceMessagesForSession, stableForkHistoryMessages } from "./fork-history.js";
 
 import { commitAtomicConversationFork } from "./fork-atomic.js";
 

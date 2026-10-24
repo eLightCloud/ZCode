@@ -47,7 +47,11 @@ bridge
   .catch(() => {});
 
 bridge?.onState?.((state) => {
-  const messages = resolveCuaPermissionPanelMessages(state.locale, state.permission, state.applicationName);
+  const messages = resolveCuaPermissionPanelMessages(
+    state.locale,
+    state.permission,
+    state.applicationName,
+  );
   document.documentElement.lang = state.locale;
   document.title = messages.documentTitle;
   if (tile) tile.title = messages.dragTitle;

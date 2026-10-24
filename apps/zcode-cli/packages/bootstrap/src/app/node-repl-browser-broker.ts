@@ -1,3 +1,5 @@
+import { type NodeReplBrowserBroker } from "./browser-broker-port.js";
+export type { NodeReplBrowserBroker } from "./browser-broker-port.js";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
@@ -15,13 +17,6 @@ import {
 const NODE_REPL_MCP_SERVER_NAME = "node_repl";
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-
-export interface NodeReplBrowserBroker {
-  close(): Promise<void>;
-  ready: Promise<void>;
-  socketPath: string;
-  token: string;
-}
 
 export function createNodeReplBrowserBroker(input: {
   browserControlPort: BrowserControlPort;

@@ -62,15 +62,17 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     // 语言沿用主窗口写入 localStorage 的偏好；不接 settingService，避免独立窗口再起一份 RPC。
-    <ApplicationShell><ZCodeIntlProvider>
-      <ResourceManagerApp
-        setSamplingActive={window.resourceManager?.setSamplingActive}
-        getSnapshot={
-          window.resourceManager ? () => window.resourceManager!.getSnapshot() : undefined
-        }
-        storage={window.resourceManager?.storage}
-        network={window.resourceManager?.network}
-      />
-    </ZCodeIntlProvider></ApplicationShell>,
+    <ApplicationShell>
+      <ZCodeIntlProvider>
+        <ResourceManagerApp
+          setSamplingActive={window.resourceManager?.setSamplingActive}
+          getSnapshot={
+            window.resourceManager ? () => window.resourceManager!.getSnapshot() : undefined
+          }
+          storage={window.resourceManager?.storage}
+          network={window.resourceManager?.network}
+        />
+      </ZCodeIntlProvider>
+    </ApplicationShell>,
   );
 }

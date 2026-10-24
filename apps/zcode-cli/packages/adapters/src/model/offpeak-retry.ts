@@ -9,7 +9,8 @@
    - D24 规则 1（首派弃派）不在适配层实现：首派挂网关时 ready 5min TTL 到期自然触发
      3102 → 续跑回队，等待上界 ≈ TTL + 一次钳制探测 ≤ 10min，满足规则意图且少一套状态
      （该简化已回写 tech-design §4.3）。 */
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { isProviderBusinessError } from "./model-execution.js";
 
 /**

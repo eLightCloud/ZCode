@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { extname } from "node:path";
 import { sanitizeZCodeRuntimeEnvInPlace } from "@zcode/shared";
-import { applyNetworkEgressEnv, type NetworkEgressEnvPolicy } from "../network/subprocess-env.js";
+import { applyNetworkEgressEnv, type NetworkEgressEnvPolicy } from "../http/index.js";
 import {
   resolveEffectiveBashShellSelection,
   type BashShellProvider,

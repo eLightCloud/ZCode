@@ -6,19 +6,19 @@ import { TurnMachineImpl } from "../deps.js";
 import { traceContextToLogContext } from "../deps.js";
 import type { MessageId } from "../deps.js";
 import type { Model } from "../deps.js";
-import type { ModelToolCall } from "../deps.js";
-import type { ModelToolContract } from "../deps.js";
+
+
 import type { TraceContext } from "../deps.js";
 import { createRuntimeAssistantEntry } from "../../agent/message-history.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+
 import { isModelContextExceededError } from "../helpers/index.js";
 import { isTurnCancellationError } from "../helpers/index.js";
 import { projectExecutionErrorPayload } from "../helpers/index.js";
 import { throwIfTurnAborted } from "../helpers/index.js";
-import type { DrainedPendingInputDiagnostics } from "../types.js";
-import type { RunModelTextRequestOptions } from "../types.js";
-import type { RuntimeModelStreamSnapshot } from "../types.js";
-import type { StreamedToolExecutionResult } from "../types.js";
+
+
+import type { RuntimeModelStreamSnapshot } from "../model-execution-types.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import { persistCancelledStreamSnapshot } from "./cancelled-stream-persistence.js";
 import { beginStartPlanBusyAdmissionRetryAttempt } from "./streaming-recovery.js";

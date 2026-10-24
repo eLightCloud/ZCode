@@ -30,9 +30,9 @@ import type {
   SessionRef,
 } from "@zcode/dynamic-workflow";
 import type { ActorTranscriptStore } from "./workflow-actor-transcript.js";
-import type { WorkflowConcurrencyPort } from "./workflow-concurrency-governor.js";
-import type { ActorModelActivity, WorkflowClock } from "./workflow-driver-concurrency.js";
-import type { ActorSessionQuiescence } from "./workflow-driver-quiescence.js";
+import type { WorkflowConcurrencyPort } from "./workflow-concurrency-port.js";
+import type { ActorModelActivity, WorkflowClock } from "./workflow-activity-contract.js";
+import type { ActorSessionQuiescence } from "./workflow-quiescence-contract.js";
 import type { WorkflowEscalationRegistry } from "./workflow-escalation-registry.js";
 import type { WorkflowRunSeatGate } from "./workflow-seat-gate.js";
 

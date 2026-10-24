@@ -12,11 +12,8 @@ import type {
 
 import { modelContentForToolResult, isErrorForToolResult } from "../runtime/helpers/tool-result.js";
 import { projectMessagesForModelMediaPolicy } from "../runtime/helpers/media-budget.js";
-import {
-  analyzeBashCommand,
-  isBashCommandPermissionSafe,
-} from "../tool/handlers/bash-command-parser.js";
-import { isRuntimeReadOnlyBashCommand } from "../tool/handlers/bash-semantics.js";
+import { analyzeBashCommand, isBashCommandPermissionSafe } from "../tool/session-tools-api.js";
+import { isRuntimeReadOnlyBashCommand } from "../tool/session-tools-api.js";
 import type { ExecutableToolCall, ToolExecutionResult } from "../tool/types.js";
 import { resolveContainedMemoryFilePath, resolveSafeMemoryFilePath } from "./memory-file-path.js";
 import { auxiliaryModelOptions } from "../model/auxiliary-model-options.js";

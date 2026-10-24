@@ -6,7 +6,7 @@ import {
   type ProviderModel,
 } from "@zcode/provider";
 import type { ZCodeModelOption } from "@zcode/shared";
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
 
 export interface ResolvedRegistrySelection {
   readonly provider: Provider;

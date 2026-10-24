@@ -1,38 +1,17 @@
-import { CompactPhase } from "../deps.js";
-import { CompactReason } from "../deps.js";
+import { type CompactActiveOptions } from "./compact-active-options.js";
+export type { CompactActiveOptions } from "./compact-active-options.js";
+
 import { CompactTrigger } from "../deps.js";
 import type { SessionEvent } from "../deps.js";
 import type { TraceContext } from "../deps.js";
 import { defaultCompactPhaseForTrigger } from "../helpers/index.js";
 import { isTurnCancellationError } from "../helpers/index.js";
-import type { Model } from "../deps.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { CompactAttemptOutcome } from "./turn-loop-state.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import { AUTO_COMPACT_MAX_ATTEMPTS } from "./compact-active-policy.js";
 import { compactActiveConversationImpl } from "./compact-active-attempt.js";
-import type { ModelToolContract } from "@zcode/contracts";
-
-/** 同一 compact owner 的选项合同；各阶段只借用此投影。 */
-export type CompactActiveOptions = {
-  abortSignal?: AbortSignal;
-  compactContextTelemetry?: {
-    inputTokens: number;
-    policyContextWindowTokens: number;
-    thresholdTokens?: number;
-    tokenSource: "estimate" | "provider_usage";
-  };
-  autoCompactThreshold?: number;
-  compactReason?: CompactReason;
-  initialPromptTooLongCause?: unknown;
-  phase?: CompactPhase;
-  sourceCommandId?: string;
-  trigger?: CompactTrigger;
-  model?: Model;
-  agentListingTools?: readonly { name: string }[];
-  activeEntries?: readonly RuntimeMessageEntry[];
-  getContinuationTools?: () => readonly ModelToolContract[];
-};
 
 export async function compactActiveConversation(
   this: AgentRuntimeInternal,

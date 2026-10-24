@@ -24,9 +24,9 @@ describe("runUpdateCommand cleanup errors", () => {
       .mockResolvedValueOnce({ status: "ready", runningTaskCount: 0 })
       .mockResolvedValueOnce({ status: "blocked", runningTaskCount: 1 });
 
-    await expect(
-      runUpdateCommand([], {}, false, layout, vi.fn()),
-    ).rejects.toThrow("Running tasks require --force for update");
+    await expect(runUpdateCommand([], {}, false, layout, vi.fn())).rejects.toThrow(
+      "Running tasks require --force for update",
+    );
     expect(discard).toHaveBeenCalledTimes(1);
   });
 
@@ -34,11 +34,13 @@ describe("runUpdateCommand cleanup errors", () => {
     const discard = vi.fn().mockRejectedValue(new Error("release directory could not be removed"));
     prepareOnlineUpdate.mockResolvedValue({ status: "prepared", version: "4.0.0", discard });
     requestControl.mockResolvedValue({ status: "ready", runningTaskCount: 0 });
-    const applyUpdate = vi.fn().mockRejectedValue(new Error("Running tasks require --force for update"));
+    const applyUpdate = vi
+      .fn()
+      .mockRejectedValue(new Error("Running tasks require --force for update"));
 
-    await expect(
-      runUpdateCommand([], {}, false, layout, applyUpdate),
-    ).rejects.toThrow("Running tasks require --force for update");
+    await expect(runUpdateCommand([], {}, false, layout, applyUpdate)).rejects.toThrow(
+      "Running tasks require --force for update",
+    );
     expect(discard).toHaveBeenCalledTimes(1);
   });
 
@@ -49,9 +51,33 @@ describe("runUpdateCommand cleanup errors", () => {
       .mockResolvedValueOnce({ status: "ready", runningTaskCount: 0 })
       .mockRejectedValueOnce(new Error("control socket unavailable"));
 
-    await expect(
-      runUpdateCommand([], {}, false, layout, vi.fn()),
-    ).rejects.toThrow("control socket unavailable");
+    await expect(runUpdateCommand([], {}, false, layout, vi.fn())).rejects.toThrow(
+      "control socket unavailable",
+    );
     expect(discard).toHaveBeenCalledTimes(1);
+  });
+  it("uses injected display identity for human updates while JSON keeps technical fields", async () => {
+    requestControl.mockResolvedValue({ status: "ready", runningTaskCount: 0 });
+    prepareOnlineUpdate.mockResolvedValue({ status: "up-to-date", version: "3.16.2" });
+    const write = vi.fn();
+    await runUpdateCommand(
+      [],
+      { applicationName: "Test Workspace", stdout: { write } },
+      false,
+      layout,
+      vi.fn(),
+    );
+    expect(write).toHaveBeenLastCalledWith("Test Workspace Server 3.16.2 is already up to date\n");
+    await runUpdateCommand(
+      [],
+      { applicationName: "Test Workspace", stdout: { write } },
+      true,
+      layout,
+      vi.fn(),
+    );
+    expect(JSON.parse(write.mock.calls.at(-1)![0])).toEqual({
+      status: "up-to-date",
+      version: "3.16.2",
+    });
   });
 });

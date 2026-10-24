@@ -4,7 +4,7 @@ import { AgentRuntime, AgentRuntimeConfig } from "@zcode/core";
 
 import { createSessionEvent, Logger, SessionId, type TraceContext } from "@zcode/contracts";
 
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 
 import { createWorkspaceHookRuntimeSecurity } from "./workspace-hook-trust.js";
 

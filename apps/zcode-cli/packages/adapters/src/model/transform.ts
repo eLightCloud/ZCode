@@ -1,64 +1,14 @@
-// ============================================================
-// Vercel AI SDK protocol transforms
-// ============================================================
-
-import { type ModelMessage as AiSdkModelMessage, type ToolResultPart } from "ai";
-
-import {
-  ModelErrorCode,
-  modelMessageContentToText,
-  type ModelInputFormat,
-  type ModelInputMessage,
-  type ModelMessageContent,
-  type ModelMessageContentBlock,
-} from "@zcode/contracts";
-
+import type { AiSdkMessageTransformOptions, AiSdkAssistantContent, AiSdkAssistantContentPart, AiSdkAssistantTransformOptions, AiSdkUserContent } from "./message-transform-contract.js";
+import { type ModelMessage as AiSdkModelMessage } from "ai";
+import { ModelErrorCode, modelMessageContentToText, type ModelInputMessage, type ModelMessageContent, type ModelMessageContentBlock } from "@zcode/contracts";
 import { AiSdkModelAdapterError } from "./errors.js";
-
 import { providerOptionsForReasoningBlock } from "./anthropic-reasoning-metadata.js";
-
-import {
-  shouldTextifyStructuredToolResults,
-  toToolResultMediaUserParts,
-  toolResultHasVideoMedia,
-  undeliverableFrameReferenceText,
-} from "./tool-result-media-projection.js";
-
+import { shouldTextifyStructuredToolResults, toToolResultMediaUserParts, toolResultHasVideoMedia, undeliverableFrameReferenceText } from "./tool-result-media-projection.js";
 import { normalizeOpenAiCompatibleSystemMessages } from "./system-message-compat.js";
-
-import {
-  hasOpenAiStoredReasoningItemId,
-  projectToolNameForProvider,
-  providerOptionsForCacheControl,
-  shouldStripStoredReasoningForOpenAiResponsesStatelessReplay,
-} from "./transform-options.js";
-
+import { hasOpenAiStoredReasoningItemId, projectToolNameForProvider, providerOptionsForCacheControl, shouldStripStoredReasoningForOpenAiResponsesStatelessReplay } from "./transform-options.js";
 import { toAiSdkToolResultOutput, toAiSdkUserContent } from "./transform-content.js";
 
-export interface AiSdkMessageTransformOptions {
-  toolSearchEnabled?: boolean;
-  apiFormat?: string;
-  providerOptions?: Record<string, unknown>;
-  providerKind?: "openai" | "anthropic" | "openai-compatible" | "gateway" | "custom";
-  stripMedia?: boolean;
-  inputFormat?: ModelInputFormat;
-}
-
-type AiSdkAssistantMessage = Extract<AiSdkModelMessage, { role: "assistant" }>;
-
-type AiSdkAssistantContent = AiSdkAssistantMessage["content"];
-
-type AiSdkAssistantContentPart = Extract<AiSdkAssistantContent, unknown[]>[number];
-
-export type AiSdkToolResultOutput = ToolResultPart["output"];
-
-export type AiSdkProviderOptions = NonNullable<
-  Extract<AiSdkModelMessage, { role: "system" }>["providerOptions"]
->;
-
-type AiSdkAssistantTransformOptions = AiSdkMessageTransformOptions & {
-  stripOpenAiResponsesStoredReasoning?: boolean;
-};
+export type { AiSdkMessageTransformOptions, AiSdkToolResultOutput, AiSdkProviderOptions, AiSdkUserContent } from "./message-transform-contract.js";
 
 export function toAiSdkMessages(
   messages: ModelInputMessage[],
@@ -172,8 +122,6 @@ export function toAiSdkMessages(
   flushPendingToolMedia();
   return transformedMessages;
 }
-
-export type AiSdkUserContent = Extract<AiSdkModelMessage, { role: "user" }>["content"];
 
 function toAiSdkAssistantContent(
   content: ModelMessageContent,

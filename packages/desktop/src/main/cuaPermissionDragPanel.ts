@@ -159,7 +159,7 @@ export function createCuaPermissionDragPanel(
         permission,
         locale: options.getLocale(),
         iconDataUrl: options.getIconDataUrl?.() ?? null,
-            applicationName: options.getApplicationName?.(),
+        applicationName: options.getApplicationName?.(),
       });
       window.showInactive();
       startTracking();

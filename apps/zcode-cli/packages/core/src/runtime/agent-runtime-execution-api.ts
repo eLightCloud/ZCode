@@ -1,56 +1,16 @@
 import type { BackgroundBashOutputResult } from "@zcode/shared";
 
-import type {
-  BackgroundTaskCancelResult,
-  ContextBuilder,
-  DynamicWorkflowRunProgressPayload,
-  PermissionBrokerRequest,
-  SavedWorkflowScope,
-  SessionEvent,
-  SessionEventSink,
-  SessionEventStorePort,
-  SessionGoal,
-  SessionId,
-  SessionProjection,
-  SkillLoadOutcome,
-  TargetChangedPayload,
-  ToolCall,
-  ToolCallId,
-  ToolExecutor,
-  ToolRegistry,
-  ToolSchedule,
-  TraceContext,
-  TurnInputIntentMetadata,
-  TurnState,
-  UserInputAutoResolutionUpdatedPayload,
-} from "./deps.js";
+import type { BackgroundTaskCancelResult, ContextBuilder, DynamicWorkflowRunProgressPayload, PermissionBrokerRequest, SavedWorkflowScope, SessionEvent, SessionEventSink, SessionEventStorePort, SessionGoal, SessionId, SessionProjection, SkillLoadOutcome, TargetChangedPayload, ToolCall, ToolCallId, ToolExecutor, ToolRegistry, ToolSchedule, TraceContext, TurnInputIntentMetadata, TurnState, UserInputAutoResolutionUpdatedPayload } from "./deps.js";
 
 import type { StartSavedWorkflowRunResult } from "./methods/dynamic-workflow-run-start.js";
 
-import type {
-  AmendWorkflowRunSettingsInput,
-  AmendWorkflowRunSettingsResult,
-} from "./methods/dynamic-workflow-run-settings.js";
+import type { AmendWorkflowRunSettingsInput, AmendWorkflowRunSettingsResult } from "./methods/dynamic-workflow-run-settings.js";
 
-import type {
-  RuntimeBackgroundStopOptions,
-  RuntimeBackgroundStopResult,
-} from "./methods/background.js";
+import type { RuntimeBackgroundStopOptions, RuntimeBackgroundStopResult } from "./methods/background-stop-types.js";
 
-import { type DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation.js";
+import { type DynamicWorkflowActivationSource } from "./methods/dynamic-workflow-activation-types.js";
 
-import type {
-  ContinueActiveTargetLoopOptions,
-  ExecuteToolsOptions,
-  ExecuteToolsResult,
-  ExecuteTurnOptions,
-  PermissionDecisionResult,
-  ResumeSessionOptions,
-  ResumeSessionResult,
-  StopActiveForegroundExecutionOptions,
-  StopActiveForegroundExecutionResult,
-  TurnResult,
-} from "./types.js";
+import type { ContinueActiveTargetLoopOptions, ExecuteToolsOptions, ExecuteToolsResult, ExecuteTurnOptions, PermissionDecisionResult, ResumeSessionOptions, ResumeSessionResult, StopActiveForegroundExecutionOptions, StopActiveForegroundExecutionResult, TurnResult } from "./types.js";
 
 import type { ChildClientPortsContext, ClientFacingPorts } from "./helpers/child-client-ports.js";
 

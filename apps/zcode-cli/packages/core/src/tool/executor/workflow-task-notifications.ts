@@ -24,7 +24,7 @@ import {
 
 import type { BackgroundTaskSnapshot } from "./background-task-contract.js";
 
-import type { BashTaskNotificationStatus } from "./background-task-outcomes.js";
+import type { BashTaskNotificationStatus } from "./background-notification-status.js";
 
 export function buildWorkflowTaskSummary(input: {
   lost?: boolean;

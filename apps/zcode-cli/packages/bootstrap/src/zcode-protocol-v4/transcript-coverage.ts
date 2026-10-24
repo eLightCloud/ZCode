@@ -22,7 +22,7 @@ import {
   mergeGoalVerificationEntryFacts,
 } from "./transcript-goal-events.js";
 
-import type { HydratedGoalVerificationEntry } from "./transcript-goal-events.js";
+import type { HydratedGoalVerificationEntry } from "./transcript-goal-contract.js";
 
 import type { TranscriptFootprint } from "./transcript-hydration-contract.js";
 

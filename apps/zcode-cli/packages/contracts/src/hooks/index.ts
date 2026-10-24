@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ModelToolSideEffectScope } from "../model/index.js";
-import type { CollaborationMode, RiskLevel } from "../interfaces/session.port.js";
+import type { CollaborationMode, RiskLevel } from "../interfaces/session-execution-types.js";
 import type { PermissionUpdate } from "../interfaces/permission.port.js";
 import type { SessionId, ToolCallId, TraceId, TurnId } from "../interfaces/shared.js";
 

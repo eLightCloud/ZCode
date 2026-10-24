@@ -1,9 +1,11 @@
 import type { AiSdkGenerateTextOptions } from "./runner-runtime.js";
 import type { AiSdkModelTextRequest } from "./runner-runtime.js";
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { unwrapRetryError } from "./failure-inspection.js";
 import { recordGenerateTextDebug } from "./runner-debug.js";
-import { ModelStatusContext } from "./runner-status.js";
+
+import type { ModelStatusContext } from "./model-status-context.js";
 import { publishModelStatus } from "./runner-status.js";
 import type { ResolvedAiSdkModel } from "./runner-runtime.js";
 import { modelFailureStatusFields } from "./runner-telemetry.js";

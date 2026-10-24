@@ -9,13 +9,19 @@ import { expect, it } from "vitest";
 import { SERVER_CLI_DEFINES } from "../tsup.config.js";
 
 it("reports the staged application version from the actual compiled shared version", async () => {
-  const manifest = JSON.parse(await readFile(new URL("../../../package.json", import.meta.url), "utf8"));
+  const manifest = JSON.parse(
+    await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+  );
   const bundled = await build({
     stdin: {
-      contents: "import { ZCODE_VERSION } from '@zcode/shared'; process.stdout.write(ZCODE_VERSION)",
+      contents:
+        "import { ZCODE_VERSION } from '@zcode/shared'; process.stdout.write(ZCODE_VERSION)",
       resolveDir: fileURLToPath(new URL("..", import.meta.url)),
     },
-    bundle: true, write: false, platform: "node", format: "cjs",
+    bundle: true,
+    write: false,
+    platform: "node",
+    format: "cjs",
     define: SERVER_CLI_DEFINES,
   });
   const directory = await mkdtemp(join(tmpdir(), "zcode-build-version-"));

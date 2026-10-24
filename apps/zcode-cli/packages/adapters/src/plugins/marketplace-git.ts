@@ -16,7 +16,7 @@ import {
   isRecord,
 } from "./helpers.js";
 
-import { applyNetworkEgressEnv } from "../network/subprocess-env.js";
+import { applyNetworkEgressEnv } from "../http/index.js";
 
 import { planGitCheckout } from "./git-checkout-plan.js";
 

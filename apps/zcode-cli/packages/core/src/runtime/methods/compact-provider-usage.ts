@@ -4,7 +4,7 @@ import type { AutoCompactTokenOverride } from "../deps.js";
 
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 
-import type { RunModelTextRequestOptions } from "../types.js";
+import type { RunModelTextRequestOptions } from "../model-execution-types.js";
 
 import { findLatestCommittedAssistantUsage } from "./turn-model-step-usage.js";
 

@@ -15,7 +15,7 @@ import type {
 
 import type { ModelId, ModelProviderId, ModelSelection } from "../model/index.js";
 
-import type { AssistantErrorInfo, TokenUsageInfo } from "./session-message.js";
+import type { AssistantErrorInfo, TokenUsageInfo } from "./session-message-values.js";
 
 export interface TextPart {
   id: PartId;

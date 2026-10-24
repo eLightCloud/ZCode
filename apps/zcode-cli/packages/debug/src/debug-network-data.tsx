@@ -1,3 +1,4 @@
+export { mergeNetworkRequest } from "./network-request-index.js";
 import type {
   TimelineOptions,
   DataGroup as VisTimelineGroup,
@@ -11,7 +12,6 @@ import type { NetworkRequestRecord, TraceSpan } from "./shared";
 import { ganttItemStyle } from "./gantt-style";
 
 import {
-  compareDateDesc,
   formatBytes,
   formatDuration,
   formatNetworkStatus,
@@ -20,17 +20,6 @@ import {
 } from "./debug-formatters.js";
 
 import { laneLabels, laneOrder } from "./debug-view-config.js";
-
-export function mergeNetworkRequest(
-  current: NetworkRequestRecord[],
-  next: NetworkRequestRecord,
-): NetworkRequestRecord[] {
-  const byId = new Map(current.map((request) => [request.id, request]));
-  byId.set(next.id, next);
-  return [...byId.values()]
-    .toSorted((left, right) => compareDateDesc(left.startedAt, right.startedAt))
-    .slice(0, 200);
-}
 
 export function mergeNetworkSpans(
   spans: TraceSpan[],

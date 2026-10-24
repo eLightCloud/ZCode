@@ -1,35 +1,8 @@
-import {
-  CoreErrorType,
-  RewindScope,
-  RewindStrategy,
-  SessionEventType,
-  createModelUsageSummaryFromEvents,
-  createMessageId,
-  parseWorkspaceCheckpointArtifact,
-  evaluateRewindTarget,
-  runWithContextAsync,
-  traceContextToLogContext,
-} from "../deps.js";
-import type {
-  SessionEvent,
-  TraceContext,
-  TurnId,
-  CheckpointCreatedPayload,
-  RewindTargetEvaluation,
-  WorkspaceCheckpointArtifact,
-} from "../deps.js";
-import {
-  selectCheckpointForRewind,
-  buildRewindEvaluationItems,
-  formatWorkspaceRewindNoticeBody,
-  formatUnavailableRewindResponse,
-  throwIfTurnAborted,
-  createTurnFailureError,
-  createTurnCancelledError,
-  isTurnCancellationError,
-  appendTurnOutcomeEvent,
-} from "../helpers/index.js";
-import type { TurnResult, WorkspaceRewindResult, ParsedRewindCommand } from "../types.js";
+import { CoreErrorType, RewindScope, RewindStrategy, SessionEventType, createModelUsageSummaryFromEvents, createMessageId, parseWorkspaceCheckpointArtifact, evaluateRewindTarget, runWithContextAsync, traceContextToLogContext } from "../deps.js";
+import type { SessionEvent, TraceContext, TurnId, CheckpointCreatedPayload, RewindTargetEvaluation, WorkspaceCheckpointArtifact } from "../deps.js";
+import { selectCheckpointForRewind, buildRewindEvaluationItems, formatWorkspaceRewindNoticeBody, formatUnavailableRewindResponse, throwIfTurnAborted, createTurnFailureError, createTurnCancelledError, isTurnCancellationError, appendTurnOutcomeEvent } from "../helpers/index.js";
+import type { TurnResult, ParsedRewindCommand } from "../types.js";
+import type { WorkspaceRewindResult } from "../workspace-recovery-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { recordTurnUsageFact } from "./usage-observability.js";
 
@@ -99,13 +72,13 @@ export async function executeRewindCommand(
                     })
                   ).response
                 : (
-                  await this.rewindWorkspaceToCheckpoint({
-                    abortSignal,
-                    events,
-                    targetCheckpointId: command.targetCheckpointId,
-                    traceContext: turnTraceContext,
-                  })
-                ).response;
+                    await this.rewindWorkspaceToCheckpoint({
+                      abortSignal,
+                      events,
+                      targetCheckpointId: command.targetCheckpointId,
+                      traceContext: turnTraceContext,
+                    })
+                  ).response;
       throwIfTurnAborted(abortSignal);
 
       const turnUsage = createModelUsageSummaryFromEvents(events);

@@ -1,4 +1,4 @@
-import { resolveToolSearchMode } from "../../tool/search/exposure.js";
+import { resolveToolSearchMode } from "../../tool/model-surface-api.js";
 import type {
   CollaborationMode,
   ExecutionShellSelection,
@@ -29,8 +29,8 @@ import { cloneModelSelection } from "../model-selection.js";
 import { applyRuntimeExecutionState } from "../execution-state.js";
 
 import { mirrorSubagentInteractionEvent } from "../../subagent/tool-event-mirror.js";
-import { orderProviderVisibleToolContracts } from "../../tool/provider-visible-order.js";
-import { projectToolModelContract } from "../../tool/model-contract.js";
+import { orderProviderVisibleToolContracts } from "../../tool/model-surface-api.js";
+import { projectToolModelContract } from "../../tool/model-surface-api.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
 import { filterEmbeddedSearchRuntimeVisibleTools } from "./embedded-search-branch.js";
 import {

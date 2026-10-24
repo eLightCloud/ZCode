@@ -11,7 +11,10 @@ it("真实入口 JSX 在匿名时不渲染，登录后展示邀请好友和奖�
   const start = source.lastIndexOf("{user &&", item);
   const endMarker = ") : null}";
   const end = source.indexOf(endMarker, item);
-  const expression = source.slice(start, end + endMarker.length).trim().slice(1, -1);
+  const expression = source
+    .slice(start, end + endMarker.length)
+    .trim()
+    .slice(1, -1);
   const script = ts.transpileModule(`const result = (${expression}); result;`, {
     compilerOptions: { jsx: ts.JsxEmit.React },
     fileName: "entry.tsx",

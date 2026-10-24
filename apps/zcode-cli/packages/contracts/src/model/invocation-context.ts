@@ -3,13 +3,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { ZCodeProviderAccountAccess } from "@zcode/shared";
 import type { ModelApiCallObservation } from "../telemetry/index.js";
 import type { TraceContext } from "../tracing/tracer.js";
-import type {
-  ModelRequestAdmission,
-  ModelRequestSessionType,
-  ModelRetryBudget,
-  ModelStatusSink,
-  ModelStreamRecoveryStatus,
-} from "./index.js";
+import type { ModelRequestAdmission, ModelRequestSessionType, ModelRetryBudget } from "./request-identity.js";
+import type { ModelStatusSink, ModelStreamRecoveryStatus } from "./network-status.js";
 
 /**
  * Runtime 与 Adapter 之间的调用级执行信息。

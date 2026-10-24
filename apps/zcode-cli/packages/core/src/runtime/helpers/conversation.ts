@@ -1,19 +1,9 @@
 import { activeSessionMessages, modelMessageContentToText } from "../deps.js";
 import { buildPromptAttachmentBlocks } from "../../system-reminder/prompt-attachment.js";
-import {
-  buildUserMessageEntries,
-  isPastedInlineImageAttachment,
-  promptAttachmentInputForResolvedAttachment,
-  isFailedTextAttachmentPlaceholder,
-  type RuntimeMessageEntry,
-} from "../../agent/message-history.js";
-import type {
-  MessageId,
-  MessageWithParts,
-  ModelMessageContent,
-  ModelMessageContentBlock,
-} from "../deps.js";
-import type { ResolvedTurnAttachment, RunModelTextRequestOptions } from "../types.js";
+import { buildUserMessageEntries, isPastedInlineImageAttachment, promptAttachmentInputForResolvedAttachment, isFailedTextAttachmentPlaceholder, type RuntimeMessageEntry } from "../../agent/message-history.js";
+import type { MessageId, MessageWithParts, ModelMessageContent, ModelMessageContentBlock } from "../deps.js";
+import type { ResolvedTurnAttachment } from "../types.js";
+import type { RunModelTextRequestOptions } from "../model-execution-types.js";
 
 export function getLatestActiveSessionMessageId(
   messages: MessageWithParts[],

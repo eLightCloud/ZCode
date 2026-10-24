@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { ModelToolCall } from "@zcode/contracts";
 
-import { analyzeBashCommand } from "../tool/handlers/bash-command-parser.js";
+import { analyzeBashCommand } from "../tool/session-tools-api.js";
 import { resolveContainedMemoryFilePath } from "./memory-file-path.js";
 
 const DREAM_LOCK_FILE = ".consolidate-lock";

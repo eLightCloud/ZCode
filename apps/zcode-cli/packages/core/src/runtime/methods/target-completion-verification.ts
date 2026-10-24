@@ -1,21 +1,7 @@
-import {
-  SessionEventType,
-  GOAL_COMPLETION_VERIFICATION_QUERY_SOURCE,
-  createChildTraceContext,
-  failOpenGoalCompletionVerification,
-  failedGoalCompletionVerification,
-  formatGoalCompletionVerificationPrompt,
-  parseGoalCompletionVerificationText,
-  runWithModelInvocationContext,
-  traceContextToLogContext,
-} from "../deps.js";
-import type {
-  GoalCompletionVerificationOutput,
-  Model,
-  SessionEvent,
-  SessionGoal,
-  TraceContext,
-} from "../deps.js";
+import { type TargetCompletionVerificationResult } from "./target-completion-verification-result.js";
+export type { TargetCompletionVerificationResult } from "./target-completion-verification-result.js";
+import { SessionEventType, GOAL_COMPLETION_VERIFICATION_QUERY_SOURCE, createChildTraceContext, failOpenGoalCompletionVerification, failedGoalCompletionVerification, formatGoalCompletionVerificationPrompt, parseGoalCompletionVerificationText, runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
+import type { GoalCompletionVerificationOutput, Model, SessionEvent, SessionGoal, TraceContext } from "../deps.js";
 import { prepareRuntimeProviderRequest, throwIfTurnAborted } from "../helpers/index.js";
 import { projectMessagesForModelMediaPolicy } from "../helpers/media-budget.js";
 import type { AgentRuntimeInternal } from "../internal.js";
@@ -25,11 +11,6 @@ import { createRuntimeModel } from "./runtime-model.js";
 import { isStartPlanBusyStreamRecoveryFailure } from "./streaming-recovery.js";
 import { recordModelUsageFact } from "./usage-observability.js";
 import { runTargetCompletionVerificationWithTelemetry } from "./target-completion-verification-telemetry.js";
-
-export interface TargetCompletionVerificationResult {
-  target: SessionGoal;
-  verification: GoalCompletionVerificationOutput;
-}
 
 const TARGET_VERIFIER_START_PLAN_BUSY_RETRY_DELAYS_MS = [1_000, 2_000] as const;
 const START_PLAN_TARGET_VERIFIER_RETRY_PROVIDER_IDS = new Set([

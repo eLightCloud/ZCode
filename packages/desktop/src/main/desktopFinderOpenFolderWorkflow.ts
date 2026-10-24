@@ -36,7 +36,10 @@ function escapeXml(value: string): string {
 }
 
 function getServicesMenuLabel(locale: Locale, applicationName = "ZCode"): string {
-  return (SERVICES_MENU_LABELS[locale] ?? SERVICES_MENU_LABELS["en-US"]).replaceAll("ZCode", applicationName);
+  return (SERVICES_MENU_LABELS[locale] ?? SERVICES_MENU_LABELS["en-US"]).replaceAll(
+    "ZCode",
+    applicationName,
+  );
 }
 
 function buildInfoPlist(locale: Locale, applicationName?: string): string {
@@ -268,7 +271,10 @@ export function installFinderOpenFolderWorkflow(options: {
   try {
     mkdirSync(resourcesDir, { recursive: true });
 
-    const infoChanged = writeFileIfChanged(infoPlistPath, buildInfoPlist(options.locale, options.applicationName));
+    const infoChanged = writeFileIfChanged(
+      infoPlistPath,
+      buildInfoPlist(options.locale, options.applicationName),
+    );
     const workflowContent = buildDocumentWorkflow();
     const workflowChanged = writeFileIfChanged(documentWorkflowPath, workflowContent);
     // 用户 Automator workflow 通常读取 Contents/document.wflow；

@@ -1,6 +1,7 @@
 import type { AiSdkModelTextRequest, AiSdkStreamTextResult } from "./runner-runtime.js";
 
-import { StreamDiagnostics, logStreamDiagnostics } from "./runner-diagnostics.js";
+import { logStreamDiagnostics } from "./runner-diagnostics.js";
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 
 import { recordStreamTextDebug } from "./runner-debug.js";
 

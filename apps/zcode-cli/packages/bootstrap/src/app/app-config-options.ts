@@ -1,7 +1,7 @@
 import type { ConfigResult } from "@zcode/adapters/config";
 import type { RuntimeConfigPatch, SupportedLocale, UiLocale } from "@zcode/contracts";
 import { detectLocale, resolveLocale } from "@zcode/i18n";
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 
 export function isMessageEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.ZCODE_MESSAGE_ENABLED === "1" || env.ZCODE_MESSAGE_ENABLED === "true";

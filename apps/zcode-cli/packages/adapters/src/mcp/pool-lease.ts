@@ -15,7 +15,7 @@ import type {
 
 import type { PoolEntry } from "./pool-contract.js";
 
-import type { McpConnectionPoolOptions } from "./pool.js";
+import type { McpConnectionPoolOptions } from "./pool-contract.js";
 
 import { connectionKey, createConnectionContext } from "./pool-identity.js";
 

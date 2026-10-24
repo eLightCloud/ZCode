@@ -1,30 +1,17 @@
 import type { ToolSearchExecutionContext } from "@zcode/contracts";
 import { createPartId, TurnMachineImpl } from "../deps.js";
-import type {
-  MessageId,
-  ToolCallId,
-  TraceContext,
-  ToolCall,
-  ToolExecutionResult,
-} from "../deps.js";
+import type { MessageId, ToolCallId, TraceContext, ToolCall, ToolExecutionResult } from "../deps.js";
 import { emitStreamingToolLedgerUpdate, toRecordInput } from "../helpers/index.js";
-import type { RuntimeModelTextResult, StreamedToolExecutionResult } from "../types.js";
+import type { RuntimeModelTextResult, StreamedToolExecutionResult } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { emitSyntheticStreamedToolError } from "./streaming-tool-synthetic-result.js";
-import {
-  persistPendingToolPart,
-  projectToolNameForNonEmptyBoundary,
-} from "./tool-part-persistence.js";
+import { persistPendingToolPart, projectToolNameForNonEmptyBoundary } from "./tool-part-persistence.js";
 import { persistToolModelStepFinish } from "./turn-step-finish.js";
 import { mcpToolPartMetadata } from "./tool-part-metadata.js";
 import { drainInlineGuideForNextRequest } from "./turn-guide-drain.js";
 import { handleToolCallAnomalyWarnings } from "./turn-tool-warnings.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
-import {
-  isAutomationMutationRestrictedTurn,
-  isOffPeakCreateRestrictedTurn,
-  recordCompletedToolBatch,
-} from "./turn-loop-state.js";
+import { isAutomationMutationRestrictedTurn, isOffPeakCreateRestrictedTurn, recordCompletedToolBatch } from "./turn-loop-state.js";
 import type { ToolCallInput } from "../../agent/message-history.js";
 import { settleToolResults, type ToolResultPart } from "./tool-result-settlement.js";
 

@@ -6,7 +6,7 @@ import {
   resolveBuiltInToolAllowlist,
   resolveRuntimeDynamicWorkflowToolsIncluded,
 } from "../helpers/tool-allowlist.js";
-import { isToolNameDisallowed } from "../../tool/tool-visibility.js";
+import { isToolNameDisallowed } from "../../tool/model-surface-api.js";
 
 export function resolveRuntimeEmbeddedSearchEnabled(runtime: AgentRuntimeInternal): boolean {
   const builtInToolAllowlist = resolveBuiltInToolAllowlist(runtime.config);

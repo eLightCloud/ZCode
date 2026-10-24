@@ -32,23 +32,23 @@ import type {
   ToolHandler,
   ToolHandlerFailure,
 } from "../types.js";
-import { resolveTraceContext } from "./create-workflow.js";
-import { FILL_WORKFLOW_HOLE_TOOL_DESCRIPTION } from "./fill-workflow-hole-description.js";
+import { resolveTraceContext } from "../workflow-host-api.js";
+import { FILL_WORKFLOW_HOLE_TOOL_DESCRIPTION } from "../workflow-host-api.js";
 import {
   FILL_WORKFLOW_HOLE_ERROR_CODE,
   rememberRejectedFill,
   resolveFillWorkflowHoleInput,
   takeFillPreview,
   validateFillWorkflowHoleSource,
-} from "./fill-workflow-hole-resolve.js";
-import { boundGraphOfAnalysis, displayOfAnalysis } from "./workflow-analysis-display.js";
-import { recordAuthoredWorkflowDraft } from "./workflow-draft-read-state.js";
-import { workflowDraftSlug, writeWorkflowDraft } from "./workflow-drafts.js";
-import { workflowRunNotFoundFailure } from "./workflow-run-introspection.js";
-import { analyzeScript } from "./workflow-script-analysis.js";
-import { allScriptModelsBound } from "./workflow-script-models.js";
-import { describeWorkflowScriptPath } from "./workflow-script-path.js";
-import { requireDynamicWorkflowSkill } from "./workflow-skill-gate.js";
+} from "../workflow-host-api.js";
+import { boundGraphOfAnalysis, displayOfAnalysis } from "../workflow-host-api.js";
+import { recordAuthoredWorkflowDraft } from "../workflow-host-api.js";
+import { workflowDraftSlug, writeWorkflowDraft } from "../workflow-host-api.js";
+import { workflowRunNotFoundFailure } from "../workflow-host-api.js";
+import { analyzeScript } from "../workflow-host-api.js";
+import { allScriptModelsBound } from "../workflow-host-api.js";
+import { describeWorkflowScriptPath } from "../workflow-host-api.js";
+import { requireDynamicWorkflowSkill } from "../workflow-host-api.js";
 
 export { FILL_WORKFLOW_HOLE_ERROR_CODE } from "./fill-workflow-hole-resolve.js";
 

@@ -43,9 +43,9 @@ test("starts without a runtime readiness system message", async () => {
 
   // testRender 内部也使用 act；必须先结束外层 React 提交，再读取原生渲染首帧。
   // 原顺序在冷启动/隔离 HOME 下偶发捕获空 Logo，不应靠延长时限或删除断言掩盖。
-  await view.renderOnce();
   try {
     assert.ok(view);
+    await view.renderOnce();
     const frame = view.captureCharFrame();
     const rows = frame.split("\n");
     const firstLogoRow = rows.findIndex((row) => row.includes(ZCODE_LOGO_LINES[0]));

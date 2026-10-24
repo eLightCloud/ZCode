@@ -155,40 +155,50 @@ describe.each(["desktop-continuous", "web-remote-replayable"] as const)(
         model: identity.modelId,
       },
     ])("当前选择 $stored 不被消息或恢复提示替换", async ({ stored, provider, model }) => {
-      const fixture = await createLegacySelectionStoreFixture();
-      let { store } = fixture;
       const sessionID = createSessionId("protocol-unbound");
       const messageID = createMessageId("protocol-history");
-      await store.createSession({
-        id: sessionID,
-        projectID: createProjectId("protocol-unbound"),
-        directory: process.cwd(),
-        slug: "unbound",
-        title: "History remains",
-        version: "test",
-      });
-      await store.saveMessage({
-        id: messageID,
-        sessionID,
-        role: "user",
-        agent: "zcode-agent",
-        time: { created: 1 },
-        modelSelection: complete,
-      });
-      await store.savePart({
-        id: createPartId("history"),
-        messageID,
-        sessionID,
-        type: "text",
-        text: "Existing history",
-      });
-      if ("providerId" in stored && stored.providerId?.startsWith("builtin:")) {
-        await fixture.seedLegacy(sessionID, {
-          providerId: stored.providerId,
-          modelId: stored.modelId,
+      const legacy = "providerId" in stored && stored.providerId?.startsWith("builtin:");
+      const fixture = await createLegacySelectionStoreFixture(
+        legacy
+          ? {
+              sessionID,
+              messageID,
+              partID: createPartId("history"),
+              projectID: createProjectId("protocol-unbound"),
+              directory: process.cwd(),
+              slug: "unbound",
+              title: "History remains",
+              text: "Existing history",
+              modelSelection: complete,
+              selection: { providerId: stored.providerId, modelId: stored.modelId },
+            }
+          : undefined,
+      );
+      const { store } = fixture;
+      if (!legacy) {
+        await store.createSession({
+          id: sessionID,
+          projectID: createProjectId("protocol-unbound"),
+          directory: process.cwd(),
+          slug: "unbound",
+          title: "History remains",
+          version: "test",
         });
-        store = fixture.store;
-      } else
+        await store.saveMessage({
+          id: messageID,
+          sessionID,
+          role: "user",
+          agent: "zcode-agent",
+          time: { created: 1 },
+          modelSelection: complete,
+        });
+        await store.savePart({
+          id: createPartId("history"),
+          messageID,
+          sessionID,
+          type: "text",
+          text: "Existing history",
+        });
         await store.saveSessionEntry({
           id: `${sessionID}:runtime-model-selection`,
           sessionID,
@@ -196,6 +206,7 @@ describe.each(["desktop-continuous", "web-remote-replayable"] as const)(
           time: { created: 2, updated: 2 },
           data: stored,
         });
+      }
       const apps: Awaited<ReturnType<typeof createRegistryBackedTestApp>>[] = [];
       const legacyProviderResolveRequests: unknown[] = [];
       const server = new ZCodeProtocolAgentServer({

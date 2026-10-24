@@ -134,59 +134,73 @@ describe("DB109：配置可失效，回滚和再升级的内容读取不可报�
     {},
     { providerId: "p" },
     { providerId: "p", modelId: "m", options: { reasoningLevel: 3 } },
-  ])("已记账后出现无效新选择 %j：不回读旧值，不阻断协议，内容保留", async (modelSelection) => {
-    store = await createSqliteSessionStore({ dbPath: path });
-    const ledger = db.prepare("SELECT * FROM schema_migration ORDER BY id").all();
-    store.close();
-    store = undefined;
-    seedMessage("after-rollback", {
-      model: { providerID: "old-p", modelID: "old-m" },
-      modelSelection,
-    });
-    for (const [id, value] of Object.entries({
-      timeline: {
-        type: "timeline",
-        timelineType: "model_change",
-        display: "separator",
-        toModel: {},
-        toModelSelection: modelSelection,
-      },
-      subtask: {
-        type: "subtask",
-        prompt: "子任务正文",
-        description: "说明",
-        agent: "worker",
-        model: {},
+  ])(
+    "已记账后当前 writer 写无效新选择 %j：不回读旧值，不阻断协议，内容保留",
+    async (modelSelection) => {
+      store = await createSqliteSessionStore({ dbPath: path });
+      const ledger = db.prepare("SELECT * FROM schema_migration ORDER BY id").all();
+      store.close();
+      store = undefined;
+      // 已升级库中的明确损坏注入；不能声称旧 binary 仍可写 0026。
+      db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
+      seedMessage("after-rollback", {
+        model: { providerID: "old-p", modelID: "old-m" },
         modelSelection,
-      },
-    })) {
-      db.prepare(
-        "INSERT INTO part(id,message_id,session_id,time_created,time_updated,data) VALUES(?,?,?,?,?,?)",
-      ).run(id, "after-rollback", sessionID, 1, 2, JSON.stringify(value));
-    }
-    const old = readOld();
-    const disk = db.prepare("SELECT * FROM message ORDER BY id").all();
-    store = await createSqliteSessionStore({ dbPath: path });
-    const [message] = await readCurrent();
-    expect(message.info.model).toBeUndefined();
-    expect(message.parts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "text", text: "正文-after-rollback" }),
-        expect.objectContaining({ type: "subagent", prompt: "子任务正文" }),
-        expect.objectContaining({ type: "timeline", timelineType: "model_change" }),
-      ]),
-    );
-    expect(JSON.stringify(message)).not.toContain("old-p");
-    expect(readOld()).toEqual(old);
-    expect(db.prepare("SELECT * FROM message ORDER BY id").all()).toEqual(disk);
-    expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(ledger);
-  });
+      });
+      for (const [id, value] of Object.entries({
+        timeline: {
+          type: "timeline",
+          timelineType: "model_change",
+          display: "separator",
+          toModel: {},
+          toModelSelection: modelSelection,
+        },
+        subtask: {
+          type: "subtask",
+          prompt: "子任务正文",
+          description: "说明",
+          agent: "worker",
+          model: {},
+          modelSelection,
+        },
+      })) {
+        db.prepare(
+          "INSERT INTO part(id,message_id,session_id,time_created,time_updated,data) VALUES(?,?,?,?,?,?)",
+        ).run(id, "after-rollback", sessionID, 1, 2, JSON.stringify(value));
+      }
+      const old = readOld();
+      const disk = db.prepare("SELECT * FROM message ORDER BY id").all();
+      store = await createSqliteSessionStore({ dbPath: path });
+      const [message] = await readCurrent();
+      expect(message.info.model).toBeUndefined();
+      expect(message.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "text", text: "正文-after-rollback" }),
+          expect.objectContaining({ type: "subagent", prompt: "子任务正文" }),
+          expect.objectContaining({ type: "timeline", timelineType: "model_change" }),
+        ]),
+      );
+      expect(JSON.stringify(message)).not.toContain("old-p");
+      expect(readOld()).toEqual(old);
+      expect(db.prepare("SELECT * FROM message ORDER BY id").all()).toEqual(disk);
+      expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(ledger);
+    },
+  );
 
-  it("真实 restore CLI 导入后可被旧 Reader 打开，再升级不重迁也能读取正文", async () => {
-    store = await createSqliteSessionStore({ dbPath: path });
+  it("真实 restore CLI 写独立旧 schema，旧 Reader 可读，前迁 0026 后旧 CLI 拒写", async () => {
+    // 先在独立旧格式副本恢复，再由当前唯一 writer 执行正式升级。
+    for (const migration of SQLITE_MIGRATIONS.filter(
+      (item) => item.id >= migrationId && item.id < "0026",
+    )) {
+      db.exec(migration.sql);
+      db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+        migration.id,
+        createHash("sha256").update(migration.sql.trim()).digest("hex"),
+        migration.appVersion,
+        1,
+      );
+    }
     const ledger = db.prepare("SELECT * FROM schema_migration ORDER BY id").all();
-    store.close();
-    store = undefined;
     const taskPath = join(root, "tasks.sqlite");
     const tasks = new DatabaseSync(taskPath);
     tasks.exec(TASK_INDEX_SCHEMA);
@@ -232,11 +246,34 @@ describe("DB109：配置可失效，回滚和再升级的内容读取不可报�
         .map((part) => (part.type === "text" ? part.text : undefined)),
     ).toEqual(["导入问题正文", "导入回答正文"]);
     expect(readOld()).toEqual(old);
-    expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(ledger);
+    expect(db.prepare("SELECT * FROM schema_migration WHERE id<'0026' ORDER BY id").all()).toEqual(
+      ledger,
+    );
+    const upgraded = db.prepare("SELECT * FROM schema_migration ORDER BY id").all();
+    expect(upgraded).toHaveLength(ledger.length + 1);
+    expect(upgraded.at(-1)?.id).toBe("0026_portable_context_writer");
     const raw = db.prepare("SELECT data FROM message WHERE id=?").get(`msg_legacy_${sessionID}_0`)!;
     expect(JSON.parse(String(raw.data))).toMatchObject({
       model: {},
       modelSelection: { providerId: "glm", modelId: "historic-model" },
     });
+    store.close();
+    store = undefined;
+    const beforeRejectedWrite = db.prepare("SELECT * FROM message ORDER BY id").all();
+    await expect(
+      exec(process.execPath, [
+        restoreScript,
+        "--snapshot",
+        snapshot,
+        "--task-index",
+        taskPath,
+        "--cli-db",
+        path,
+      ]),
+    ).rejects.toMatchObject({ stderr: expect.stringContaining("zcode_portable_context_version") });
+    expect(db.prepare("SELECT * FROM message ORDER BY id").all()).toEqual(beforeRejectedWrite);
+    store = await createSqliteSessionStore({ dbPath: path });
+    expect(readOld()).toEqual(old);
+    expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(upgraded);
   });
 });

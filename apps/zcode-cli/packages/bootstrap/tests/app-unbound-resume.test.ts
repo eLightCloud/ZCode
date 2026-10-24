@@ -54,50 +54,65 @@ describe("App 从真实存储恢复未绑定选择", () => {
   ])(
     "保留迁移后的意图 $stored，Registry 只影响运行绑定",
     async ({ stored, candidate, bound, readFailure }) => {
-      const fixture = await createLegacySelectionStoreFixture();
-      let { store } = fixture;
       const sessionID = createSessionId("app-unbound-resume");
       const messageID = createMessageId("history-message");
-      await store.createSession({
-        id: sessionID,
-        projectID: createProjectId("app-unbound"),
-        directory: process.cwd(),
-        slug: "app-unbound",
-        title: "History survives",
-        version: "test",
-      });
-      await store.saveMessage({
-        id: messageID,
-        sessionID,
-        role: "user",
-        agent: "zcode-agent",
-        time: { created: 1 },
-        modelSelection: complete,
-      });
-      await store.savePart({
-        id: createPartId("history-text"),
-        messageID,
-        sessionID,
-        type: "text",
-        text: "History must remain visible",
-      });
       const oldSelection = stored as ModelSelection | undefined;
-      if (oldSelection?.providerId?.startsWith("builtin:")) {
-        await fixture.seedLegacy(sessionID, {
-          providerId: oldSelection.providerId,
-          modelId: oldSelection.modelId,
-          thoughtLevel: oldSelection.options?.reasoningLevel,
+      const legacy = oldSelection?.providerId?.startsWith("builtin:") === true;
+      const fixture = await createLegacySelectionStoreFixture(
+        legacy
+          ? {
+              sessionID,
+              messageID,
+              partID: createPartId("history-text"),
+              projectID: createProjectId("app-unbound"),
+              directory: process.cwd(),
+              slug: "app-unbound",
+              title: "History survives",
+              text: "History must remain visible",
+              modelSelection: complete,
+              selection: {
+                providerId: oldSelection!.providerId,
+                modelId: oldSelection!.modelId,
+                thoughtLevel: oldSelection!.options?.reasoningLevel,
+              },
+            }
+          : undefined,
+      );
+      const { store } = fixture;
+      if (!legacy) {
+        await store.createSession({
+          id: sessionID,
+          projectID: createProjectId("app-unbound"),
+          directory: process.cwd(),
+          slug: "app-unbound",
+          title: "History survives",
+          version: "test",
         });
-        store = fixture.store;
-      } else if (stored !== undefined)
-        await store.saveSessionEntry({
-          id: `${sessionID}:runtime-model-selection`,
+        await store.saveMessage({
+          id: messageID,
           sessionID,
-          type: SESSION_ENTRY_MODEL_SELECTION,
-          touchSession: false,
-          time: { created: 2, updated: 2 },
-          data: stored,
+          role: "user",
+          agent: "zcode-agent",
+          time: { created: 1 },
+          modelSelection: complete,
         });
+        await store.savePart({
+          id: createPartId("history-text"),
+          messageID,
+          sessionID,
+          type: "text",
+          text: "History must remain visible",
+        });
+        if (stored !== undefined)
+          await store.saveSessionEntry({
+            id: `${sessionID}:runtime-model-selection`,
+            sessionID,
+            type: SESSION_ENTRY_MODEL_SELECTION,
+            touchSession: false,
+            time: { created: 2, updated: 2 },
+            data: stored,
+          });
+      }
       const generateText = vi.fn(async () => ({
         text: "Continued",
         finishReason: "stop" as const,
@@ -175,7 +190,13 @@ describe("App 从真实存储恢复未绑定选择", () => {
       data: stored,
     });
     const warn = vi.fn();
-    const logger: Logger = { debug: vi.fn(), info: vi.fn(), warn, error: vi.fn(), child: () => logger };
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn,
+      error: vi.fn(),
+      child: () => logger,
+    };
     const loggerFactory: LoggerFactory = {
       createLogger: () => logger,
       withContext: () => logger,

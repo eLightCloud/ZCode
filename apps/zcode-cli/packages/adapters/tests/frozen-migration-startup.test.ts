@@ -184,3 +184,31 @@ describe("Todo144：启动 runner 保持冻结迁移合同", () => {
     expect(db.prepare("SELECT 1 FROM schema_migration WHERE id=?").get(REASONING)).toBeDefined();
   });
 });
+
+it("开发分支 continuation 旧编号保留原记录与待恢复操作，新编号只接续记账", async () => {
+  const db = createFixture();
+  applyFrozen(db);
+  db.exec(`UPDATE schema_migration SET id='0023_session_continuation' WHERE id='0025_session_continuation';
+    INSERT INTO session_continuation(session_id,operation,state,generation,staged_json)
+    VALUES('synthetic-session','exact-operation','staged',7,'{"preserved":true}');`);
+  const old = db
+    .prepare("SELECT * FROM schema_migration WHERE id='0023_session_continuation'")
+    .get();
+  const pending = db.prepare("SELECT * FROM session_continuation").all();
+  expect((await runSqliteSessionMigrations(db, ":memory:")).applied).toEqual([]);
+  expect(
+    db.prepare("SELECT * FROM schema_migration WHERE id='0023_session_continuation'").get(),
+  ).toEqual(old);
+  expect(
+    db.prepare("SELECT * FROM schema_migration WHERE id='0025_session_continuation'").get(),
+  ).toEqual({ ...old, id: "0025_session_continuation" });
+  expect(db.prepare("SELECT * FROM session_continuation").all()).toEqual(pending);
+  db.exec("UPDATE schema_migration SET checksum='corrupt' WHERE id='0023_session_continuation'");
+  const ledger = db.prepare("SELECT * FROM schema_migration ORDER BY id").all();
+  await expect(runSqliteSessionMigrations(db, ":memory:")).rejects.toMatchObject({
+    kind: "checksum_mismatch",
+    migrationId: "0023_session_continuation",
+  });
+  expect(db.prepare("SELECT * FROM schema_migration ORDER BY id").all()).toEqual(ledger);
+  expect(db.prepare("SELECT * FROM session_continuation").all()).toEqual(pending);
+});

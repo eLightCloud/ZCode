@@ -1,4 +1,5 @@
 import { CONVERSATION_CLASSIFICATION_SQL } from "./conversation-classification-v4.js";
+import { CONVERSATION_BARRIER_SQL } from "./conversation-barrier-v5.js";
 import { TASK_GROUP_ADMISSIONS_SQL } from "#src/task-groups/migration-v6.js";
 import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
@@ -125,6 +126,13 @@ const definitions = [
     checksumInput: [TASK_GROUP_ADMISSIONS_SQL],
     apply: (db: DatabaseSync) => db.exec(TASK_GROUP_ADMISSIONS_SQL),
   },
+  {
+    id: "0007_conversation_index_barrier",
+    previousIds: ["0005_conversation_index_barrier"],
+    checksumInput: [CONVERSATION_BARRIER_SQL],
+    touchedTables: ["conversation_index_barriers", "tasks"],
+    apply: (db: DatabaseSync) => db.exec(CONVERSATION_BARRIER_SQL),
+  },
 ] as const;
 
 export type TasksDatabaseMigrationScope = "base" | "controller-remote" | "source-server";
@@ -168,6 +176,7 @@ function prepareMigrations(scope: TasksDatabaseMigrationScope) {
           ];
   return migrations.map((migration) => ({
     id: migration.id,
+    ...("previousIds" in migration ? { previousIds: migration.previousIds } : {}),
     appVersion: "3.12.0",
     sql: JSON.stringify(migration.checksumInput),
     touchedTables: migration.touchedTables,
@@ -249,15 +258,28 @@ export async function runTasksDatabaseMigrations(
   }
 }
 
-function isMigrationApplied(db: DatabaseSync, id: string, checksum: string): boolean {
-  const applied = db.prepare("SELECT checksum FROM tasks_schema_migration WHERE id=?").get(id);
-  if (!applied) return false;
-  if (applied.checksum !== checksum)
-    throw Object.assign(new Error(`Task database migration checksum mismatch: ${id}`), {
-      kind: "checksum_mismatch",
-      migrationId: id,
-    });
-  return true;
+function isMigrationApplied(
+  db: DatabaseSync,
+  id: string,
+  checksum: string,
+  previousIds: readonly string[] = [],
+): boolean {
+  let currentApplied = false;
+  // 新编号存在也必须检查旧编号，不能让快速启动绕过历史账本损坏。
+  for (const candidate of [id, ...previousIds]) {
+    const applied = db
+      .prepare("SELECT checksum FROM tasks_schema_migration WHERE id=?")
+      .get(candidate);
+    if (!applied) continue;
+    if (applied.checksum !== checksum)
+      throw Object.assign(new Error(`Task database migration checksum mismatch: ${candidate}`), {
+        kind: "checksum_mismatch",
+        migrationId: candidate,
+      });
+    if (candidate === id) currentApplied = true;
+  }
+  // 仅旧编号存在时仍由统一 runner 在事务中复制记账，不重跑 SQL。
+  return currentApplied;
 }
 
 /** 交接只复用已完成初始化；每个新连接按冻结账本确认，替换/清空文件不能假 ready。 */
@@ -271,7 +293,9 @@ export function areTasksDatabaseMigrationsApplied(
       .get()
   )
     return false;
-  return prepareMigrations(scope).every(({ id, checksum }) => isMigrationApplied(db, id, checksum));
+  return prepareMigrations(scope).every(({ id, checksum, previousIds }) =>
+    isMigrationApplied(db, id, checksum, previousIds),
+  );
 }
 
 /** 只读账本的展示预检，不授权执行；runner 拿锁后仍复查每一项。 */
@@ -283,8 +307,8 @@ export function inspectTasksMigrationKind(
     .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tasks_schema_migration'")
     .get();
   let pending = false;
-  for (const { id, checksum } of prepareMigrations(scope)) {
-    if (!hasLedger || !isMigrationApplied(db, id, checksum)) pending = true;
+  for (const { id, checksum, previousIds } of prepareMigrations(scope)) {
+    if (!hasLedger || !isMigrationApplied(db, id, checksum, previousIds)) pending = true;
   }
   if (!pending) return "none";
   return db

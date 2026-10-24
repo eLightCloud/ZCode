@@ -4,6 +4,8 @@ import { createConversationSyncHttpHandler } from "./http.js";
 import { privateProofMatcher } from "./private-proof.js";
 import { createConfigurationHandler } from "./configuration-http.js";
 import type { createConversationSyncPolicyStore } from "./policy.js";
+import { createConversationContinuation } from "./continuation.js";
+import type { ConversationRuntimeDirectory } from "./continuation-runtime-steps.js";
 
 /** Only the authenticated private ingress may construct scope; never expose this socket publicly. */
 export function createConversationSyncGateway(options: {
@@ -11,6 +13,7 @@ export function createConversationSyncGateway(options: {
   proof: string;
   maxRequestBytes: number;
   logger: Logger;
+  runtimes?: ConversationRuntimeDirectory;
   configuration?: { proof: string; store: ReturnType<typeof createConversationSyncPolicyStore> };
 }) {
   const authentic = privateProofMatcher(options.proof);
@@ -21,6 +24,13 @@ export function createConversationSyncGateway(options: {
     : null;
   const data = createConversationSyncHttpHandler({
     ...options,
+    continuation: options.runtimes
+      ? createConversationContinuation({
+          store: options.store,
+          runtimes: options.runtimes,
+          logger: options.logger,
+        })
+      : undefined,
     authenticate: async (request: NodeHttpIncomingRequest) => {
       if (!authentic(request)) return null;
       const parsed = syncScopeSchema.safeParse({

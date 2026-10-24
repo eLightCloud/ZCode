@@ -183,6 +183,28 @@ CREATE TABLE session (
       , task_type text not null default 'interactive', title_source text not null default 'first_input'
         check(title_source in ('default', 'first_input', 'generated', 'custom')), title_message_id text, time_title_updated integer, trace_id text, time_deleted integer, last_outcome text);
 
+CREATE TABLE session_continuation (
+  session_id text primary key,
+  operation text not null,
+  state text not null,
+  generation integer not null default 0,
+  version text,
+  digest text,
+  staged_json text,
+  files_json text,
+  prior_json text,
+  branch_mode text not null default 'primary'
+);
+
+CREATE TABLE session_continuation_receipt (
+  session_id text not null,
+  operation text not null,
+  kind text not null,
+  fingerprint text not null,
+  result_json text not null,
+  primary key(session_id, operation, kind)
+);
+
 CREATE TABLE session_entry (
         id text primary key,
         session_id text not null references session(id) on delete cascade,

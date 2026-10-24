@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { textCheckpointSchema } from "./text-checkpoint.js";
+import { textCheckpointSchema, checkpointArtifactUris } from "./text-checkpoint.js";
 import {
   conversationIndexFactsSchema,
   conversationScopeSchema,
   type ConversationIndexFacts,
   type ConversationHistoryItem,
+  conversationFileSchema,
+  type ConversationFile,
 } from "@zcode/shared";
 
 const key = z
@@ -32,13 +34,29 @@ export const syncVersionSchema = z
     location: key,
     generation: revision,
     checkpoint: textCheckpointSchema.nullable(),
+    files: z
+      .array(z.custom<ConversationFile>((value) => conversationFileSchema.safeParse(value).success))
+      .max(1000)
+      .optional(),
     management: z
       .custom<ConversationIndexFacts>(
         (value) => conversationIndexFactsSchema.safeParse(value).success,
       )
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const refs = value.checkpoint ? checkpointArtifactUris(value.checkpoint) : [];
+    const files = value.files ?? [];
+    if (
+      refs.length !== files.length ||
+      refs.some((uri) => files.filter((file) => file.uri === uri).length !== 1)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Native artifact manifest must cover the exact checkpoint references",
+      });
+  });
 export type SyncVersion = z.infer<typeof syncVersionSchema>;
 export const syncCommandSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("receive"), version: syncVersionSchema }).strict(),
@@ -184,6 +202,19 @@ export class ConversationSyncError extends Error {
   }
 }
 export interface ConversationSyncStore {
+  files?: ConversationFileStore;
+  /** Native private orchestration journal; never an accepted input queue or execution grant. */
+  continuations?: import("@zcode/shared").ConversationContinuationJournal;
+  executeContinuation?(
+    scope: SyncScope,
+    operation: string,
+    request: SyncRequest,
+  ): Promise<SyncReceipt>;
+  continuation?(
+    scope: SyncScope,
+    session: string,
+    operation: string,
+  ): Promise<import("@zcode/shared").ConversationContinuationRecord | null>;
   history(
     scope: SyncScope,
     after: string | null,
@@ -199,4 +230,24 @@ export interface ConversationSyncStore {
     after: string | null,
     limit: number,
   ): Promise<Array<{ session: string; state: SyncState }>>;
+}
+export interface ConversationObjectReceipt {
+  binding: string;
+  version: string;
+}
+export interface ConversationObjectBytesPort {
+  put(
+    scope: SyncScope,
+    file: ConversationFile,
+    bytes: Uint8Array,
+  ): Promise<ConversationObjectReceipt>;
+  read(
+    scope: SyncScope,
+    file: ConversationFile,
+    receipt: ConversationObjectReceipt,
+  ): Promise<Uint8Array>;
+}
+export interface ConversationFileStore {
+  put(scope: SyncScope, file: ConversationFile, bytes: Uint8Array): Promise<void>;
+  read(scope: SyncScope, file: ConversationFile): Promise<Uint8Array>;
 }

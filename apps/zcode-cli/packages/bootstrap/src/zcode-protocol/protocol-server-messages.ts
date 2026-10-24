@@ -26,6 +26,8 @@ import {
 
 import { collectResidencySessionIds } from "./protocol-server-support.js";
 import { checkpointIndexProjection } from "./checkpoint-index.js";
+import { continuationControl, assertContinuationAdmission } from "./continuation-control.js";
+import { continuationContent } from "./continuation-content.js";
 
 import type { ZCodeProtocolAgentServerMethodsContext } from "./protocol-server-context.js";
 export async function handleMessage(
@@ -70,6 +72,10 @@ export async function handleRequest(
   this.postResponseOutbox.delete(request.id);
   let releaseResidencyOperation: (() => void) | undefined;
   try {
+    if (request.method === zcodeProtocolMethods.sessionContinuation)
+      return this.ok(request.id, await continuationControl(this.context, request.params));
+    if (request.method === zcodeProtocolMethods.sessionContinuationContent)
+      return this.ok(request.id, await continuationContent(this.context, request.params));
     // 生命周期命令自身不能取得普通 operation lease，否则永远将自己判为忙。
     if (request.method === zcodeProtocolMethods.processIdleMaintenance) {
       if (!this.context.sessionResidentPool) throw new Error("Runtime lifecycle unavailable");
@@ -136,6 +142,12 @@ export async function handleRequest(
     // subscribe hydration、workspace 配置与 resume 都可能跨 await。若只看
     // session 当前状态，sampler 会在 handler 持有旧 record 时把它关闭。进程级 lease
     // 覆盖整个 request；能识别的 sessionIds 额外用于冷恢复闸门与 LRU touch。
+    await assertContinuationAdmission(
+      this.context,
+      request.method,
+      request.params,
+      collectResidencySessionIds(request.params),
+    );
     releaseResidencyOperation = await this.context.sessionResidentPool?.acquireOperation(
       collectResidencySessionIds(request.params),
     );

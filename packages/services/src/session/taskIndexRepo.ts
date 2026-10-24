@@ -1437,20 +1437,138 @@ export class TaskIndexRepo {
     });
   }
 
+  /** Native Host control only. SQL trigger protects unique actions across all connections. */
+  async controlConversationIndexBarrier(params: {
+    workspacePath: string;
+    taskId: string;
+    operation: string;
+    hold: boolean;
+    supersedeOperation?: string;
+  }) {
+    await this.ensureReady();
+    return this.enqueueWrite(params, () => {
+      const db = this.getDatabase(),
+        key = workspaceKey(params);
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const row = db
+          .prepare(
+            "SELECT operation FROM conversation_index_barriers WHERE workspace_key=? AND task_id=?",
+          )
+          .get(key, params.taskId) as { operation: string } | undefined;
+        if (
+          row &&
+          params.hold &&
+          row.operation !== params.operation &&
+          row.operation !== params.supersedeOperation
+        )
+          throw new Error("conversation_index_operation_conflict");
+        if (params.hold)
+          db.prepare(
+            "INSERT INTO conversation_index_barriers VALUES(?,?,?) ON CONFLICT(workspace_key,task_id) DO UPDATE SET operation=excluded.operation",
+          ).run(key, params.taskId, params.operation);
+        else
+          db.prepare(
+            "DELETE FROM conversation_index_barriers WHERE workspace_key=? AND task_id=? AND operation=?",
+          ).run(key, params.taskId, params.operation);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    });
+  }
+
+  async applyContinuationIndex(params: {
+    meta: ZCodeTaskMeta;
+    management: ConversationIndexFacts;
+    cliFacts: NonNullable<ConversationIndexProjection["cliFacts"]>;
+    searchableText: string;
+    operation: string;
+  }) {
+    await this.ensureReady();
+    const meta = zcodeTaskMetaSchema.parse(params.meta),
+      facts = conversationIndexFactsSchema.parse(params.management);
+    if (
+      meta.workspacePath !== getConversationWorkspaceDir() ||
+      meta.workspaceIdentity ||
+      meta.workspacePurpose !== "conversation" ||
+      facts.pinned === undefined
+    )
+      throw new Error("conversation_index_ineligible");
+    return this.enqueueWrite(meta, () => {
+      const db = this.getDatabase(),
+        key = workspaceKey(meta);
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const barrier = db
+          .prepare(
+            "SELECT operation FROM conversation_index_barriers WHERE workspace_key=? AND task_id=?",
+          )
+          .get(key, meta.taskId) as { operation: string } | undefined;
+        if (barrier?.operation !== params.operation)
+          throw new Error("conversation_index_barrier_required");
+        // Remove and reinstate only inside this exclusive transaction; other writers never see an open guard.
+        db.prepare(
+          "DELETE FROM conversation_index_barriers WHERE workspace_key=? AND task_id=?",
+        ).run(key, meta.taskId);
+        this.writeRecord({
+          meta: {
+            ...meta,
+            title: facts.titleOverride ?? meta.title,
+            titleOverridden: facts.titleOverride !== null,
+          },
+          titleOverridden: facts.titleOverride !== null,
+          pinned: facts.pinned === true,
+          archived: facts.archived,
+          deleted: facts.deleted,
+        });
+        const value = this.writeCliFacts({ meta, ...params.cliFacts });
+        db.prepare("UPDATE tasks SET searchable_text=? WHERE workspace_key=? AND task_id=?").run(
+          params.searchableText,
+          key,
+          meta.taskId,
+        );
+        db.prepare("INSERT INTO conversation_index_barriers VALUES(?,?,?)").run(
+          key,
+          meta.taskId,
+          params.operation,
+        );
+        db.exec("COMMIT");
+        return value;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    });
+  }
+
   async withConversationSyncFacts<T>(
-    target: { workspacePath: string; taskId: string; workspaceIdentity?: string },
+    target: {
+      workspacePath: string;
+      taskId: string;
+      workspaceIdentity?: string;
+      continuationOperation?: string;
+    },
     capture: (facts: ConversationIndexFacts) => Promise<T>,
   ): Promise<T> {
     await this.ensureReady();
-    return this.enqueueWrite(target, () =>
-      captureConversationIndexFacts({
+    return this.enqueueWrite(target, () => {
+      const barrier = this.getDatabase()
+        .prepare(
+          "SELECT operation FROM conversation_index_barriers WHERE workspace_key=? AND task_id=?",
+        )
+        .get(workspaceKey(target), target.taskId) as { operation: string } | undefined;
+      if (barrier && barrier.operation !== target.continuationOperation)
+        throw new Error("conversation_index_admission_closed");
+      return captureConversationIndexFacts({
         database: this.getDatabase(),
         read: () => this.getTaskRow(target),
         isCurrent: (database) => database === this.db,
         target,
         capture,
-      }),
-    );
+      });
+    });
   }
 
   /** Create-only recovery; the same transaction protects against another Host's seed/write. */

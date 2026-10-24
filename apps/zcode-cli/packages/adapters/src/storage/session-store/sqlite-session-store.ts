@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import type { SqliteSessionStoreApi } from "./sqlite-session-api.js";
 import * as implementation0 from "./sqlite-session-checkpoints.js";
 import * as implementation10 from "./sqlite-session-diagnostics.js";
+import * as continuation from "./sqlite-session-continuation.js";
 import * as implementation1 from "./sqlite-session-forks.js";
 import * as implementation5 from "./sqlite-session-inputs.js";
 import * as implementation4 from "./sqlite-session-messages.js";
@@ -43,6 +44,7 @@ export class SqliteSessionStore
 {
   // 类型声明无实例字段；实现由下方唯一安装器登记在同一 owner 原型。
   declare exportTextCheckpoint: SqliteSessionStoreApi["exportTextCheckpoint"];
+  declare controlContinuation: SqliteSessionStoreApi["controlContinuation"];
   declare importTextCheckpoint: SqliteSessionStoreApi["importTextCheckpoint"];
   declare createForkedSessionWithMetadata: SqliteSessionStoreApi["createForkedSessionWithMetadata"];
   declare commitForkBundle: SqliteSessionStoreApi["commitForkBundle"];
@@ -219,6 +221,7 @@ for (const methods of [
   implementation8,
   implementation9,
   implementation10,
+  continuation,
 ]) {
   for (const [name, value] of Object.entries(methods)) {
     Object.defineProperty(SqliteSessionStore.prototype, name, {

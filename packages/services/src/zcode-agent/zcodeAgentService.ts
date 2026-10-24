@@ -1000,6 +1000,7 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   "idleTimeoutMs"
 > {
   onLocalMaintenanceReady?: (maintenance: LocalRuntimeMaintenance) => void;
+  onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
   /** 仅供 MCP 状态探测进程使用，不能把空闲回收传给 chat。 */
   mcpStatusIdleTimeoutMs?: number;
   accountProviderConfigSource?: ProviderSource<AccountProviderConfigSnapshot>;
@@ -3843,6 +3844,32 @@ export function createZCodeAgentService(
       () => waitingWorkspaceStartups.size > 0,
     ),
   );
+  options?.onConversationRuntimeReady?.({
+    async content(input) {
+      const { conversationContentRequestSchema, conversationContentResultSchema } =
+        await import("@zcode/shared");
+      const { getConversationWorkspaceDir } = await import("../paths.js");
+      const client = await getReadOnlyClient({ workspacePath: getConversationWorkspaceDir() });
+      return client.request(
+        zcodeProtocolMethods.sessionContinuationContent,
+        conversationContentRequestSchema.parse(input),
+        conversationContentResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
+      );
+    },
+    async control(input) {
+      const { conversationRuntimeCommandSchema, conversationRuntimeResultSchema } =
+        await import("@zcode/shared");
+      const { getConversationWorkspaceDir } = await import("../paths.js");
+      const client = await getReadOnlyClient({ workspacePath: getConversationWorkspaceDir() });
+      return client.request(
+        zcodeProtocolMethods.sessionContinuation,
+        conversationRuntimeCommandSchema.parse(input),
+        conversationRuntimeResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
+      );
+    },
+  });
   return {
     async prepareStorage(params) {
       const client = await processManager.getClient(params);

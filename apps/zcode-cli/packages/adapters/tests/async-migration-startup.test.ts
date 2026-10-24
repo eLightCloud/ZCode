@@ -203,7 +203,7 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
       .sort()
       .at(-1),
   });
-  db.exec("DELETE FROM schema_migration WHERE id >= '0020'");
+  db.exec("DELETE FROM schema_migration WHERE id >= '0020' AND id != '0025_session_continuation'");
   const failed: SqliteMigrationProgress[] = [];
   await expect(
     runSqliteSessionMigrationsAsync(db, ":memory:", {
@@ -215,10 +215,14 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
   ).rejects.toThrow("commit barrier failed");
   expect(failed.find((s) => s.phase === "migrating")?.migration?.kind).toBe("upgrade");
   expect(failed.every((s) => !s.migration?.committedCount)).toBe(true);
-  expect(failed.at(-1)?.migration?.lastAppliedMigrationId).toBe(
-    SQLITE_MIGRATIONS.find((m) => m.id.startsWith("0019"))?.id,
-  );
-  expect(db.prepare("SELECT 1 FROM schema_migration WHERE id >= '0020'").get()).toBeUndefined();
+  expect(failed.at(-1)?.migration?.lastAppliedMigrationId).toBe("0025_session_continuation");
+  expect(
+    db
+      .prepare(
+        "SELECT 1 FROM schema_migration WHERE id >= '0020' AND id != '0025_session_continuation'",
+      )
+      .get(),
+  ).toBeUndefined();
 });
 
 it("SILENTDB-03: another writer can finish the observed migrations without this waiter executing any", async () => {
@@ -227,7 +231,9 @@ it("SILENTDB-03: another writer can finish the observed migrations without this 
   const path = join(dir, "db.sqlite");
   const holder = open(path);
   await runSqliteSessionMigrations(holder, path);
-  holder.exec("DELETE FROM schema_migration WHERE id >= '0020'; BEGIN IMMEDIATE");
+  holder.exec(
+    "DELETE FROM schema_migration WHERE id >= '0020' AND id != '0025_session_continuation'; BEGIN IMMEDIATE",
+  );
   const waiter = open(path);
   const states: SqliteMigrationProgress[] = [];
   const exec = vi.spyOn(waiter, "exec");

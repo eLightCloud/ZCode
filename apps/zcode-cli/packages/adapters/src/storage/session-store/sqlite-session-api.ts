@@ -24,6 +24,7 @@ import type { SessionStoreDebugCounts } from "./options.js";
 
 import * as implementation0 from "./sqlite-session-checkpoints.js";
 import * as implementation10 from "./sqlite-session-diagnostics.js";
+import * as continuation from "./sqlite-session-continuation.js";
 import * as implementation1 from "./sqlite-session-forks.js";
 import * as implementation5 from "./sqlite-session-inputs.js";
 import * as implementation4 from "./sqlite-session-messages.js";
@@ -37,6 +38,9 @@ export interface SqliteSessionStoreApi {
   softDeleteSession(
     ...args: Parameters<typeof implementation3.softDeleteSession>
   ): ReturnType<typeof implementation3.softDeleteSession>;
+  controlContinuation(
+    ...args: Parameters<typeof continuation.controlContinuation>
+  ): ReturnType<typeof continuation.controlContinuation>;
   exportTextCheckpoint(
     ...args: Parameters<typeof implementation0.exportTextCheckpoint>
   ): ReturnType<typeof implementation0.exportTextCheckpoint>;

@@ -14,6 +14,7 @@ export * from "./session-store.port.js";
 export * from "./session.port.js";
 export * from "./subagent.port.js";
 export * from "./text-checkpoint.js";
+export * from "./session-continuation.js";
 export * from "./tool-artifact-store.port.js";
 export * from "./workflow-escalate.port.js";
 export * from "./workflow-submit.port.js";

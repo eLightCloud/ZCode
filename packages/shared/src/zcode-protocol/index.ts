@@ -4154,6 +4154,8 @@ export const zcodeProtocolMethods = {
   sessionRead: "session/read",
   sessionTextCheckpoint: "session/textCheckpoint",
   sessionTextCheckpointIndex: "session/textCheckpointIndex",
+  sessionContinuation: "session/continuation",
+  sessionContinuationContent: "session/continuationContent",
   sessionMessages: "session/messages",
   sessionEvents: "session/events",
   sessionDebug: "session/debug",

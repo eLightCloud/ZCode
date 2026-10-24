@@ -689,3 +689,129 @@ it("refuses idle shutdown while an accepted connection could admit more work", a
     await server.close();
   }
 });
+
+it("keeps continuation control private to the configured instance credential", async () => {
+  const command = {
+    kind: "read" as const,
+    session: "private-session",
+    operation: "c633452f-c6d7-4654-a5a4-3f3f8f2b1fb0",
+  };
+  const control = vi.fn(async () => ({
+    session: command.session,
+    operation: command.operation,
+    state: "active" as const,
+    generation: 1,
+    version: "version-1",
+    digest: null,
+  }));
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    authToken: "synthetic-private-instance",
+    continuation: { control },
+  });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    for (const bearer of [undefined, "synthetic-wrong"]) {
+      const response = await fetch(base + "/api/continuation-control", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          connection: "close",
+          ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+        },
+        body: JSON.stringify(command),
+      });
+      expect(response.status).toBe(401);
+    }
+    expect(control).not.toHaveBeenCalled();
+    const response = await fetch(base + "/api/continuation-control", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        connection: "close",
+        authorization: "Bearer synthetic-private-instance",
+      },
+      body: JSON.stringify(command),
+    });
+    expect(response.status).toBe(200);
+    expect(control).toHaveBeenCalledExactlyOnceWith(command);
+  } finally {
+    await server.close();
+  }
+});
+
+it("does not turn an upstream ingress token into private continuation authority", async () => {
+  const control = vi.fn();
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    ingressToken: "synthetic-public-ingress",
+    continuation: { control },
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/continuation-control`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer synthetic-public-ingress",
+        connection: "close",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(response.status).toBe(503);
+    expect(control).not.toHaveBeenCalled();
+  } finally {
+    await server.close();
+  }
+});
+
+it("keeps a disconnected continuation request in the native idle drain until it settles", async () => {
+  const { connect } = await import("node:net");
+  const { once } = await import("node:events");
+  let entered!: () => void, finish!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const completed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const command = {
+    kind: "read" as const,
+    session: "private-session",
+    operation: "c633452f-c6d7-4654-a5a4-3f3f8f2b1fb0",
+  };
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    authToken: "synthetic-private-instance",
+    continuation: {
+      control: async () => {
+        entered();
+        await completed;
+        return {
+          session: command.session,
+          operation: command.operation,
+          state: "active",
+          generation: 1,
+          version: "version-1",
+          digest: null,
+        };
+      },
+    },
+  });
+  const socket = connect(server.port, "127.0.0.1");
+  try {
+    await once(socket, "connect");
+    const body = JSON.stringify(command);
+    socket.write(
+      `POST /api/continuation-control HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer synthetic-private-instance\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+    );
+    await started;
+    const closed = once(socket, "close");
+    socket.destroy();
+    await closed;
+    await new Promise<void>((resolve) => setImmediate(() => setImmediate(resolve)));
+    expect(server.tryBeginIdleShutdown()).toBe(false);
+    finish();
+    await vi.waitFor(() => expect(server.tryBeginIdleShutdown()).toBe(true));
+  } finally {
+    finish();
+    socket.destroy();
+    await server.close();
+  }
+});

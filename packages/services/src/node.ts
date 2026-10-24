@@ -23,6 +23,7 @@ export { createLegacySingleRootProjectService } from "#src/project/index.js";
 export { createRemoteProjectService } from "#src/remote-projects/index.js";
 import { getZCodeDataRootDir as projectDataRoot } from "#src/paths.js";
 import { createTaskGroupService, ITaskGroupService, groupTaskKey } from "#src/task-groups/index.js";
+import { createConversationRuntimeHost } from "./session/conversationRuntimeHost.js";
 import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 import { channelReplyHostRequestSchema, channelReplyResultSchema } from "@zcode/shared";
@@ -1202,6 +1203,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createLocalServices(options: {
   /** Trusted local lifecycle capability; never registered as an RPC service method. */
   onLocalMaintenanceReady?: (maintenance: import("@zcode/shared").LocalRuntimeMaintenance) => void;
+  onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
   /** 已鉴权 Desktop stdio 连接提供的私有回查频道；不作为公共 service 暴露。 */
   topicResourceRelayChannel?: (request: unknown) => IChannel;
   parentPort?: Parameters<typeof createBroadcastService>[0];
@@ -2243,6 +2245,7 @@ export function createLocalServices(options: {
     hostId: options?.projectStorageHostId ?? "local",
     workspaceIdentity: undefined,
   });
+  let conversationRuntime: import("@zcode/shared").ConversationRuntimePort | undefined;
   const zcodeAgentService = createZCodeAgentService({
     prepareProjectExecution,
     prepareSessionCreation: async (target) =>
@@ -2255,6 +2258,9 @@ export function createLocalServices(options: {
       (await projectService.resolveSessionDirectories({ ...target, taskId: target.sessionId }))
         .additionalDirectories,
     onLocalMaintenanceReady: options?.onLocalMaintenanceReady,
+    onConversationRuntimeReady: (port) => {
+      conversationRuntime = port;
+    },
     ...(agentAccountProviderConfigSource
       ? { accountProviderConfigSource: agentAccountProviderConfigSource }
       : {}),
@@ -3048,13 +3054,38 @@ export function createLocalServices(options: {
   sharedSqliteRepos.set(services, sqliteReposToClose);
   const applicationHost = createApplicationHostService({
     native: zcodeAgentService,
-    conversations: createConversationSyncHost({ index: taskIndexRepo, agent: zcodeAgentService }),
+    conversations: createConversationSyncHost({
+      index: taskIndexRepo,
+      agent: zcodeAgentService,
+      continuation: () => conversationRuntime,
+    }),
     credentials: credentialService,
     storageRoot: resolveAppConfigDir(),
     surface: options.agentTelemetry?.runtimeSurface,
     modulePath: process.env["ZCODE_APPLICATION_HOST_MODULE"],
   });
   services.register(IApplicationHostService, applicationHost);
+  if (conversationRuntime)
+    options?.onConversationRuntimeReady?.(
+      createConversationRuntimeHost({
+        runtime: conversationRuntime,
+        index: taskIndexRepo,
+        agent: zcodeAgentService,
+        ...(process.env["ZCODE_APPLICATION_HOST_MODULE"]
+          ? {
+              captureBase: async (session) => {
+                const { conversationCaptureBaseSchema } = await import("@zcode/shared");
+                return conversationCaptureBaseSchema.parse(
+                  await applicationHost.call("conversationCaptureBase", { session }),
+                );
+              },
+              beforeActivate: async (input) => {
+                await applicationHost.call("conversationAdoptVersion", input);
+              },
+            }
+          : {}),
+      }),
+    );
   return services;
 }
 
@@ -3275,6 +3306,7 @@ export async function createServerHostServices(options: {
     Parameters<typeof createLocalServices>[0]
   >["onAutomationManualRunRequested"];
   onLocalMaintenanceReady?: (maintenance: import("@zcode/shared").LocalRuntimeMaintenance) => void;
+  onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
 }) {
   const projectStorageHostId = remoteHostIdFromWorkspaceIdentity(
     buildServerRemoteWorkspaceIdentity({ serverId: options.sourceServerId, workspacePath: "/" }),
@@ -3300,6 +3332,7 @@ export async function createServerHostServices(options: {
   const services = createLocalServices({
     onAutomationManualRunRequested: options.onAutomationManualRunRequested,
     onLocalMaintenanceReady: options.onLocalMaintenanceReady,
+    onConversationRuntimeReady: options.onConversationRuntimeReady,
     zcodeBuiltinProviderConfigFilePath: options.zcodeBuiltinProviderConfigFilePath,
     providerProvisioningTargetEnabled: options.providerProvisioningTargetEnabled,
     serviceAuthorityMode: "standalone-server",

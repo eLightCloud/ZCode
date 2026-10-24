@@ -6,7 +6,7 @@ import { materializeZCodeBuiltinProviderConfig } from "@zcode/services/node";
 import { getAppConfigDir } from "@zcode/services/node";
 import { ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV } from "@zcode/services/node";
 import { createTopicResourcePeers } from "@zcode/services/node";
-import { IZCodeAgentService } from "@zcode/services";
+import { IZCodeAgentService, IApplicationHostService } from "@zcode/services";
 import { ZCODE_VERSION } from "@zcode/shared";
 import { createCoreHttpServer } from "./http.js";
 import { createIngressToken } from "./ingressToken.js";
@@ -108,6 +108,7 @@ export async function runServerCore(generation: number): Promise<void> {
       throw new Error("Native automation cannot start while maintenance is held");
     }
     let localMaintenance: LocalRuntimeMaintenance | undefined;
+    let continuation: import("@zcode/shared").ConversationRuntimePort | undefined;
     let automation: ReturnType<typeof startServerAutomationRuntime> | undefined;
     const sourceServerId = (await resolveCoreServerId()) ?? hostname() ?? "zcode-server";
     const { services, workspaceIdentityMapper, migrationFailedPathCount } =
@@ -115,6 +116,9 @@ export async function runServerCore(generation: number): Promise<void> {
         sourceServerId,
         onLocalMaintenanceReady: (port) => {
           localMaintenance = port;
+        },
+        onConversationRuntimeReady: (port) => {
+          continuation = port;
         },
         zcodeBuiltinProviderConfigFilePath,
         providerProvisioningTargetEnabled: true,
@@ -146,6 +150,9 @@ export async function runServerCore(generation: number): Promise<void> {
     const serverId = sourceServerId;
     const ingressToken = authToken || authTokenHash ? undefined : await createIngressToken(layout);
     const http = await createCoreHttpServer(services, {
+      continuation,
+      continuationIdentity: () =>
+        services.get(IApplicationHostService).call("conversationRuntimeIdentity", {}),
       ...(bindHost ? { host: bindHost } : {}),
       ...(bindPort === undefined ? {} : { port: bindPort }),
       ...(authToken ? { authToken } : {}),

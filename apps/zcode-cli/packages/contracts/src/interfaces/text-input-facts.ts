@@ -1,32 +1,55 @@
 import { z } from "zod";
+import { conversationArtifactUriSchema } from "@zcode/shared";
 import {
   conversationInputIntentSchema,
   type ConversationInputIntent,
 } from "@zcode/shared/zcode-protocol-v4";
 
 /** The existing native intent schema owns the DTO. This codec only limits portability. */
-export const portableTextIntent = z.custom<ConversationInputIntent>((value) => {
-  const parsed = conversationInputIntentSchema.safeParse(value);
-  if (!parsed.success) return false;
-  const intent = parsed.data;
-  return (
-    intent.kind === "sendText" &&
-    intent.attachments.length === 0 &&
-    (!intent.mode || ["build", "guarded"].includes(intent.mode)) &&
-    intent.planEnabled !== true &&
-    intent.delivery.admitted !== "guide" &&
-    intent.steer.state === "notRequested" &&
-    ["admitted", "queued", "drained"].includes(intent.dispatch.state) &&
-    [
-      "botGroupSource",
-      "conversationQuotes",
-      "sharedContextRefs",
-      "highspeed",
-      "provenance",
-      "source",
-    ].every((key) => (value as Record<string, unknown>)[key] === undefined)
-  );
-});
+function portableIntent(allowFiles: boolean) {
+  return z.custom<ConversationInputIntent>((value) => {
+    const parsed = conversationInputIntentSchema.safeParse(value);
+    if (!parsed.success) return false;
+    const intent = parsed.data;
+    return (
+      intent.kind === "sendText" &&
+      (allowFiles
+        ? intent.attachments.every((ref) => portableAttachmentRef.safeParse(ref).success)
+        : intent.attachments.length === 0) &&
+      (!intent.mode || ["build", "guarded"].includes(intent.mode)) &&
+      intent.planEnabled !== true &&
+      intent.delivery.admitted !== "guide" &&
+      intent.steer.state === "notRequested" &&
+      ["admitted", "queued", "drained"].includes(intent.dispatch.state) &&
+      [
+        "botGroupSource",
+        "conversationQuotes",
+        "sharedContextRefs",
+        "highspeed",
+        "provenance",
+        "source",
+      ].every((key) => (value as Record<string, unknown>)[key] === undefined)
+    );
+  });
+}
+export const portableAttachmentRef = z
+  .object({
+    ref: z.string().refine((value) => conversationArtifactUriSchema.safeParse(value).success),
+    fileName: z
+      .string()
+      .min(1)
+      .max(255)
+      .refine((value) => !/[\\/]/.test(value)),
+    mime: z.string().min(1).max(256),
+    bytes: z.number().int().nonnegative(),
+    previewRef: z
+      .string()
+      .refine((value) => conversationArtifactUriSchema.safeParse(value).success)
+      .optional(),
+  })
+  .strict();
+export const portableTextIntent = portableIntent(false);
+export const portableFileIntent = portableIntent(true);
 function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
@@ -77,43 +100,57 @@ function legacyAgrees(intent: ConversationInputIntent, value: Record<string, unk
     )
   );
 }
-export const portableTextMetadata = z
-  .object({
-    conversationInputIntent: portableTextIntent,
-    inputIntent: z.record(z.unknown()).optional(),
-    inputClientId: z.string().optional(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const intent = value.conversationInputIntent;
-    const issue = () =>
-      context.addIssue({ code: "custom", message: "Inconsistent native input facts" });
-    if (
-      intent.dispatch.state !== "drained" ||
-      (value.inputClientId !== undefined && value.inputClientId !== intent.clientId)
-    )
-      issue();
-    if (!value.inputIntent) return;
-    if (!legacyAgrees(intent, value.inputIntent)) issue();
-  });
-
-export const portableTextPayload = z
-  .object({
-    text: z.string(),
-    conversationInputIntent: z
-      .union([portableTextIntent, z.object({ sourceCommandId: z.string().min(1) }).strict()])
-      .optional(),
-    intent: z.record(z.unknown()).optional(),
-    attachments: z.array(z.never()).optional(),
-    sourceCommandType: z.enum(["createSession", "sendText"]).optional(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const intent = value.conversationInputIntent;
-    const issue = () =>
-      context.addIssue({ code: "custom", message: "Inconsistent native input payload" });
-    if (intent && "queueItemId" in intent) {
-      if (intent.text !== value.text || (value.intent && !legacyAgrees(intent, value.intent)))
+function metadata(allowFiles: boolean) {
+  return z
+    .object({
+      conversationInputIntent: allowFiles ? portableFileIntent : portableTextIntent,
+      inputIntent: z.record(z.unknown()).optional(),
+      inputClientId: z.string().optional(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      const intent = value.conversationInputIntent;
+      const issue = () =>
+        context.addIssue({ code: "custom", message: "Inconsistent native input facts" });
+      if (
+        intent.dispatch.state !== "drained" ||
+        (value.inputClientId !== undefined && value.inputClientId !== intent.clientId)
+      )
         issue();
-    } else if (value.intent || value.attachments || value.sourceCommandType) issue();
-  });
+      if (!value.inputIntent) return;
+      if (!legacyAgrees(intent, value.inputIntent)) issue();
+    });
+}
+export const portableTextMetadata = metadata(false);
+export const portableFileMetadata = metadata(true);
+function payload(allowFiles: boolean) {
+  return z
+    .object({
+      text: z.string(),
+      conversationInputIntent: z
+        .union([
+          allowFiles ? portableFileIntent : portableTextIntent,
+          z.object({ sourceCommandId: z.string().min(1) }).strict(),
+        ])
+        .optional(),
+      intent: z.record(z.unknown()).optional(),
+      attachments: (allowFiles ? z.array(portableAttachmentRef) : z.array(z.never())).optional(),
+      sourceCommandType: z.enum(["createSession", "sendText"]).optional(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      const intent = value.conversationInputIntent;
+      const issue = () =>
+        context.addIssue({ code: "custom", message: "Inconsistent native input payload" });
+      if (intent && "queueItemId" in intent) {
+        if (
+          intent.text !== value.text ||
+          (value.intent && !legacyAgrees(intent, value.intent)) ||
+          (value.attachments !== undefined && !equal(value.attachments, intent.attachments))
+        )
+          issue();
+      } else if (value.intent || value.attachments || value.sourceCommandType) issue();
+    });
+}
+export const portableTextPayload = payload(false);
+export const portableFilePayload = payload(true);

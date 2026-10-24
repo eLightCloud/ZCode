@@ -5,7 +5,7 @@ import { hostname, userInfo } from "node:os";
 import type { Socket } from "node:net";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { WebSocket } from "ws";
 import type { WebSocketServer } from "ws";
 import {
@@ -41,6 +41,10 @@ import {
   ZCODE_RPC_HOST_CAPABILITY_HEADER,
   ZCODE_VERSION,
   type ServerRemoteInfo,
+  conversationRuntimeCommandSchema,
+  conversationContentRequestSchema,
+  conversationRuntimeIdentitySchema,
+  type ConversationRuntimePort,
 } from "@zcode/shared";
 import { createHostCapabilityStore, type HostCapabilityStore } from "./hostCapability.js";
 
@@ -221,6 +225,8 @@ export async function createCoreHttpServer(
     workspaceIdentityMapper?: SourceServerWorkspaceIdentityMapper;
     topicResourcePeers?: TopicResourcePeers;
     initiallyPaused?: boolean;
+    continuation?: ConversationRuntimePort;
+    continuationIdentity?: () => Promise<unknown>;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
@@ -317,6 +323,110 @@ export async function createCoreHttpServer(
     return context.json({ error: "Ingress authentication required" }, 401);
   });
   app.get("/api/server-info", (context) => context.json(info));
+  app.use("*", async (context, next) => {
+    if (
+      ![
+        "/api/continuation-identity",
+        "/api/continuation-control",
+        "/api/continuation-content",
+      ].includes(context.req.path)
+    )
+      return await next();
+    let settled!: () => void;
+    track(
+      new Promise<void>((resolve) => {
+        settled = resolve;
+      }),
+    );
+    try {
+      return await next();
+    } finally {
+      settled();
+    }
+  });
+  app.get("/api/continuation-identity", async (context) => {
+    if (!options.continuationIdentity || (!authToken && !authTokenHash))
+      return context.json({ error: "unavailable" }, 503);
+    try {
+      return context.json(
+        conversationRuntimeIdentitySchema.parse(await options.continuationIdentity()),
+      );
+    } catch {
+      return context.json({ error: "unavailable" }, 503);
+    }
+  });
+  // Private instance control uses the existing non-browser instance credential.
+  // This port is not registered on the browser-facing RPC service collection.
+  const continuationHandler = (content: boolean) => async (context: Context) => {
+    if (!options.continuation || (!authToken && !authTokenHash))
+      return context.json({ error: "unavailable" }, 503);
+    const limit = 32 * 1024 * 1024;
+    if (Number(context.req.header("content-length") ?? 0) > limit)
+      return context.json({ error: "limit" }, 413);
+    const reader = context.req.raw.body?.getReader();
+    if (!reader) return context.json({ error: "invalid" }, 400);
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    let identity: { sessionId?: string; operationId?: string; action?: string } = {};
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > limit) {
+          await reader.cancel();
+          return context.json({ error: "limit" }, 413);
+        }
+        chunks.push(part.value);
+      }
+      const raw = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (content) {
+        if (!options.continuation.content) return context.json({ error: "unavailable" }, 503);
+        const input = conversationContentRequestSchema.parse(raw);
+        identity = {
+          sessionId: input.session,
+          operationId: input.kind === "restore" ? input.operation : undefined,
+          action: input.kind,
+        };
+        const result = await options.continuation.content(input);
+        log.info(undefined, "Continuation bytes verified", {
+          event: "conversation.continuation.control",
+          ...identity,
+          outcome: "completed",
+        });
+        return context.json(result);
+      }
+      const input = conversationRuntimeCommandSchema.parse(raw);
+      identity = { sessionId: input.session, operationId: input.operation, action: input.kind };
+      const result = await options.continuation.control(input);
+      log.info(undefined, "Continuation control completed", {
+        event: "conversation.continuation.control",
+        ...identity,
+        outcome: "completed",
+        phase: result.state,
+      });
+      return context.json(result);
+    } catch (error) {
+      const code =
+        error &&
+        typeof error === "object" &&
+        "data" in error &&
+        error.data &&
+        typeof error.data === "object" &&
+        "code" in error.data
+          ? String(error.data.code)
+          : "blocked";
+      log.warn(undefined, "Continuation control rejected", {
+        event: "conversation.continuation.control",
+        ...identity,
+        outcome: "blocked",
+        code,
+      });
+      return context.json({ error: code }, 409);
+    }
+  };
+  app.post("/api/continuation-control", continuationHandler(false));
+  app.post("/api/continuation-content", continuationHandler(true));
   app.get(
     "/ws",
     upgradeWebSocket(() => ({

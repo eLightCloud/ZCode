@@ -1,7 +1,8 @@
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-selection";
 import { z } from "zod";
 import type { ProjectId, SessionId, WorkspaceId } from "./shared.js";
-import { portableTextPayload, portableTextMetadata } from "./text-input-facts.js";
+import { portableFilePayload, portableFileMetadata } from "./text-input-facts.js";
+import { conversationArtifactUriSchema } from "@zcode/shared";
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();
@@ -50,7 +51,7 @@ const messageInfo = z.discriminatedUnion("role", [
       role: z.literal("user"),
       time: z.object({ created: timestamp }).strict(),
       modelSelection: selection.optional(),
-      metadata: portableTextMetadata.optional(),
+      metadata: portableFileMetadata.optional(),
     })
     .strict(),
   z
@@ -70,6 +71,45 @@ const messageInfo = z.discriminatedUnion("role", [
     .strict(),
 ]);
 const part = z.discriminatedUnion("type", [
+  z
+    .object({
+      id,
+      type: z.literal("file"),
+      mime: z.string().min(1).max(256),
+      filename: z
+        .string()
+        .max(255)
+        .refine((value) => !/[\\/]/.test(value))
+        .optional(),
+      url: z.string().refine((value) => conversationArtifactUriSchema.safeParse(value).success),
+      metadata: z
+        .object({
+          storageKind: z.literal("artifact"),
+          artifactUri: z
+            .string()
+            .refine((value) => conversationArtifactUriSchema.safeParse(value).success),
+          recoverability: z.literal("provider_ready"),
+          sizeBytes: z.number().nonnegative().optional(),
+          sha256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          image: z
+            .object({
+              maxDimension: z.number().positive().optional(),
+              originalWidth: z.number().positive().optional(),
+              originalHeight: z.number().positive().optional(),
+              width: z.number().positive().optional(),
+              height: z.number().positive().optional(),
+              resized: z.boolean().optional(),
+              transformedSizeBytes: z.number().nonnegative().optional(),
+            })
+            .strict()
+            .optional(),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       id,
@@ -94,7 +134,7 @@ const input = z
     id,
     kind: id,
     delivery: z.enum(["startNow", "guide", "queue"]),
-    payload: portableTextPayload,
+    payload: portableFilePayload,
     admittedSequence: timestamp,
     promotedSequence: timestamp.optional(),
     promotedMessageID: id.optional(),
@@ -111,7 +151,7 @@ const input = z
 export const textCheckpointSchema = z
   .object({
     format: z.literal("zcode.text-checkpoint"),
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     session: z
       .object({
         id,
@@ -129,6 +169,23 @@ export const textCheckpointSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    const refs = checkpointArtifactUris(value);
+    if (
+      (value.version < 3 && refs.length > 0) ||
+      refs.some((uri) => uri.split("/")[2] !== value.session.id)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Registered same-session files require format v3",
+      });
+    if (
+      value.messages.some((message) =>
+        message.parts.some(
+          (part) => part.type === "file" && part.url !== part.metadata.artifactUri,
+        ),
+      )
+    )
+      context.addIssue({ code: "custom", message: "Inconsistent native artifact identity" });
     if (
       value.version === 1 &&
       (value.messages.some(
@@ -202,6 +259,43 @@ export const textCheckpointSchema = z
   });
 
 export type TextCheckpoint = z.infer<typeof textCheckpointSchema>;
+export function checkpointArtifactUris(value: {
+  messages: Array<{
+    info: {
+      role: string;
+      metadata?: {
+        conversationInputIntent: { attachments: Array<{ ref: string; previewRef?: string }> };
+      };
+    };
+    parts: Array<{ type: string; url?: string }>;
+  }>;
+  inputs: Array<{
+    payload: {
+      conversationInputIntent?: {
+        sourceCommandId: string;
+        attachments?: Array<{ ref: string; previewRef?: string }>;
+      };
+      attachments?: Array<{ ref: string; previewRef?: string }>;
+    };
+  }>;
+}) {
+  const refs = new Set<string>();
+  const add = (items: Array<{ ref: string; previewRef?: string }> | undefined) => {
+    for (const item of items ?? []) {
+      refs.add(item.ref);
+      if (item.previewRef) refs.add(item.previewRef);
+    }
+  };
+  for (const message of value.messages) {
+    for (const part of message.parts) if (part.type === "file" && part.url) refs.add(part.url);
+    add(message.info.metadata?.conversationInputIntent.attachments);
+  }
+  for (const item of value.inputs) {
+    add(item.payload.attachments);
+    add(item.payload.conversationInputIntent?.attachments);
+  }
+  return [...refs].sort();
+}
 export type TextCheckpointErrorCode =
   | "invalid_checkpoint"
   | "unsupported_state"

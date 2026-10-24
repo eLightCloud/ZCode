@@ -35,6 +35,7 @@ describe("DB109 App 库统一迁移", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "automation_runs",
       "automations",
+      "conversation_index_barriers",
       "conversation_workspace_purpose",
       "off_peak_tasks",
       "task_group_admissions",
@@ -46,9 +47,47 @@ describe("DB109 App 库统一迁移", () => {
       "tasks_schema_migration",
     ]);
     const ledger = db.prepare("SELECT * FROM tasks_schema_migration").all();
-    expect(ledger).toHaveLength(6);
+    expect(ledger).toHaveLength(7);
     await migrate(db);
     expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toEqual(ledger);
+  });
+
+  it("开发分支屏障迁移沿用旧账本，不重跑 DDL，快速启动仍拒绝损坏旧 checksum", async () => {
+    const db = open();
+    await migrate(db);
+    db.exec(`UPDATE tasks_schema_migration SET id='0005_conversation_index_barrier'
+      WHERE id='0007_conversation_index_barrier';
+      INSERT INTO conversation_index_barriers VALUES('synthetic-workspace','synthetic-task','held-operation');`);
+    const old = db
+      .prepare("SELECT * FROM tasks_schema_migration WHERE id='0005_conversation_index_barrier'")
+      .get();
+    expect((await migrate(db)).applied).toEqual([]);
+    expect(
+      db
+        .prepare("SELECT * FROM tasks_schema_migration WHERE id='0005_conversation_index_barrier'")
+        .get(),
+    ).toEqual(old);
+    expect(
+      db
+        .prepare("SELECT * FROM tasks_schema_migration WHERE id='0007_conversation_index_barrier'")
+        .get(),
+    ).toEqual({ ...old, id: "0007_conversation_index_barrier" });
+    expect(db.prepare("SELECT * FROM conversation_index_barriers").all()).toEqual([
+      {
+        workspace_key: "synthetic-workspace",
+        task_id: "synthetic-task",
+        operation: "held-operation",
+      },
+    ]);
+    db.exec(
+      "UPDATE tasks_schema_migration SET checksum='corrupt' WHERE id='0005_conversation_index_barrier'",
+    );
+    const ledger = db.prepare("SELECT * FROM tasks_schema_migration ORDER BY id").all();
+    await expect(migrate(db)).rejects.toMatchObject({
+      kind: "checksum_mismatch",
+      migrationId: "0005_conversation_index_barrier",
+    });
+    expect(db.prepare("SELECT * FROM tasks_schema_migration ORDER BY id").all()).toEqual(ledger);
   });
 
   it("DB109-04/08：旧格式来源明确才转，原列/时间保留，不依赖账号", async () => {
@@ -167,6 +206,8 @@ describe("DB109 App 库统一迁移", () => {
     await migrate(db);
     db.exec(`DELETE FROM tasks_schema_migration;
       DROP TABLE conversation_workspace_purpose;
+      DROP TRIGGER conversation_index_actions_fenced;
+      DROP TABLE conversation_index_barriers;
       ALTER TABLE automations DROP COLUMN model_selection;
       ALTER TABLE automations DROP COLUMN scheduled_run_count;
       INSERT INTO automations(automation_id,cron_expr,prompt,workspace_key,workspace_path,created_at,updated_at,model,provider,run_count)
@@ -234,6 +275,8 @@ describe("DB109 App 库统一迁移", () => {
       await migrate(db);
       db.exec(`DELETE FROM tasks_schema_migration;
         DROP TABLE conversation_workspace_purpose;
+      DROP TRIGGER conversation_index_actions_fenced;
+      DROP TABLE conversation_index_barriers;
         INSERT INTO automations(automation_id,cron_expr,prompt,workspace_key,workspace_path,created_at,updated_at,model)
         VALUES('old','* * * * *','正文','ws','/ws',1,2,'proxy/model');
         CREATE TABLE migration_probe(value INTEGER);
@@ -267,7 +310,7 @@ describe("DB109 App 库统一迁移", () => {
       Atomics.store(new Int32Array(gate), 0, 1);
       Atomics.notify(new Int32Array(gate), 0);
       expect(await Promise.all(exits)).toEqual([[0], [0]]);
-      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(6);
+      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(7);
       expect(db.prepare("SELECT * FROM migration_probe").all()).toHaveLength(1);
       expect(db.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
     } finally {

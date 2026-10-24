@@ -14,7 +14,7 @@ import {
 
 import { StartupTimer, startupNow } from "../startup-logging.js";
 
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 
 import { createConfigCliOverrides, resolveEffectiveConfigResult } from "./app-config-options.js";
 

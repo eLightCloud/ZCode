@@ -1,7 +1,10 @@
 import { createConfig } from "@zcode/adapters/config";
 import { openStartupSqliteSessionStore } from "@zcode/adapters/storage";
 import type { SessionInfo } from "@zcode/contracts";
-import type { ListZCodeSessionsOptions, ResolveLatestSessionOptions } from "./app/types.js";
+import type {
+  ListZCodeSessionsOptions,
+  ResolveLatestSessionOptions,
+} from "./app/app-option-types.js";
 import { getSessionDbPath, isClosableSessionStore } from "./app/session-store.js";
 
 export async function resolveLatestSession(

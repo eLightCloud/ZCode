@@ -29,7 +29,8 @@ import {
   type ZCodeSessionPersistence,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
-import type { ZCodeApp, ZCodeAppOptions } from "../app/types.js";
+import type { ZCodeApp } from "../app/types.js";
+import type { ZCodeAppOptions } from "../app/app-option-types.js";
 import type { V4InteractionRegistry } from "../zcode-protocol-v4/interaction-registry.js";
 import type { ConversationV4Gateway } from "../zcode-protocol-v4/v4-gateway.js";
 import type { SessionResidentPool, SessionResidentPoolOptions } from "./session-resident-pool.js";

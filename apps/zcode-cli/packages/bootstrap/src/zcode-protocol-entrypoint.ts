@@ -19,12 +19,10 @@ import type { SqliteSessionStore } from "@zcode/adapters/storage";
 import { traceContextToLogContext, createRootTraceContext } from "@zcode/contracts";
 import type { McpPort, ModelSelection } from "@zcode/contracts";
 import type { PresentationSurface } from "@zcode/core";
-import type { RunZCodeProtocolAgentOptions, ZCodeAppOptions } from "./app/types.js";
+import type { RunZCodeProtocolAgentOptions, ZCodeAppOptions } from "./app/app-option-types.js";
 import { createZCodeApp } from "./app/create-app.js";
-import {
-  createNodeReplBrowserBroker,
-  type NodeReplBrowserBroker,
-} from "./app/node-repl-browser-broker.js";
+import { createNodeReplBrowserBroker } from "./app/node-repl-browser-broker.js";
+import { type NodeReplBrowserBroker } from "./app/browser-broker-port.js";
 import {
   openProtocolStartupStorage,
   prepareProtocolStartupStorage,

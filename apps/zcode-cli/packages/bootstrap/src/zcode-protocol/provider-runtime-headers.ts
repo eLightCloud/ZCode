@@ -6,7 +6,7 @@ import {
   zcodeProviderRuntimeHeadersResponseSchema,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
-import type { ZCodeAppOptions } from "../app/types.js";
+import type { ZCodeAppOptions } from "../app/app-option-types.js";
 import {
   ProtocolRequestError,
   protocolTraceFromTraceContext,

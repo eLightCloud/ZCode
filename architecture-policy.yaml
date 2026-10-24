@@ -257,7 +257,12 @@ modules:
     roots: [ packages/services/src/gen-ui ]
     managed: true
     requires: [ services, shared, rpc, gen-ui-protocol, mcp-apps-protocol ]
-    publicEntrypoints: [ packages/services/src/gen-ui/index.ts, packages/services/src/gen-ui/contract.ts, packages/services/src/gen-ui/node.ts ]
+    publicEntrypoints:
+      [
+        packages/services/src/gen-ui/index.ts,
+        packages/services/src/gen-ui/contract.ts,
+        packages/services/src/gen-ui/node.ts
+      ]
     layers: { domain: domain, app: app, adapters: adapters }
     layerOrder: [ domain, app, adapters ]
     owner: conversation
@@ -276,7 +281,12 @@ modules:
     roots: [ packages/shared/src/mcp-apps ]
     managed: true
     requires: []
-    publicEntrypoints: [ packages/shared/src/mcp-apps/index.ts, packages/shared/src/mcp-apps/contract.ts, packages/shared/src/mcp-apps/hostContract.ts ]
+    publicEntrypoints:
+      [
+        packages/shared/src/mcp-apps/index.ts,
+        packages/shared/src/mcp-apps/contract.ts,
+        packages/shared/src/mcp-apps/hostContract.ts
+      ]
     layers:
       domain: "."
     owner: plugin
@@ -284,7 +294,11 @@ modules:
     roots: [ apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui ]
     managed: true
     requires: [ cli-protocol-host, zcode-cli, shared, mcp-apps-protocol ]
-    publicEntrypoints: [ apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/index.ts, apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/contract.ts ]
+    publicEntrypoints:
+      [
+        apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/index.ts,
+        apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/contract.ts
+      ]
     layers:
       app: "."
     owner: plugin
@@ -292,7 +306,13 @@ modules:
     roots: [ packages/services/src/plugin-ui-bridge ]
     managed: true
     requires: [ services, shared, mcp-apps-protocol ]
-    publicEntrypoints: [ packages/services/src/plugin-ui-bridge/index.ts, packages/services/src/plugin-ui-bridge/contract.ts, packages/services/src/plugin-ui-bridge/appToolsContract.ts, packages/services/src/plugin-ui-bridge/samplingContract.ts ]
+    publicEntrypoints:
+      [
+        packages/services/src/plugin-ui-bridge/index.ts,
+        packages/services/src/plugin-ui-bridge/contract.ts,
+        packages/services/src/plugin-ui-bridge/appToolsContract.ts,
+        packages/services/src/plugin-ui-bridge/samplingContract.ts
+      ]
     layers:
       app: "."
     owner: plugin
@@ -322,7 +342,12 @@ modules:
     roots: [ packages/ui/src/plugin-ui ]
     managed: true
     requires: [ ui, shared, services, mcp-apps-protocol, plugin-ui-bridge, plugin-sandbox ]
-    publicEntrypoints: [ packages/ui/src/plugin-ui/index.ts, packages/ui/src/plugin-ui/contract.ts, packages/ui/src/plugin-ui/hostPrimitives.ts ]
+    publicEntrypoints:
+      [
+        packages/ui/src/plugin-ui/index.ts,
+        packages/ui/src/plugin-ui/contract.ts,
+        packages/ui/src/plugin-ui/hostPrimitives.ts
+      ]
     layers:
       domain: domain
       app: app
@@ -404,6 +429,7 @@ modules:
     requires:
       - shared
       - zcode-cli
+      - cli-app-assembly
     publicEntrypoints:
       - apps/zcode-cli/packages/bootstrap/src/session-execution/index.ts
       - apps/zcode-cli/packages/bootstrap/src/session-execution/contract.ts
@@ -898,6 +924,7 @@ modules:
       - provider
       - shared
       - zcode-cli
+      - cli-app-assembly
     publicEntrypoints:
       - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/server.ts
       - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/contract.ts
@@ -907,6 +934,116 @@ modules:
     layers:
       adapters: .
     owner: native-protocol
+  # cli-app-assembly：由 architecture:adopt 登记
+  - id: cli-app-assembly
+    roots:
+      - apps/zcode-cli/packages/bootstrap/src/app
+      - apps/zcode-cli/packages/bootstrap/tests/app-assembly-contract
+    managed: true
+    requires:
+      - cli-adapters
+      - cli-network
+      - cli-subagent-config
+      - cli-telemetry
+      - mcp-apps-protocol
+      - provider
+      - provider-node
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/bootstrap/src/app/app-option-types.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/artifact-store.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/browser-broker-port.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugins.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-skills.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/contract.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/create-app.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/dynamic-workflow-run-observation.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/dynamic-workflow-run-service.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/legacy-cli-personal-provider-config-importer.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/model-execution-context.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/node-repl-browser-broker.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/paths.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/process-provider-registry-runtime.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/provider-registry-selection.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/session-residency-finalization.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/session-store.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/standalone-account-provider-runtime.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/startup-marks.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/subagent-session-contract.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/subagent-session-query.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/types.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/visualize-skill-gate.ts
+    layers:
+      app: .
+      domain: app-attachment-codec.ts
+      adapters:
+        - contract.test.ts
+        - app-agent-assembly.ts
+        - app-browser-resources.ts
+        - app-config-options.ts
+        - app-facade-assembly.ts
+        - app-infrastructure.ts
+        - app-resume-boundary.ts
+        - app-startup-context.ts
+        - app-startup-sources.ts
+        - app-workflow-assembly.ts
+        - app-workflow-journal-facade.ts
+        - built-in-node-repl.ts
+        - bundled-plugin-cache.ts
+        - bundled-plugin-marketplace.ts
+        - bundled-plugin-source.ts
+        - bundled-plugins.ts
+        - bundled-skills.ts
+        - contract.example.ts
+        - contract.ts
+        - create-app.ts
+        - dynamic-workflow-gate.ts
+        - dynamic-workflow-run-fill.ts
+        - dynamic-workflow-run-introspection.ts
+        - dynamic-workflow-run-launch.ts
+        - dynamic-workflow-run-progress-payload.ts
+        - dynamic-workflow-run-replay.ts
+        - dynamic-workflow-run-retune.ts
+        - dynamic-workflow-run-service.ts
+        - dynamic-workflow-run-submit.ts
+        - dynamic-workflow-snippet-service.ts
+        - embedded-search-backend.ts
+        - legacy-cli-personal-provider-config-importer.ts
+        - node-repl-browser-broker.ts
+        - official-plugin-cache-fs.ts
+        - official-plugin-runtime.ts
+        - official-plugin-seed-lock.ts
+        - process-provider-registry-runtime.ts
+        - runtime-config.ts
+        - script-workflow-child-runtime.ts
+        - script-workflow-meta.ts
+        - script-workflow-methods.ts
+        - script-workflow-prepare.ts
+        - script-workflow-process.ts
+        - script-workflow-runtime.ts
+        - script-workflow-tool-port.ts
+        - script-workflow-utils.ts
+        - session-facade.ts
+        - session-resource-close.ts
+        - startup-marks.ts
+        - workflow-artifact-publish.ts
+        - workflow-concurrency-governor.ts
+        - workflow-default-concurrency.ts
+        - workflow-driver-concurrency.ts
+        - workflow-driver-escalation.ts
+        - workflow-driver-helpers.ts
+        - workflow-driver-model-failure.ts
+        - workflow-driver-quiescence.ts
+        - workflow-driver-submit-bridge.ts
+        - workflow-driver.ts
+        - workflow-facade.ts
+    owner: native-bootstrap
+    layerOrder:
+      - domain
+      - app
+      - adapters
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。
@@ -925,7 +1062,8 @@ exceptions:
   - id: side-pane-full-view-shortcut-command-edit
     rule: unmanaged-new-file
     paths: [ packages/shared/src/shortcutCommands.ts ]
-    reason: 已准入的快捷键命令表只追加一条 toggleSidePaneFullView 命令（Side Pane 完整视图，docs/ui/side-pane-full-view.md）；命令表仍是唯一数据源，签名与模块边界不变，接管整个 shared 包不在本次范围内。
+    reason: 已准入的快捷键命令表只追加一条 toggleSidePaneFullView 命令（Side Pane
+      完整视图，docs/ui/side-pane-full-view.md）；命令表仍是唯一数据源，签名与模块边界不变，接管整个 shared 包不在本次范围内。
   - id: opensource-cua-test-project-config
     rule: unmanaged-new-file
     paths: [ packages/zcode-cua/vitest.config.ts ]
@@ -949,7 +1087,8 @@ exceptions:
       - packages/ui/src/browser-use/EmbeddedBrowserPermissionPrompts.tsx
       - packages/ui/src/hooks/useStartPlanRecommendation.ts
       - packages/ui/src/settings/DynamicWorkflowModeSetting.tsx
-    reason: 已准入的存量文件只把 TID 导入从 @zcode/shared 根入口改为 @zcode/shared/test-ids 子路径（根入口不再导出 test-ids，以收窄受影响单测范围）；行为与模块边界不变，接管 ui 目录不在本次范围内。
+    reason: 已准入的存量文件只把 TID 导入从 @zcode/shared 根入口改为 @zcode/shared/test-ids 子路径（根入口不再导出
+      test-ids，以收窄受影响单测范围）；行为与模块边界不变，接管 ui 目录不在本次范围内。
   - id: connection-log-secret-token-unmanaged-edit
     rule: unmanaged-new-file
     paths: [ packages/shared/src/source-server/connectionLog.ts ]
@@ -957,11 +1096,13 @@ exceptions:
   - id: connection-errors-econnreset-unmanaged-edit
     rule: unmanaged-new-file
     paths: [ packages/shared/src/source-server/connectionErrors.ts ]
-    reason: 已存在的连接错误归一化码表补一项 ECONNRESET → remote-host-unreachable，修复在线断连恢复失败被误报为预检失败；签名与模块边界不变，接管整个 shared 包不在本次修复范围内。
+    reason: 已存在的连接错误归一化码表补一项 ECONNRESET → remote-host-unreachable，修复在线断连恢复失败被误报为预检失败；签名与模块边界不变，接管整个 shared
+      包不在本次修复范围内。
   - id: client-config-public-field-unmanaged-edit
     rule: unmanaged-new-file
     paths: [ packages/shared/src/clientConfig.ts ]
-    reason: Existing upstream public config parser gains one validated recommendation field; ownership and module boundaries remain unchanged, and adopting the shared package is outside this change.
+    reason: Existing upstream public config parser gains one validated recommendation field; ownership and module
+      boundaries remain unchanged, and adopting the shared package is outside this change.
   - id: highspeed-fallback-snapshot-unmanaged-edit
     rule: unmanaged-new-file
     paths: [ apps/zcode-cli/packages/core/src/runtime/methods/turn-execution-fallback.ts ]
@@ -972,11 +1113,13 @@ exceptions:
       - packages/ui/src/components/ui/kbd.tsx
       - packages/ui/src/settings/ShortcutSearchBar.tsx
       - packages/ui/src/settings/ShortcutSettingsSection.tsx
-    reason: Existing upstream shortcut components and keycap primitive edited for shared controls, responsive layout and save admission; adopting the entire settings directory requires a separate boundary refactor.
+    reason: Existing upstream shortcut components and keycap primitive edited for shared controls, responsive
+      layout and save admission; adopting the entire settings directory requires a separate boundary refactor.
   - id: sidebar-workflow-tooltip-existing-ui-edit
     rule: unmanaged-new-file
     paths: [ packages/ui/src/components/workflow-run-line/WorkflowRunRail.tsx ]
-    reason: Existing upstream workflow rail edited only to adapt native titles within the sidebar tooltip scope; workflow ownership and imports remain unchanged except for the shared UI tooltip adapter.
+    reason: Existing upstream workflow rail edited only to adapt native titles within the sidebar tooltip scope;
+      workflow ownership and imports remain unchanged except for the shared UI tooltip adapter.
   - id: onboarding-existing-module-edit
     rule: unmanaged-new-file
     paths:
@@ -986,11 +1129,13 @@ exceptions:
   - id: remote-connection-flow-existing-size
     rule: max-file-lines
     paths: [ packages/ui/src/remote-connection-flow/index.ts ]
-    reason: Preserve the existing single hook owner and closure; module adoption must not mechanically split state to satisfy line counts.
+    reason: Preserve the existing single hook owner and closure; module adoption must not mechanically split state
+      to satisfy line counts.
   - id: gen-ui-tweak-runtime-size
     rule: max-file-lines
     paths: [ packages/desktop/src/renderer/src/plugin-sandbox/genUiTweakRuntime.js ]
-    reason: Keep parameter binding and registration lifecycle together; runtime-manifest.json and tests verify file integrity.
+    reason: Keep parameter binding and registration lifecycle together; runtime-manifest.json and tests verify
+      file integrity.
   - id: gen-ui-tweak-runtime-lint
     rule: disable-count
     paths: [ packages/desktop/src/renderer/src/plugin-sandbox/genUiTweakRuntime.js ]
@@ -998,13 +1143,15 @@ exceptions:
   - id: settings-machine-unmanaged-edit
     rule: unmanaged-new-file
     paths: [ packages/ui/src/settings/SettingsMachine.tsx ]
-    reason: Admitted upstream file edited only to remove settings notices; adopting packages/ui/src/settings needs a separate module boundary refactor.
+    reason: Admitted upstream file edited only to remove settings notices; adopting packages/ui/src/settings needs
+      a separate module boundary refactor.
   - id: workflow-amend-provider-boundary-unmanaged-edit
     rule: unmanaged-new-file
     paths:
       - apps/zcode-cli/packages/contracts/src/tools/amend-workflow.ts
       - apps/zcode-cli/packages/core/src/tool/handlers/amend-workflow-resolve.ts
-    reason: Admitted upstream files edited only to make an own-run AmendWorkflow that brings in a new provider ask the user; adopting the zcode-cli contracts and core handlers needs a separate module boundary refactor.
+    reason: Admitted upstream files edited only to make an own-run AmendWorkflow that brings in a new provider ask
+      the user; adopting the zcode-cli contracts and core handlers needs a separate module boundary refactor.
   - id: workflow-share-unmanaged-new-files
     rule: unmanaged-new-file
     paths:
@@ -1024,7 +1171,8 @@ exceptions:
       - packages/ui/src/chat-input-toolbar/thoughtLevelLabels.ts
       - packages/ui/src/components/workflow-timeline/subagent-model-label.ts
       - packages/desktop/src/main/fileApplications.ts
-    reason: Feature-branch files admitted path-exact; adopting conversation-share, tool presentation or renderer directories needs a separate module boundary refactor (same pattern as settings-machine-unmanaged-edit).
+    reason: Feature-branch files admitted path-exact; adopting conversation-share, tool presentation or renderer
+      directories needs a separate module boundary refactor (same pattern as settings-machine-unmanaged-edit).
   - id: workflow-notifications-unmanaged-files
     rule: unmanaged-new-file
     paths:
@@ -1034,7 +1182,8 @@ exceptions:
       - apps/zcode-cli/packages/core/src/runtime/methods/dynamic-workflow-run-hole-notification.ts
       - apps/zcode-cli/packages/core/src/tool/handlers/model-reference.ts
       - packages/shared/src/test-ids-workflow.ts
-    reason: Workflow reminder, notification and model reference files reached staging without the MR architecture gate running; adopting the zcode-cli core and shared test ids needs a separate module boundary refactor.
+    reason: Workflow reminder, notification and model reference files reached staging without the MR architecture
+      gate running; adopting the zcode-cli core and shared test ids needs a separate module boundary refactor.
   - id: composer-toolbar-unmanaged-files
     rule: unmanaged-new-file
     paths:
@@ -1047,17 +1196,21 @@ exceptions:
       - packages/ui/src/lib/composerPlanGroups.ts
       - packages/ui/src/lib/providerFamilyConnectionTransition.ts
       - packages/ui/src/prompt-editor/useComposerToolbarFit.ts
-    reason: Composer model, provider and toolbar files reached staging without the MR architecture gate running; adopting the packages/ui composer toolbar needs a separate module boundary refactor.
+    reason: Composer model, provider and toolbar files reached staging without the MR architecture gate running;
+      adopting the packages/ui composer toolbar needs a separate module boundary refactor.
   - id: provider-endpoint-routing-unmanaged-edit
     rule: unmanaged-new-file
     paths:
       - apps/zcode-cli/packages/adapters/src/model/endpoint-routing-edition/index.ts
       - apps/zcode-cli/packages/adapters/src/model/provider-endpoint-routing-options.ts
-    reason: Existing upstream routing assembly files gain the endpoint origin and injected JWT reader; adopting the full CLI model adapter directory needs a separate module boundary refactor.
+    reason: Existing upstream routing assembly files gain the endpoint origin and injected JWT reader; adopting
+      the full CLI model adapter directory needs a separate module boundary refactor.
   - id: workflow-mode-user-choice-unmanaged-edit
     rule: unmanaged-new-file
     paths:
       - packages/shared/src/dynamic-workflow-feature.ts
       - packages/ui/src/settings/DynamicWorkflowModeSetting.tsx
       - packages/ui/src/store/dynamicWorkflowAvailabilityStore.ts
-    reason: Admitted upstream files edited only to let the user's dynamic workflow mode choice always win and keep the settings row visible; adopting packages/shared/src and packages/ui/src needs a separate module boundary refactor.
+    reason: Admitted upstream files edited only to let the user's dynamic workflow mode choice always win and keep
+      the settings row visible; adopting packages/shared/src and packages/ui/src needs a separate module
+      boundary refactor.

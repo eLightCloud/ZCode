@@ -2,15 +2,15 @@ import { AgentRuntimeConfig } from "@zcode/core";
 
 import { Logger, McpServerConfig } from "@zcode/contracts";
 
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 
 import { runtimeConfigLogContext } from "./runtime-config.js";
 
 import {
   createNodeReplBrowserBroker,
   injectNodeReplBrowserBroker,
-  type NodeReplBrowserBroker,
 } from "./node-repl-browser-broker.js";
+import { type NodeReplBrowserBroker } from "./browser-broker-port.js";
 
 import { StartupTimer } from "../startup-logging.js";
 

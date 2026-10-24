@@ -27,7 +27,7 @@ import type {
   SetLocaleResult,
   SubmitPromptOptions,
   ToggleWorkspaceHookReviewItemInput,
-} from "./types.js";
+} from "./app-option-types.js";
 import type { WorkspaceHookReviewCommandResult } from "./workspace-hook-review-controller.js";
 export interface AppSessionApi {
   readonly sessionId: SessionId;

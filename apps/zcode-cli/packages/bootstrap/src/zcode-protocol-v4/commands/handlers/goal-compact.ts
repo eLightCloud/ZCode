@@ -9,7 +9,7 @@
 // - continueGoalAfterChange / runGoalContinuationInBackground（:2204-2269）→ 组内私有共用函数
 import type { CommandEnvelope, CommandResult } from "@zcode/shared/zcode-protocol-v4";
 
-import type { SteerTurnOptions } from "../../../app/types.js";
+import type { SteerTurnOptions } from "../../../app/app-option-types.js";
 
 import { runWithSessionResidencyFinalization } from "../../../app/session-residency-finalization.js";
 

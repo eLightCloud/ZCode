@@ -7,9 +7,9 @@ import { SessionId } from "@zcode/contracts";
 import { SessionStorePort } from "@zcode/contracts";
 import type { ExecutionShellSelection } from "@zcode/contracts";
 import type { TraceContext } from "@zcode/contracts";
-import type { PrepareUserExecutionBoundary } from "./types.js";
-import type { ResumeOptions } from "./types.js";
-import type { ZCodeAppOptions } from "./types.js";
+import type { PrepareUserExecutionBoundary } from "./app-option-types.js";
+import type { ResumeOptions } from "./app-option-types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 import { readSessionModelSelection } from "./session-store.js";
 
 export function createAppResumeBoundary(

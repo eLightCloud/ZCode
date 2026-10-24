@@ -7,7 +7,7 @@ import { OFF_PEAK_EXECUTION_TOOL_DENYLIST } from "@zcode/shared";
 import { type TurnBackgroundAttribution, type TurnInputIntentMetadata } from "@zcode/contracts";
 import type { TurnAttachment } from "@zcode/core";
 import type { ZCodeAutomationBotDeliveryTarget } from "@zcode/shared";
-import type { SendInputOptions, SendInputResult } from "../../app/types.js";
+import type { SendInputOptions, SendInputResult } from "../../app/app-option-types.js";
 import { runWithSessionResidencyFinalization } from "../../app/session-residency-finalization.js";
 import type { V4CommandCoreHost, V4SessionRecordView } from "./types.js";
 

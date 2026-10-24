@@ -13,7 +13,7 @@
 
 import type { ModelCatalogEntry, ModelCatalogPort } from "@zcode/contracts";
 import type { ModelSelection } from "@zcode/shared/model-selection";
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
 
 interface ModelCatalogPortDeps {
   /** 进程的 Provider Registry。**整个对象**存下来，绝不在这里 `getView()` 一次存成快照。 */

@@ -1,20 +1,11 @@
-import {
-  WorkspaceHookReviewFlowRegistry,
-  type WorkspaceHookReviewFlow,
-  type WorkspaceHookRuntimeAdmissionPort,
-  type WorkspaceHookTrustCoordinator,
-} from "@zcode/core";
+import type { WorkspaceHookReviewControllerMethodsContext } from "./hook-review-context.js";
+import { WorkspaceHookReviewFlowRegistry, type WorkspaceHookReviewFlow } from "@zcode/core";
 import type { WorkspaceHookReviewControllerApi } from "./hook-review-api.js";
 import { installWorkspaceHookReviewControllerMethods } from "./hook-review-methods.js";
 import type * as implementation3 from "./hook-review-persistence.js";
 import type * as implementation0 from "./hook-review-request.js";
 import { WorkspaceHookReviewTelemetry } from "./workspace-hook-review-telemetry.js";
-import type {
-  WorkspaceHookReviewControllerOptions,
-  WorkspaceHookReviewHostPort,
-  WorkspaceHookReviewMutationPort,
-  WorkspaceHookTrustStoreMutationPort,
-} from "./workspace-hook-review-types.js";
+import type { WorkspaceHookReviewControllerOptions } from "./workspace-hook-review-types.js";
 
 export type * from "./workspace-hook-review-types.js";
 
@@ -26,22 +17,25 @@ export class WorkspaceHookReviewController {
   declare revoke: WorkspaceHookReviewControllerApi["revoke"];
   declare revokeCurrent: WorkspaceHookReviewControllerApi["revokeCurrent"];
 
-  private readonly admission: WorkspaceHookRuntimeAdmissionPort;
-  private readonly appVersion?: string;
-  private readonly coordinator: WorkspaceHookTrustCoordinator;
-  private readonly host: WorkspaceHookReviewHostPort;
-  private readonly telemetry: WorkspaceHookReviewTelemetry;
-  private readonly mutation: WorkspaceHookReviewMutationPort;
-  private readonly sessionId: string;
-  private readonly store: Promise<WorkspaceHookTrustStoreMutationPort>;
-  private readonly now: () => number;
-  private readonly createId: () => string;
-  private readonly registry = new WorkspaceHookReviewFlowRegistry();
+  private readonly admission: WorkspaceHookReviewControllerMethodsContext["admission"];
+  private readonly appVersion?: WorkspaceHookReviewControllerMethodsContext["appVersion"];
+  private readonly coordinator: WorkspaceHookReviewControllerMethodsContext["coordinator"];
+  private readonly host: WorkspaceHookReviewControllerMethodsContext["host"];
+  private readonly telemetry: WorkspaceHookReviewControllerMethodsContext["telemetry"];
+  private readonly mutation: WorkspaceHookReviewControllerMethodsContext["mutation"];
+  private readonly sessionId: WorkspaceHookReviewControllerMethodsContext["sessionId"];
+  private readonly store: WorkspaceHookReviewControllerMethodsContext["store"];
+  private readonly now: WorkspaceHookReviewControllerMethodsContext["now"];
+  private readonly createId: WorkspaceHookReviewControllerMethodsContext["createId"];
+  private readonly registry: WorkspaceHookReviewControllerMethodsContext["registry"] =
+    new WorkspaceHookReviewFlowRegistry();
   /** flow → 监管 promise。WeakMap 使 flow 被回收后自动移除，不额外持有引用。 */
-  private readonly supervisedFlows = new WeakMap<WorkspaceHookReviewFlow, Promise<void>>();
-  private reviewFlowId?: string;
-  private generation = 0;
-  private mutationQueue: Promise<unknown> = Promise.resolve();
+  private readonly supervisedFlows: WorkspaceHookReviewControllerMethodsContext["supervisedFlows"] =
+    new WeakMap<WorkspaceHookReviewFlow, Promise<void>>();
+  private reviewFlowId?: WorkspaceHookReviewControllerMethodsContext["reviewFlowId"];
+  private generation: WorkspaceHookReviewControllerMethodsContext["generation"] = 0;
+  private mutationQueue: WorkspaceHookReviewControllerMethodsContext["mutationQueue"] =
+    Promise.resolve();
 
   constructor(options: WorkspaceHookReviewControllerOptions) {
     this.admission = options.admission;

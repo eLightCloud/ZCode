@@ -1,7 +1,7 @@
 import { isReadonlyAgentSessionKind, OFF_PEAK_EXECUTION_TOOL_DENYLIST } from "@zcode/shared";
 import { inputIntentMetadata } from "../zcode-protocol-v4/commands/input-intent.js";
 import { createModelExecutionContext } from "./model-execution.js";
-import type { SendInputOptions } from "../app/types.js";
+import type { SendInputOptions } from "../app/app-option-types.js";
 import { type QueryId, type TurnBackgroundAttribution } from "@zcode/contracts";
 import {
   zcodeSessionCancelBackgroundTaskParamsSchema,

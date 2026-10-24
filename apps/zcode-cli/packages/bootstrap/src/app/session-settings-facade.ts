@@ -8,7 +8,7 @@ import { type ModelSelection } from "@zcode/provider";
 
 import { getLocaleConfigPath } from "./locale-selection.js";
 
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
 
 import {
   requireRegistryThoughtLevel,

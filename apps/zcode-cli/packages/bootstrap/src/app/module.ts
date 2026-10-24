@@ -1,0 +1,45 @@
+/**
+ * cli-app-assembly 模块清单（architecture-governance managed 模块）。
+ * 层：app。修改 requires 时同步更新 architecture-policy.yaml（检查器会校验两者一致）。
+ */
+export const cliAppAssemblyModule = {
+  id: "cli-app-assembly",
+  requires: [
+    "cli-adapters",
+    "cli-network",
+    "cli-subagent-config",
+    "cli-telemetry",
+    "mcp-apps-protocol",
+    "provider",
+    "provider-node",
+    "shared",
+    "zcode-cli",
+  ],
+  provides: ["cli-app-assembly"],
+  publicEntrypoints: [
+    "contract.ts",
+    "create-app.ts",
+    "legacy-cli-personal-provider-config-importer.ts",
+    "standalone-account-provider-runtime.ts",
+    "bundled-skills.ts",
+    "types.ts",
+    "process-provider-registry-runtime.ts",
+    "paths.ts",
+    "bundled-plugins.ts",
+    "official-plugin-definitions.ts",
+    "app-option-types.ts",
+    "session-store.ts",
+    "visualize-skill-gate.ts",
+    "startup-marks.ts",
+    "provider-registry-selection.ts",
+    "browser-broker-port.ts",
+    "dynamic-workflow-run-service.ts",
+    "dynamic-workflow-run-observation.ts",
+    "subagent-session-query.ts",
+    "subagent-session-contract.ts",
+    "artifact-store.ts",
+    "node-repl-browser-broker.ts",
+    "model-execution-context.ts",
+    "session-residency-finalization.ts",
+  ],
+} as const;

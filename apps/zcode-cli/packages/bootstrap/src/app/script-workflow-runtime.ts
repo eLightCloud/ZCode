@@ -11,7 +11,7 @@ import {
   type TraceContext,
   type WorkflowAgentCallInput,
 } from "@zcode/contracts";
-import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { PrepareUserExecutionBoundary } from "./app-option-types.js";
 import { readWorkflowScriptDocument, stableHash } from "./script-workflow-meta.js";
 import { prepareScriptWorkflowRun } from "./script-workflow-prepare.js";
 import { resolveWorkflowDefaultConcurrency } from "./workflow-default-concurrency.js";

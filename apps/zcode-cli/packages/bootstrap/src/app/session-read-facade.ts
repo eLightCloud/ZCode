@@ -10,7 +10,7 @@ import {
 
 import { loadSessionTranscriptFromStore } from "../session-transcript.js";
 
-import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
+import type { ProviderRegistryModelSource } from "./provider-registry-source.js";
 
 import {
   getRegistryBackedModel,

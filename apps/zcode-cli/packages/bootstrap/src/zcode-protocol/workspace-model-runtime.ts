@@ -6,7 +6,8 @@ import {
   zcodeWorkspaceReadPresentationParamsSchema,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
-import type { ZCodeApp, ZCodeAppOptions } from "../app/types.js";
+import type { ZCodeApp } from "../app/types.js";
+import type { ZCodeAppOptions } from "../app/app-option-types.js";
 import { listProtocolSlashCommands } from "./slash-commands.js";
 import {
   parseParams,

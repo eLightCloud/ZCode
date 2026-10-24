@@ -1,6 +1,7 @@
 import type { ExpertWorkflowRuntime } from "@zcode/core";
 import type { SessionId, TraceContext, WorkflowDefinition } from "@zcode/contracts";
-import type { PrepareUserExecutionBoundary, ZCodeApp } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { PrepareUserExecutionBoundary } from "./app-option-types.js";
 
 export type WorkflowFacade = Pick<
   ZCodeApp,

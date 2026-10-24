@@ -30,7 +30,7 @@ import { ToolArtifactStorePort } from "@zcode/contracts";
 import type { TraceContext } from "@zcode/contracts";
 import { isRemoteWorkspaceIdentity } from "@zcode/shared";
 import { StartupTimer } from "../startup-logging.js";
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 import { createConfigCliOverrides } from "./app-config-options.js";
 import { resolveEffectiveConfigResult } from "./app-config-options.js";
 import { collectDynamicWorkflowDisabledSkillPaths } from "./dynamic-workflow-gate.js";

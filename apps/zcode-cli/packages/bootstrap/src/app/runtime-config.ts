@@ -15,10 +15,9 @@ import {
 import { omitMcpServers, resolveTrustedOfficialCuaServerNames } from "../mcp-config.js";
 import { resolveDefaultEmbeddedSearchBackend } from "./embedded-search-backend.js";
 import { getProjectMemoryRoot } from "./paths.js";
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 import {
   resolveRegistryOwnedModelSelection,
-  resolveRegistryModelSelection,
   type ResolvedRegistrySelection,
 } from "./provider-registry-selection.js";
 

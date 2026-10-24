@@ -16,7 +16,7 @@
 
 import type { FillHoleResult, HoleFill, OpenHole } from "@zcode/dynamic-workflow";
 import type { RunControlBinding } from "@zcode/dynamic-workflow-runtime";
-import type { WorkflowConcurrencyPort } from "./workflow-concurrency-governor.js";
+import type { WorkflowConcurrencyPort } from "./workflow-concurrency-port.js";
 import type { WorkflowRunSeatGate } from "./workflow-seat-gate.js";
 
 export interface WorkflowRunControl extends RunControlBinding {

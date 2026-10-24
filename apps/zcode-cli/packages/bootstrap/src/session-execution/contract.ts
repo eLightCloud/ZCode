@@ -1,5 +1,5 @@
 import type { CommandPayloadMap } from "@zcode/shared/zcode-protocol-v4";
-import type { SendInputOptions } from "../app/types.js";
+import type { SendInputOptions } from "../app/app-option-types.js";
 
 /** 原 session record 拥有计数；租约不创建第二个运行态或调度锁。 */
 export interface SessionResidencyFinalizationOwner {

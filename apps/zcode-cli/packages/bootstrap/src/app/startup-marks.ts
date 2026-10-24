@@ -6,7 +6,7 @@ import type { StartupTimer } from "../startup-logging.js";
 import { resolveOfficialPluginRoots } from "./bundled-plugins.js";
 import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "./official-plugin-definitions.js";
 import { getPluginStorageRoot } from "./paths.js";
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 import { filterVisualizeSkillRoots } from "./visualize-skill-gate.js";
 
 export function resolveStartupPlugins(input: {

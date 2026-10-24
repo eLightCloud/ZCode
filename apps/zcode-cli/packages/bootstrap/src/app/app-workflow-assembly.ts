@@ -26,7 +26,7 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 
-import type { ZCodeAppOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./app-option-types.js";
 
 import {
   createDynamicWorkflowRunService,

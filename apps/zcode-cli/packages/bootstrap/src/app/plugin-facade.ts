@@ -6,17 +6,14 @@ import {
   setZCodePluginEnabled,
   uninstallZCodeMarketplacePlugin,
 } from "../plugins.js";
+import type { ZCodeApp } from "./types.js";
 import type {
-  ZCodeApp,
   ZCodeAppOptions,
   ZCodePluginSetResult,
   ZCodePluginUninstallResult,
-} from "./types.js";
+} from "./app-option-types.js";
 
-type PluginFacade = Pick<
-  ZCodeApp,
-  "listPlugins" | "setPluginEnabled" | "uninstallPlugin"
->;
+type PluginFacade = Pick<ZCodeApp, "listPlugins" | "setPluginEnabled" | "uninstallPlugin">;
 
 interface CreatePluginFacadeOptions {
   configResult: ConfigResult;
@@ -41,10 +38,7 @@ function createPluginFacade(options: CreatePluginFacadeOptions): PluginFacade {
 
   return {
     listPlugins: async (): Promise<PluginLoadOutcome> => listZCodePlugins(commonOptions()),
-    setPluginEnabled: async (
-      plugin: string,
-      enabled: boolean,
-    ): Promise<ZCodePluginSetResult> => {
+    setPluginEnabled: async (plugin: string, enabled: boolean): Promise<ZCodePluginSetResult> => {
       const result = await setZCodePluginEnabled({
         ...commonOptions(),
         enabled,

@@ -49,7 +49,8 @@ export async function continuationControl(context: ZCodeProtocolAgentServerConte
       // staging 后配置可能变化；授予后仍不能把不支持的模型静默换成默认项。
       const value = await store.exportTextCheckpoint({ sessionID: input.session as SessionId });
       const mimeTypes = value.messages.flatMap((message) =>
-        message.parts.filter((part) => part.type === "file").map((part) => part.mime));
+        message.parts.filter((part) => part.type === "file").map((part) => part.mime),
+      );
       if (!context.deps.validateContinuationSelection?.(value.modelSelection, mimeTypes))
         throw new ConversationRuntimeError("model_unavailable");
     }

@@ -18,7 +18,7 @@ import type {
   SubmitPromptOptions,
   ZCodePluginSetResult,
   ZCodePluginUninstallResult,
-} from "./types.js";
+} from "./app-option-types.js";
 export interface AppTargetAndPluginApi {
   setTarget(input: {
     objective: string;

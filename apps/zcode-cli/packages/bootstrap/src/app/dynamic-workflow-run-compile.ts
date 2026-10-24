@@ -23,7 +23,7 @@ import {
 } from "@zcode/dynamic-workflow";
 import { projectSiteGraph } from "@zcode/dynamic-workflow/projections";
 import { compiledHolesOf } from "./dynamic-workflow-run-holes.js";
-import type { CompiledDynamicWorkflowScript } from "./dynamic-workflow-run-launch.js";
+import type { CompiledDynamicWorkflowScript } from "./workflow-compilation-types.js";
 
 /**
  * 编译一次：一个 ts.Program 同时喂站点表、schema 合成与 lowering。

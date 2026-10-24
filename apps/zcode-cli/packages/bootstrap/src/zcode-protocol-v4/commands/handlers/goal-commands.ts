@@ -13,7 +13,7 @@ import type {
   CommandResult,
 } from "@zcode/shared/zcode-protocol-v4";
 
-import type { SteerTurnOptions, SubmitPromptOptions } from "../../../app/types.js";
+import type { SteerTurnOptions, SubmitPromptOptions } from "../../../app/app-option-types.js";
 
 import { runWithSessionResidencyFinalization } from "../../../app/session-residency-finalization.js";
 

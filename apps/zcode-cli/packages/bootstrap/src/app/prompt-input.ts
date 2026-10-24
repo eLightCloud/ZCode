@@ -7,7 +7,7 @@ import type {
   ToolArtifactStorePort,
   TraceContext,
 } from "@zcode/contracts";
-import type { PromptInput } from "./types.js";
+import type { PromptInput } from "./app-option-types.js";
 
 export function normalizePromptInput(input: PromptInput): {
   text: string;

@@ -5,6 +5,7 @@
 export const cliProtocolHostModule = {
   id: "cli-protocol-host",
   requires: [
+    "cli-app-assembly",
     "cli-adapters",
     "cli-session-execution",
     "cli-telemetry",

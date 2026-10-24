@@ -12,7 +12,7 @@ import {
   collectSubagentChildSessionIds,
   paginateEndedSubagents,
   projectSessionSubagents,
-} from "../zcode-protocol/subagent-session-query.js";
+} from "./subagent-session-query.js";
 
 export interface SubagentTranscriptSnapshot {
   sessionId: string;

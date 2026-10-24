@@ -51,7 +51,7 @@ import {
   type RunLaunch,
 } from "./dynamic-workflow-run-launch-anchor.js";
 import { isResumableRecord, type RunRegistryEntry } from "./dynamic-workflow-run-observation.js";
-import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-run-service.js";
+import type { DynamicWorkflowRunServiceDeps } from "./dynamic-workflow-service-contract.js";
 import { workflowSubagentPermissionModeField } from "./workflow-actor-permission.js";
 import type { WorkflowEscalationRegistry } from "./workflow-escalation-registry.js";
 import { createWorkflowRunControl } from "./workflow-run-control.js";

@@ -9,6 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSqliteSessionStore } from "../src/storage/session-store.js";
 
@@ -79,6 +80,58 @@ async function setup() {
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
+  it("replacing v4 with a legacy checkpoint clears outcomes absent from the chosen body", async () => {
+    const { store, target, dbPath } = await setup();
+    const legacy = example();
+    const session = legacy.session.id;
+    const current = textCheckpointSchema.parse({
+      ...legacy,
+      version: 4,
+      session: {
+        ...legacy.session,
+        lastOutcome: "completed",
+        lastOutcomeInputId: "command-1",
+        lastOutcomeAt: 2,
+      },
+    });
+    try {
+      await store.importTextCheckpoint({ checkpoint: current, target });
+      expect(await store.exportTextCheckpoint({ sessionID: session })).toEqual(current);
+      const operation = randomUUID();
+      await store.controlContinuation({ kind: "close", session, operation }, target);
+      await store.controlContinuation(
+        {
+          kind: "stage",
+          session,
+          operation,
+          branchMode: "primary",
+          management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+          dataBase64: Buffer.from(JSON.stringify(legacy)).toString("base64"),
+        },
+        target,
+      );
+      await store.controlContinuation({ kind: "apply", session, operation }, target);
+      expect(await store.getSession(session)).toMatchObject({
+        lastOutcome: undefined,
+        lastOutcomeInputId: undefined,
+        lastOutcomeAt: undefined,
+      });
+      expect(await store.exportTextCheckpoint({ sessionID: session })).toEqual(legacy);
+      await store.controlContinuation(
+        { kind: "activate", session, operation, generation: 1, version: "legacy-selected" },
+        target,
+      );
+    } finally {
+      store.close();
+    }
+    const reopened = await createSqliteSessionStore({ dbPath });
+    try {
+      expect(await reopened.exportTextCheckpoint({ sessionID: session })).toEqual(legacy);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("round-trips settled tool history, plan configuration and todos without replaying inputs", async () => {
     const { store, target } = await setup();
     const cp: any = example();

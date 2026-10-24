@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { conversationIndexFactsSchema } from "./conversation-sync.js";
+import { conversationSessionIdSchema, conversationIndexFactsSchema } from "./conversation-sync.js";
 import { conversationScopeSchema } from "./conversation-sync.js";
 import { conversationFileSchema } from "./conversation-files.js";
 
-const session = z
+const session = conversationSessionIdSchema;
+// Version and location references are opaque SQL identities, never directory segments.
+const reference = z
   .string()
   .min(1)
   .max(128)
@@ -23,7 +25,7 @@ export const conversationRuntimeCommandSchema = z.discriminatedUnion("kind", [
     .object({
       ...base,
       kind: z.literal("cancel"),
-      version: session.optional(),
+      version: reference.optional(),
       generation: z.number().int().positive().optional(),
     })
     .strict(),
@@ -46,7 +48,7 @@ export const conversationRuntimeCommandSchema = z.discriminatedUnion("kind", [
     .object({
       ...base,
       kind: z.literal("activateOffline"),
-      version: session,
+      version: reference,
       generation: z.literal(0),
     })
     .strict(),
@@ -54,7 +56,7 @@ export const conversationRuntimeCommandSchema = z.discriminatedUnion("kind", [
     .object({
       ...base,
       kind: z.literal("activate"),
-      version: session,
+      version: reference,
       generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     })
     .strict(),
@@ -66,14 +68,14 @@ export const conversationRuntimeResultSchema = z
     operation,
     state: z.enum(["closing", "closed", "staged", "applied", "active", "cancelled"]),
     generation: z.number().int().nonnegative(),
-    version: session.nullable(),
+    version: reference.nullable(),
     digest: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .nullable(),
     management: conversationIndexFactsSchema.optional(),
     files: z.array(conversationFileSchema).max(1000).optional(),
-    baseVersion: session.nullable().optional(),
+    baseVersion: reference.nullable().optional(),
     branchMode: z.enum(["primary", "offline"]).optional(),
     dataBase64: z
       .string()
@@ -89,9 +91,11 @@ export interface ConversationRuntimePort {
   control(input: ConversationRuntimeCommand): Promise<ConversationRuntimeResult>;
 }
 export const conversationRuntimeIdentitySchema = z
-  .object({ location: session, scope: conversationScopeSchema })
+  .object({ location: reference, scope: conversationScopeSchema })
   .strict();
-export const conversationCaptureBaseSchema = z.object({ baseVersion: session.nullable() }).strict();
+export const conversationCaptureBaseSchema = z
+  .object({ baseVersion: reference.nullable() })
+  .strict();
 export class ConversationRuntimeError extends Error {
   constructor(readonly code: string) {
     super("Native continuation: " + code);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { conversationSessionIdSchema } from "./conversation-sync.js";
 const key = z
   .string()
   .min(1)
@@ -6,7 +7,7 @@ const key = z
   .regex(/^[a-zA-Z0-9_.:-]+$/);
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const identity = {
-  session: key,
+  session: conversationSessionIdSchema,
   operation: z
     .string()
     .uuid()
@@ -76,7 +77,7 @@ export interface ConversationContinuationJournal {
 const binding = z.object({ location: key, version: key, generation: revision }).strict();
 export const conversationContinuationOptionsSchema = z
   .object({
-    session: key,
+    session: conversationSessionIdSchema,
     revision,
     candidates: z.array(key),
     active: binding.nullable(),

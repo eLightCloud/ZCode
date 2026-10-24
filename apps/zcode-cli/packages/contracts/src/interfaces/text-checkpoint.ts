@@ -2,7 +2,7 @@ import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-s
 import { z } from "zod";
 import type { ProjectId, SessionId, WorkspaceId } from "./shared.js";
 import { portableFilePayload, portableFileMetadata } from "./text-input-facts.js";
-import { conversationArtifactUriSchema } from "@zcode/shared";
+import { conversationArtifactUriSchema, conversationSessionIdSchema } from "@zcode/shared";
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();
@@ -154,7 +154,7 @@ export const textCheckpointSchema = z
     version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     session: z
       .object({
-        id,
+        id: z.custom<string>((value) => conversationSessionIdSchema.safeParse(value).success),
         traceID: id.optional(),
         slug: id,
         title: z.string(),

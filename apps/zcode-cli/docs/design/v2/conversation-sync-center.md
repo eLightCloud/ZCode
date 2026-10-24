@@ -291,3 +291,39 @@ an active owner. Cancellation therefore has no intermediate committed-fence gap:
 before commit restore exact prior native guards; after commit finish activation.
 Read-only guard queries bypass Host mutation serialization so owner verification
 cannot wait on the activation that invoked it. Core SQLite remains the authority.
+
+## Host-origin control and explicit target model
+
+Desktop reuses its window Host and the same private continuation port. The Host
+initiates an authenticated outbound connection; ingress keeps only bounded in-flight
+transport correlations, never accepted work or a recovery queue. Source delegation
+alone is not device proof: the Host must sign a fresh server challenge using its
+native installation key, and the public key digest determines its location ID.
+The private key stays in the protected native outbox. Duplicate live connections
+cannot evict an owner. Disconnect is unavailability, never a native close receipt.
+Current original login/scope is revalidated for every request and idle heartbeat.
+
+Outbox key enrollment preserves receipts, input ownership and baseline history.
+An existing unkeyed location can change identity only with no unconfirmed uploads;
+its prior positive generation is not transferred. Retained bases become offline
+anchors, requiring the normal explicit branch/selection contract for continuation.
+Never rewrite a pending operation or a previously shipped migration checksum.
+Outbox schema 5 appends the installation-key table to schema 4. If the original
+storage delegation expires with uploads still pending, renew that original unkeyed
+delegation to finish those exact operations before enrolling the key. Such a
+delegation never enables the control connection. Old positive admissions without
+device proof remain blocked; enrollment cannot manufacture a close receipt.
+
+HTTP and outbound transport share the native domain-error projection. A numeric
+JSON-RPC envelope code must not hide `data.code` (notably `not_found` during first
+preparation); unknown errors remain unavailable and never reflect error messages.
+
+The intent may include `targetModel`, using the canonical native ModelSelection.
+Only an explicit UI choice sets it; omission preserves the saved model. Staging
+uses that exact selection for future turns while retaining historical message/input
+model facts. The target validates its current provider capabilities at staging and
+again before activation; recommendations and matching model names are insufficient.
+Activation compares the expected model-adjusted checkpoint and adopts the original
+saved version as its causal base. Subsequent model change is an ordinary successor,
+not a rewrite of the chosen version or a fabricated upload ACK. The original intent
+fingerprint includes the complete choice. Retrying cannot change it.

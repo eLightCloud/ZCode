@@ -2,6 +2,7 @@ import { IApplicationHostService } from "./application-host/contract.js";
 import { createApplicationHostService } from "./application-host/applicationHostService.js";
 import { createConversationSyncHost } from "./session/conversationSyncHost.js";
 import { createConversationRuntimeHost } from "./session/conversationRuntimeHost.js";
+import { conversationModelOptions } from "./session/conversationModelOptions.js";
 import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 import { channelReplyHostRequestSchema, channelReplyResultSchema } from "@zcode/shared";
@@ -2730,7 +2731,37 @@ export function createLocalServices(options: {
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
   sharedSqliteRepos.set(services, sqliteReposToClose);
+  const continuationHost: import("@zcode/shared").ConversationRuntimePort | undefined =
+    conversationRuntime
+      ? createConversationRuntimeHost({
+          runtime: conversationRuntime,
+          index: taskIndexRepo,
+          agent: zcodeAgentService,
+          prepareWorkspace: () => fileService.ensureConversationWorkspace(),
+          models: () => conversationModelOptions(providerRuntime.modelSelection),
+          ...(process.env["ZCODE_APPLICATION_HOST_MODULE"]
+            ? {
+                captureBase: async (session: string) => {
+                  const { conversationCaptureBaseSchema } = await import("@zcode/shared");
+                  return conversationCaptureBaseSchema.parse(
+                    await applicationHost.call("conversationCaptureBase", { session }),
+                  );
+                },
+                beforeActivate: async (
+                  input: Parameters<
+                    NonNullable<
+                      Parameters<typeof createConversationRuntimeHost>[0]["beforeActivate"]
+                    >
+                  >[0],
+                ) => {
+                  await applicationHost.call("conversationAdoptVersion", input);
+                },
+              }
+            : {}),
+        })
+      : undefined;
   const applicationHost = createApplicationHostService({
+    runtime: continuationHost,
     native: zcodeAgentService,
     conversations: createConversationSyncHost({
       index: taskIndexRepo,
@@ -2743,28 +2774,7 @@ export function createLocalServices(options: {
     modulePath: process.env["ZCODE_APPLICATION_HOST_MODULE"],
   });
   services.register(IApplicationHostService, applicationHost);
-  if (conversationRuntime)
-    options?.onConversationRuntimeReady?.(
-      createConversationRuntimeHost({
-        runtime: conversationRuntime,
-        index: taskIndexRepo,
-        agent: zcodeAgentService,
-        prepareWorkspace: () => fileService.ensureConversationWorkspace(),
-        ...(process.env["ZCODE_APPLICATION_HOST_MODULE"]
-          ? {
-              captureBase: async (session) => {
-                const { conversationCaptureBaseSchema } = await import("@zcode/shared");
-                return conversationCaptureBaseSchema.parse(
-                  await applicationHost.call("conversationCaptureBase", { session }),
-                );
-              },
-              beforeActivate: async (input) => {
-                await applicationHost.call("conversationAdoptVersion", input);
-              },
-            }
-          : {}),
-      }),
-    );
+  if (continuationHost) options?.onConversationRuntimeReady?.(continuationHost);
   return services;
 }
 

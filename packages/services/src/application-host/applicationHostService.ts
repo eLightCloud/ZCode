@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import type { IApplicationHostService } from "./contract.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import type { ICredentialService } from "../credential/credential.js";
-import type { ConversationSyncHost } from "@zcode/shared";
+import type { ConversationSyncHost, ConversationRuntimePort } from "@zcode/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 interface ApplicationHostExtension {
@@ -16,6 +16,7 @@ const log = createServiceLogger("application-host");
 export function createApplicationHostService(options: {
   native: IZCodeAgentService;
   conversations?: ConversationSyncHost;
+  runtime?: ConversationRuntimePort;
   credentials: ICredentialService;
   storageRoot: string;
   modulePath?: string;
@@ -33,6 +34,7 @@ export function createApplicationHostService(options: {
       const value: unknown = await module.createApplicationHost({
         native: options.native,
         conversations: options.conversations,
+        runtime: options.runtime,
         credentials: options.credentials,
         storageRoot: join(options.storageRoot, "application"),
         surface: options.surface,

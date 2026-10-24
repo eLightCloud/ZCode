@@ -6,6 +6,7 @@ import {
   ConversationChoiceError,
   type ConversationHistoryReader,
   type ConversationContinuationResult,
+  type ConversationContinuationOptions,
 } from "@zcode/shared";
 import {
   ConversationContinuation,
@@ -14,6 +15,11 @@ import {
 
 afterEach(cleanup);
 const labels: ConversationContinuationLabels = {
+  capability:
+    "Target capability is unavailable. Cancel before choosing another model; after grant repair the exact target and retry.",
+  model: "Model for future turns",
+  keepModel: "Keep saved model",
+  modelWarning: "Historical models and provider settings are retained.",
   target: "Target",
   prepareTarget: "Prepare target",
   choose: "Choose whole copy",
@@ -37,7 +43,7 @@ const labels: ConversationContinuationLabels = {
   cancelling: "Cancelling",
 };
 function fixture() {
-  const options = {
+  const options: ConversationContinuationOptions = {
     session: "s",
     revision: 4,
     candidates: ["v", "other"],
@@ -118,6 +124,30 @@ it("keeps original operation and input fingerprint after an ambiguous response",
   fireEvent.click(screen.getByRole("button", { name: labels.retry }));
   await screen.findByText(labels.ready);
   expect(continuation.run.mock.calls).toHaveLength(2);
+  expect(continuation.run.mock.calls[1]![0]).toEqual(continuation.run.mock.calls[0]![0]);
+});
+it("binds only an explicit target model to confirmation and retains it across a lost ACK", async () => {
+  const { reader, continuation } = fixture();
+  const options = await continuation.options();
+  const selection = {
+    providerId: "target-only",
+    modelId: "replacement",
+    options: { reasoningLevel: "disabled" },
+  };
+  options.targets[0]!.models = [{ label: "Target replacement", selection }];
+  continuation.run.mockRejectedValueOnce(new ConversationChoiceError("unavailable"));
+  render(createElement(ConversationContinuation, { reader, session: "s", version: "v", labels }));
+  const picker = await screen.findByRole("combobox", { name: labels.model });
+  expect((picker as HTMLSelectElement).value).toBe("");
+  fireEvent.change(picker, { target: { value: JSON.stringify(selection) } });
+  fireEvent.click(screen.getByRole("button", { name: labels.handoff }));
+  expect(screen.getByText(labels.model + ": Target replacement")).toBeTruthy();
+  expect(continuation.run).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: labels.confirm }));
+  await screen.findByText(labels.unavailable);
+  expect(continuation.run.mock.calls[0]![0].targetModel).toEqual(selection);
+  fireEvent.click(screen.getByRole("button", { name: labels.retry }));
+  await screen.findByText(labels.ready);
   expect(continuation.run.mock.calls[1]![0]).toEqual(continuation.run.mock.calls[0]![0]);
 });
 it("states offline branching risk and resumes a durable in-flight intent after reload", async () => {

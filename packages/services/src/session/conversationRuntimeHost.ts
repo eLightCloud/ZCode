@@ -11,6 +11,7 @@ export function createConversationRuntimeHost(options: {
   agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
   prepareWorkspace?: () => Promise<unknown>;
   captureBase?: (session: string) => Promise<{ baseVersion: string | null }>;
+  models?: ConversationRuntimePort["models"];
   beforeActivate?: (
     input: Extract<ConversationRuntimeCommand, { kind: "activate" | "cancel" | "activateOffline" }>,
   ) => Promise<void>;
@@ -168,6 +169,7 @@ export function createConversationRuntimeHost(options: {
     return value;
   }
   return {
+    models: options.models,
     content: options.runtime.content
       ? async (input) => {
           await options.prepareWorkspace?.();

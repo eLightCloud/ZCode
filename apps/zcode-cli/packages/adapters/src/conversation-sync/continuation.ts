@@ -127,7 +127,7 @@ export function createConversationContinuation(options: {
           canonical([...new Set(input.candidates)].sort())
         )
           return progress(input, "stale", "preparing", "changed");
-        await stageRuntime(store, scope, target, input.session, input.operation, saved, "offline");
+        await stageRuntime(store, scope, target, input.session, input.operation, saved, "offline", input.targetModel);
         const committed = await journal.commitOffline(scope, input.session, input.operation);
         if (committed.result?.status === "cancelling")
           return cancel(scope, input.session, input.operation);
@@ -180,7 +180,7 @@ export function createConversationContinuation(options: {
           input.operation,
           input.version,
         );
-        await stageRuntime(store, scope, target, input.session, input.operation, final);
+        await stageRuntime(store, scope, target, input.session, input.operation, final, "primary", input.targetModel);
         state = await current(scope, input.session);
         const receipt = await command(scope, input, "grant", {
           kind: "grant",
@@ -225,7 +225,7 @@ export function createConversationContinuation(options: {
         canonical([...state.candidates].sort()) !== canonical([...new Set(input.candidates)].sort())
       )
         return progress(input, "stale", "preparing", "changed");
-      await stageRuntime(store, scope, target, input.session, input.operation, saved);
+      await stageRuntime(store, scope, target, input.session, input.operation, saved, "primary", input.targetModel);
       const receipt = await command(scope, input, "select", {
         kind: "select",
         revision: state.revision,
@@ -257,7 +257,7 @@ export function createConversationContinuation(options: {
         input,
         "waiting",
         granted ? "granted" : "settling",
-        runtimeCode(error) === "busy" ? "busy" : "unavailable",
+        runtimeCode(error) === "busy" ? "busy" : ["model_unavailable", "unsupported"].includes(runtimeCode(error)) ? "capability" : "unavailable",
         granted?.state.pending?.version ?? input.version,
       );
     }

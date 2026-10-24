@@ -50,7 +50,7 @@ export async function saveSessionInput(
         id, session_id, kind, delivery, payload,
         admitted_sequence, status, time_created, time_updated
       )
-      values (
+      select
         ?, ?, ?, ?, ?,
         (
           select coalesce(max(admitted_sequence), -1) + 1
@@ -58,12 +58,16 @@ export async function saveSessionInput(
           where session_id = ?
         ),
         'admitted', ?, ?
-      )
+      where not exists (
+        select 1 from session_continuation where session_id = ?
+          and state not in ('active', 'cancelled')
+      ) or exists (select 1 from session_input where id = ? and session_id = ?)
       on conflict(id) do update set
         kind = excluded.kind,
         delivery = excluded.delivery,
         payload = excluded.payload,
         time_updated = excluded.time_updated
+      where session_input.session_id = excluded.session_id
       `,
   ).run(
     input.id,
@@ -74,7 +78,17 @@ export async function saveSessionInput(
     input.sessionID,
     now,
     now,
+    input.sessionID,
+    input.id,
+    input.sessionID,
   );
+  // 接纳与关闸在同一 SQLite writer 序中裁决；已接纳的原 ID 仍可收口。
+  if (
+    !db
+      .prepare("select 1 from session_input where id = ? and session_id = ?")
+      .get(input.id, input.sessionID)
+  )
+    throw new Error("session_continuation_admission_closed");
 }
 
 function decodePayload(raw: string): { text: string; [key: string]: unknown } {

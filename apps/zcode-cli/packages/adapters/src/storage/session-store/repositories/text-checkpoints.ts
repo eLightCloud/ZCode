@@ -92,6 +92,7 @@ export function importTextCheckpoint(
   db: DatabaseSync,
   input: Parameters<TextCheckpointStorePort["importTextCheckpoint"]>[0],
   logger?: Logger,
+  replaceInsideTransaction = false,
 ): void {
   observe("import", logger, (log) => {
     const parsed = textCheckpointSchema.safeParse(input.checkpoint);
@@ -110,10 +111,16 @@ export function importTextCheckpoint(
     }
     const checkpoint = parsed.data;
     const sessionID = checkpoint.session.id as SessionId;
-    db.exec("begin immediate");
+    if (!replaceInsideTransaction) db.exec("begin immediate");
     try {
+      if (replaceInsideTransaction) {
+        // 唯一恢复 writer 复用；外层必须持有持久屏障和同一 SQLite 事务。
+        for (const table of ["part", "message", "session_entry", "session_input"])
+          db.prepare(`delete from ${table} where session_id = ?`).run(sessionID);
+        db.prepare("update session set permission = null where id = ?").run(sessionID);
+      }
       const identities: Array<[string, string[]]> = [
-        ["session", [sessionID]],
+        ...(replaceInsideTransaction ? [] : [["session", [sessionID]] as [string, string[]]]),
         ["message", checkpoint.messages.map(({ info }) => info.id)],
         ["part", checkpoint.messages.flatMap(({ parts }) => parts.map((part) => part.id))],
         ["session_entry", [checkpoint.modelSelectionEntryId]],
@@ -181,9 +188,9 @@ export function importTextCheckpoint(
         checkpoint.session.time.updated,
         sessionID,
       );
-      db.exec("commit");
+      if (!replaceInsideTransaction) db.exec("commit");
     } catch (error) {
-      db.exec("rollback");
+      if (!replaceInsideTransaction) db.exec("rollback");
       throw error;
     }
     log?.info("Text checkpoint imported", {

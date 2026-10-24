@@ -274,6 +274,15 @@ export async function runZCodeProtocolAgent(
     );
     options.lifecycle?.signal.throwIfAborted();
     const server = (serverForCleanup = new ZCodeProtocolAgentServer({
+      validateContinuationSelection: (selection) => {
+        const view = modelSelectionFacade.getView(undefined, undefined, { selection });
+        return (
+          !!view.effectiveSelection &&
+          !view.selectionIssue &&
+          view.effectiveSelection.providerId === selection.providerId &&
+          view.effectiveSelection.modelId === selection.modelId
+        );
+      },
       createZCodeApp: (appOptions = {}) =>
         createZCodeApp({
           ...applyProtocolProviderRegistry(

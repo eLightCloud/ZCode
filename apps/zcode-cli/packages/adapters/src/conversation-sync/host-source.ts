@@ -39,8 +39,7 @@ export function createHostConversationSyncSource(options: {
             options.blocked(session, "original_owner_unknown");
             continue;
           }
-          const latest = options.outbox.latest(options.scope, session);
-          const previous = latest?.command.kind === "receive" ? latest.command.version : null;
+          const previous = options.outbox.baseline(options.scope, session);
           if (
             previous &&
             digest({ checkpoint: previous.checkpoint, management: previous.management }) ===
@@ -52,7 +51,7 @@ export function createHostConversationSyncSource(options: {
           const content = {
             parent: previous?.id ?? null,
             location: options.location,
-            generation: 0,
+            generation: options.outbox.branchGeneration(options.scope,session),
             checkpoint,
             management,
           };

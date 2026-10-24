@@ -209,6 +209,49 @@ The same operation retries an ACK loss, new candidates make stale choices reject
 and rejected choices never fence a runtime. Account changes are checked before
 mutation against the previous server-provided scope, which cannot grant access.
 
+## Fenced native continuation
+
+The native session store owns a durable per-session continuation barrier. Closing
+it and accepting a new input serialize in SQLite; already accepted input IDs may
+settle, but a new input cannot enter after closure, including after process restart.
+The resident owner waits for accepted work, interactions and protocol operations
+before retiring the App and capturing C. Closing is not cancellation of work.
+Queries and settlement remain available. No timer proves settlement.
+
+The trusted Host control facade is separate from renderer Agent methods. It can
+close, capture, stage, apply, activate or cancel one original operation. Staging
+validates an entire native package and fixed file bytes while admission stays
+closed. Applying replaces only that session's supported transcript and terminal
+input facts in one transaction; local configuration, plugins and other sessions
+remain owned by their original stores. Existing target changes must first be
+saved as a center candidate; unknown or unsupported state blocks replacement.
+Exact operation retries return their durable result; an old operation cannot
+reopen a newer barrier. Activation is explicit, after the center CAS/grant and
+target package verification. Before grant cancellation can reopen the source;
+after grant the orchestrator only recovers forward, or starts a reverse handoff.
+
+The center continuation orchestrator owns no second runtime or input queue. It
+uses the existing version/selection/handoff receipts and trusted native runtime
+ports. Browser requests contain intent, operation and observed revisions only;
+runtime ports, source barriers, dependency and recovery evidence are supplied by
+trusted assembly. Missing runtime routing or file capabilities fail closed.
+
+```mermaid
+sequenceDiagram
+  participant U as History UI
+  participant C as Native center owner
+  participant S as Source native owner
+  participant T as Target native owner
+  U->>C: original intent and observed candidates/revision
+  C->>S: close admission, settle accepted work, capture C
+  S-->>C: native package under persistent barrier
+  C->>C: save C with original receipt, compare B/selection
+  C->>T: validate package/files in closed staging
+  C->>C: grant/whole-copy selection CAS
+  C->>T: atomic apply, exact generation activation
+  T-->>U: ready for a separate explicit new input
+```
+
 ```mermaid
 sequenceDiagram
   participant B as Browser history

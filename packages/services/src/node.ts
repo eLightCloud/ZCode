@@ -1,6 +1,7 @@
 import { IApplicationHostService } from "./application-host/contract.js";
 import { createApplicationHostService } from "./application-host/applicationHostService.js";
 import { createConversationSyncHost } from "./session/conversationSyncHost.js";
+import { createConversationRuntimeHost } from "./session/conversationRuntimeHost.js";
 import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 import { channelReplyHostRequestSchema, channelReplyResultSchema } from "@zcode/shared";
@@ -1137,6 +1138,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createLocalServices(options: {
   /** Trusted local lifecycle capability; never registered as an RPC service method. */
   onLocalMaintenanceReady?: (maintenance: import("@zcode/shared").LocalRuntimeMaintenance) => void;
+  onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
   /** 已鉴权 Desktop stdio 连接提供的私有回查频道；不作为公共 service 暴露。 */
   topicResourceRelayChannel?: (request: unknown) => IChannel;
   parentPort?: Parameters<typeof createBroadcastService>[0];
@@ -2014,8 +2016,10 @@ export function createLocalServices(options: {
           resolveOffPeakClientConfig: () => codingPlanSubscriptionService.getOffPeakClientConfig(),
           resolveOffPeakTaskService: () => offPeakTaskServiceForAgent,
         };
+  let conversationRuntime:import("@zcode/shared").ConversationRuntimePort|undefined;
   const zcodeAgentService = createZCodeAgentService({
     onLocalMaintenanceReady: options?.onLocalMaintenanceReady,
+    onConversationRuntimeReady: (port)=>{conversationRuntime=port;},
     ...(agentAccountProviderConfigSource
       ? { accountProviderConfigSource: agentAccountProviderConfigSource }
       : {}),
@@ -2726,13 +2730,19 @@ export function createLocalServices(options: {
   sharedSqliteRepos.set(services, sqliteReposToClose);
   const applicationHost = createApplicationHostService({
     native: zcodeAgentService,
-    conversations: createConversationSyncHost({ index: taskIndexRepo, agent: zcodeAgentService }),
+    conversations: createConversationSyncHost({ index: taskIndexRepo, agent: zcodeAgentService,continuation:()=>conversationRuntime }),
     credentials: credentialService,
     storageRoot: resolveAppConfigDir(),
     surface: options.agentTelemetry?.runtimeSurface,
     modulePath: process.env["ZCODE_APPLICATION_HOST_MODULE"],
   });
   services.register(IApplicationHostService, applicationHost);
+  if(conversationRuntime)options?.onConversationRuntimeReady?.(createConversationRuntimeHost({
+    runtime:conversationRuntime,index:taskIndexRepo,agent:zcodeAgentService,
+    ...(process.env['ZCODE_APPLICATION_HOST_MODULE']?{beforeActivate:async(input)=>{
+      await applicationHost.call('conversationAdoptVersion',input);
+    }}:{}),
+  }));
   return services;
 }
 

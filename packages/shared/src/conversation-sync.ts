@@ -80,6 +80,8 @@ export type ConversationCheckpointResult = z.infer<typeof conversationCheckpoint
 export interface ConversationSyncHost {
   enumerate(): Promise<string[]>;
   capture(session: string): Promise<{ dataBase64: string; management: ConversationIndexFacts }>;
+  captureContinuation?(session:string,operation:string):Promise<{dataBase64:string;management:ConversationIndexFacts}>;
+  continuationState?(session:string,operation:string):Promise<import('./conversation-runtime.js').ConversationRuntimeResult>;
   /** Trusted Host only. Rebuilds a missing projection, never imports or executes. */
   rebuildIndex?(input: {
     session: string;

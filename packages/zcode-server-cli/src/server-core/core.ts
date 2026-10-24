@@ -6,7 +6,7 @@ import {
   ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV,
   createTopicResourcePeers,
 } from "@zcode/services/node";
-import { IZCodeAgentService } from "@zcode/services";
+import { IZCodeAgentService,IApplicationHostService } from "@zcode/services";
 import { ZCODE_VERSION } from "@zcode/shared";
 import { createCoreHttpServer } from "./http.js";
 import { installParentDisconnectHandler } from "./parentDisconnect.js";
@@ -29,28 +29,46 @@ export async function runServerCore(generation: number): Promise<void> {
   let startupStopReason: string | undefined;
   const startup = new AbortController();
   const requestStop = (reason: string): void => {
-    if (shutdown) { void shutdown(reason); return; }
+    if (shutdown) {
+      void shutdown(reason);
+      return;
+    }
     startupStopReason = reason;
     startup.abort();
   };
   // writer guard 等待期间也走同一停止入口，不能把 SIGTERM 留到超时后才处理。
   process.on("message", (message: unknown) => {
-    if (typeof message === "object" && message !== null && "command" in message && message.command === "shutdown") requestStop("requested");
+    if (
+      typeof message === "object" &&
+      message !== null &&
+      "command" in message &&
+      message.command === "shutdown"
+    )
+      requestStop("requested");
   });
   process.once("SIGTERM", () => requestStop("SIGTERM"));
   process.once("SIGINT", () => requestStop("SIGINT"));
   let disposeParentDisconnectHandler = (): void => undefined;
   disposeParentDisconnectHandler = installParentDisconnectHandler(() => {
     if (shutdown) void shutdown("parent-disconnected");
-    else { parentDisconnected = true; requestStop("parent-disconnected"); }
+    else {
+      parentDisconnected = true;
+      requestStop("parent-disconnected");
+    }
   });
   // Supervisor 异常死亡后旧 Core 可能仍在排空；独立 writer guard 禁止新 Core 并写。
-  const writerLock = new DataRootLock(join(resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir, "core.lock"));
+  const writerLock = new DataRootLock(
+    join(resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir, "core.lock"),
+  );
   try {
-    await writerLock.acquire({ waitMs: CORE_WRITER_WAIT_MS, signal: startup.signal,
+    await writerLock.acquire({
+      waitMs: CORE_WRITER_WAIT_MS,
+      signal: startup.signal,
       onBlocked: () => {
-        if (process.connected) process.send?.({ type: "startup-wait", reason: "writer-lock-busy" }, () => undefined);
-      } });
+        if (process.connected)
+          process.send?.({ type: "startup-wait", reason: "writer-lock-busy" }, () => undefined);
+      },
+    });
   } catch (error) {
     if (startupStopReason) process.exit(0);
     throw error;
@@ -73,15 +91,24 @@ export async function runServerCore(generation: number): Promise<void> {
     );
   }
   const automationEnabled = process.env.ZCODE_SERVER_AUTOMATION_ENABLED === "1";
-  const maintenanceFile = join(resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir, "maintenance.json");
+  const maintenanceFile = join(
+    resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir,
+    "maintenance.json",
+  );
   const maintenanceOperation = await readMaintenanceOperation(maintenanceFile);
   if (automationEnabled && maintenanceOperation) {
     throw new Error("Native automation cannot start while maintenance is held");
   }
   let localMaintenance: LocalRuntimeMaintenance | undefined;
+  let continuation: import("@zcode/shared").ConversationRuntimePort | undefined;
   let automation: ReturnType<typeof startServerAutomationRuntime> | undefined;
   const services = createLocalServices({
-    onLocalMaintenanceReady: (port) => { localMaintenance = port; },
+    onLocalMaintenanceReady: (port) => {
+      localMaintenance = port;
+    },
+    onConversationRuntimeReady: (port) => {
+      continuation = port;
+    },
     zcodeBuiltinProviderConfigFilePath,
     serviceAuthorityMode: "standalone-server",
     topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
@@ -106,6 +133,8 @@ export async function runServerCore(generation: number): Promise<void> {
   const authTokenHash = process.env.ZCODE_SERVER_AUTH_TOKEN_SHA256?.trim();
   const serverId = await resolveCoreServerId();
   const http = await createCoreHttpServer(services, {
+    continuation,
+    continuationIdentity:()=>services.get(IApplicationHostService).call('conversationRuntimeIdentity',{}),
     ...(bindHost ? { host: bindHost } : {}),
     ...(bindPort === undefined ? {} : { port: bindPort }),
     ...(authToken ? { authToken } : {}),
@@ -130,17 +159,33 @@ export async function runServerCore(generation: number): Promise<void> {
     });
   };
   let shutdownStarted = false;
-  const maintenance = new CoreMaintenance(maintenanceFile, http, localMaintenance,
-    () => shutdownStarted || !activitySource || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0,
-    maintenanceOperation);
+  const maintenance = new CoreMaintenance(
+    maintenanceFile,
+    http,
+    localMaintenance,
+    () =>
+      shutdownStarted ||
+      !activitySource ||
+      automationEnabled ||
+      taskActivityTracker.readRunningTaskCount() > 0,
+    maintenanceOperation,
+  );
   process.on("message", (message: unknown) => {
     const parsed = coreCommandSchema.safeParse(message);
     if (!parsed.success || parsed.data.command !== "maintenance") return;
     const request = parsed.data;
     void maintenance.handle(request.input).then(
-      result => send({ type: "maintenance-result", requestId: request.requestId, result }),
-      () => send({ type: "maintenance-result", requestId: request.requestId,
-        result: { operationId: request.input.operationId, state: "blocked", reasonCode: "unconfirmed" } }),
+      (result) => send({ type: "maintenance-result", requestId: request.requestId, result }),
+      () =>
+        send({
+          type: "maintenance-result",
+          requestId: request.requestId,
+          result: {
+            operationId: request.input.operationId,
+            state: "blocked",
+            reasonCode: "unconfirmed",
+          },
+        }),
     );
   });
   // ready.version 的语义是 Core 版本；不能误发 Node runtime 版本常量
@@ -199,16 +244,26 @@ export async function runServerCore(generation: number): Promise<void> {
     // writer guard 保持到真实进程退出，不能在最后 IPC 回执前提前开放另一个 writer。
     process.exit(0);
   };
-  if (parentDisconnected || startupStopReason) void shutdown(startupStopReason ?? "parent-disconnected");
+  if (parentDisconnected || startupStopReason)
+    void shutdown(startupStopReason ?? "parent-disconnected");
   process.on("message", (message: unknown) => {
-    if (typeof message === "object" && message !== null && "command" in message
-      && message.command === "shutdown-if-idle") {
+    if (
+      typeof message === "object" &&
+      message !== null &&
+      "command" in message &&
+      message.command === "shutdown-if-idle"
+    ) {
       // 条件停止沿同一个 residency owner 收口；零 turn 不能证明后台 / 审批已结束。
-      void maintenance.prepareIdleStop().then(prepared => {
-        if (shutdownStarted) return;
-        if (prepared) void shutdown("idle");
-        else void send({ type: "idle-stop-blocked" });
-      }, () => { void send({ type: "idle-stop-blocked" }); });
+      void maintenance.prepareIdleStop().then(
+        (prepared) => {
+          if (shutdownStarted) return;
+          if (prepared) void shutdown("idle");
+          else void send({ type: "idle-stop-blocked" });
+        },
+        () => {
+          void send({ type: "idle-stop-blocked" });
+        },
+      );
       return;
     }
   });

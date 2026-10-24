@@ -9,6 +9,7 @@ import {
 import { importLegacyAutomationSelections } from "#src/session/tasksDatabase/provider-selection-v2.js";
 import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "#src/session/tasksDatabase/official-glm-selection-v3.js";
 import { CONVERSATION_CLASSIFICATION_SQL } from "./conversation-classification-v4.js";
+import { CONVERSATION_BARRIER_SQL } from "./conversation-barrier-v5.js";
 
 // 冻结历史列声明，不能以实时 Repo/schema 代替，否则新版构建会改变已应用 checksum。
 const columns = [
@@ -66,6 +67,7 @@ const definitions = [
     checksumInput: [OFFICIAL_GLM_SELECTION_MIGRATION_SQL],
   },
   { id: "0004_conversation_workspace_purpose", checksumInput: [CONVERSATION_CLASSIFICATION_SQL] },
+  { id: "0005_conversation_index_barrier", checksumInput: [CONVERSATION_BARRIER_SQL] },
 ] as const;
 
 export function runTasksDatabaseMigrations(
@@ -117,7 +119,8 @@ export function runTasksDatabaseMigrations(
       else if (migration.id === "0002_provider_selection") importLegacyAutomationSelections(db);
       else if (migration.id === "0003_official_glm_selection")
         db.exec(OFFICIAL_GLM_SELECTION_MIGRATION_SQL);
-      else db.exec(CONVERSATION_CLASSIFICATION_SQL);
+      else if(migration.id==='0004_conversation_workspace_purpose')db.exec(CONVERSATION_CLASSIFICATION_SQL);
+      else db.exec(CONVERSATION_BARRIER_SQL);
       migrationFacts.executedCount++;
       db.prepare("INSERT INTO tasks_schema_migration VALUES(?,?,?)").run(
         migration.id,

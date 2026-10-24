@@ -5,6 +5,8 @@ import {
   syncReceiptSchema,
   syncRequestSchema,
   syncScopeSchema,
+  syncVersionSchema,
+  type SyncVersion,
   type SyncScope,
   type SyncRequest,
   type SyncReceipt,
@@ -19,6 +21,10 @@ export interface ConversationSyncOutbox {
   pending(scope: SyncScope): SyncRequest[];
   latest(scope: SyncScope, session: string): SyncRequest | null;
   knownSessions(scope: SyncScope): string[];
+  baseline(scope:SyncScope,session:string):SyncVersion|null;
+  branchGeneration(scope:SyncScope,session:string):number;
+  /** Exact verified selected version, not a fabricated upload acknowledgement. */
+  adopt(scope:SyncScope,version:SyncVersion,generation:number):void;
   acknowledge(scope: SyncScope, receipt: SyncReceipt): void;
   watermark(scope: SyncScope, session: string): SyncReceipt | null;
   /** Cursor and staged versions share one SQLite transaction; caller re-scans after source commit. */
@@ -27,7 +33,7 @@ export interface ConversationSyncOutbox {
   close(): void;
 }
 const OUTBOX_APPLICATION_ID = 0x5a435359;
-const OUTBOX_SCHEMA_VERSION = 3;
+const OUTBOX_SCHEMA_VERSION = 4;
 const OUTBOX_BUSY_TIMEOUT_MS = 5000;
 
 /** Separate native sync metadata file; never opens or migrates a session/plugin database. */
@@ -38,7 +44,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     const application = Number(db.prepare("pragma application_id").get()?.application_id);
     const tables = db.prepare("select name from sqlite_master where type='table'").all();
     if (
-      ![0, 1, 2, OUTBOX_SCHEMA_VERSION].includes(version) ||
+      ![0, 1, 2, 3, OUTBOX_SCHEMA_VERSION].includes(version) ||
       (version === 0 && (tables.length > 0 || application !== 0)) ||
       (version > 0 && application !== OUTBOX_APPLICATION_ID)
     )
@@ -73,6 +79,9 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     create table sync_input_owners(command text primary key,tenant text not null,subject text not null,session text);
     create table sync_session_owners(session text primary key,tenant text not null,subject text not null);
     pragma user_version = 3;`);
+    if(version<4)db.exec(`create table sync_bases(tenant text not null,subject text not null,session text not null,
+      version text not null,generation integer not null,after_sequence integer not null,primary key(tenant,subject,session));
+      pragma user_version=4;`);
     db.prepare(
       "insert into sync_installation(singleton,location) values(1,?) on conflict do nothing",
     ).run("host:" + randomUUID());
@@ -163,10 +172,45 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     knownSessions(scope) {
       return db
         .prepare(
-          "select distinct session from sync_outbox where tenant=? and subject=? order by session",
+          "select session from sync_outbox where tenant=? and subject=? union select session from sync_bases where tenant=? and subject=? order by session",
         )
-        .all(...scopeValues(scope))
+        .all(...scopeValues(scope),...scopeValues(scope))
         .map((row) => String(row.session));
+    },
+    baseline(scope,session) {
+      const values=[...scopeValues(scope),session];
+      const anchor=db.prepare('select version,after_sequence from sync_bases where tenant=? and subject=? and session=?').get(...values);
+      const local=db.prepare('select request from sync_outbox where tenant=? and subject=? and session=? and sequence>? order by sequence desc limit 1')
+        .get(...values,Number(anchor?.after_sequence??0));
+      if(local) {
+        const request=syncRequestSchema.parse(JSON.parse(String(local.request)));
+        if(request.command.kind!=='receive')throw new ConversationSyncError('invalid');
+        return request.command.version;
+      }
+      return anchor?syncVersionSchema.parse(JSON.parse(String(anchor.version))):null;
+    },
+    branchGeneration(scope,session) {
+      return Number(db.prepare('select generation from sync_bases where tenant=? and subject=? and session=?').get(...scopeValues(scope),session)?.generation??0);
+    },
+    adopt(scope,raw,generation) {
+      const version=syncVersionSchema.parse(raw),session=version.checkpoint?.session.id;
+      if(!session||!Number.isSafeInteger(generation)||generation<1)throw new ConversationSyncError('invalid');
+      const values=[...scopeValues(scope),session];db.exec('begin immediate');
+      try {
+        if(db.prepare('select 1 from sync_outbox where tenant=? and subject=? and session=? and receipt is null').get(...values))
+          throw new ConversationSyncError('blocked');
+        const owner=db.prepare('select tenant,subject from sync_session_owners where session=?').get(session);
+        if(owner&&(owner.tenant!==values[0]||owner.subject!==values[1]))throw new ConversationSyncError('scope');
+        const previous=db.prepare('select generation,version from sync_bases where tenant=? and subject=? and session=?').get(...values);
+        if(previous&&(Number(previous.generation)>generation || (Number(previous.generation)===generation&&String(previous.version)!==canonical(version))))
+          throw new ConversationSyncError('stale');
+        if(previous&&Number(previous.generation)===generation) {db.exec('commit');return;}
+        const sequence=Number(db.prepare('select coalesce(max(sequence),0) as value from sync_outbox where tenant=? and subject=? and session=?').get(...values)!.value);
+        db.prepare('insert into sync_bases values(?,?,?,?,?,?) on conflict(tenant,subject,session) do update set version=excluded.version,generation=excluded.generation,after_sequence=excluded.after_sequence')
+          .run(...values,canonical(version),generation,sequence);
+        db.prepare('insert into sync_session_owners(session,tenant,subject) values(?,?,?) on conflict do nothing').run(session,...scopeValues(scope));
+        db.exec('commit');
+      }catch(error){db.exec('rollback');throw error;}
     },
     pending(scope) {
       return db

@@ -402,6 +402,11 @@ Whole-body replacement also replaces the terminal outcome tuple. A legacy
 checkpoint without outcome/input/time restores those columns as NULL; a previous
 target outcome must not turn the selected legacy body into a different v4 body.
 
+Activation completion is awaited inside the existing continuation error boundary.
+A refused asynchronous activation keeps the original intent, grant and native
+barriers; it returns the existing waiting result. Retrying uses the same operation
+and cannot issue another grant or reopen the fenced source.
+
 Format v4 preserves native settled compact timeline parts as well as boundary parts;
 only native system timeline messages may use maintenance finish values and a prior
 assistant parent. Ordinary model replies still require an earlier user parent.

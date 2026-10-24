@@ -164,6 +164,7 @@ export async function settleToolResults(
                 // modelContent 更笼统；仅附加保存 string 内容供冷恢复精确重放。
                 metadata: {
                   schemaVersion: COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION,
+                  ...(result.effectExecution ? { effectExecution: result.effectExecution } : {}),
                   ...mcpToolPartMetadata(
                     this.registry.getMetadata(result.toolName)?.mcpPresentation,
                   ),

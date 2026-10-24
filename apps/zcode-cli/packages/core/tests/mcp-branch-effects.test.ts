@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { McpPort, McpCallToolRequest, McpToolCallResult } from "@zcode/contracts";
 import { createMcpToolEntry } from "../src/mcp/index.js";
+import { createToolExecutor } from "../src/tool/executor.js";
+import { createToolRegistry } from "../src/tool/registry.js";
+import { PermissionService } from "../src/permission/service.js";
+import { completedToolPartMetadata } from "../src/runtime/methods/tool-part-metadata.js";
+import type { SessionId, SessionStorePort } from "@zcode/contracts";
 
 const effect = {
   server: "synthetic-business",
@@ -42,6 +47,7 @@ function setup(decision = "proceed", readOnly = false) {
     {
       serverName: effect.server,
       toolName: "send",
+      alwaysLoad: true,
       effectCheckTool: "check_operation",
       inputSchema: { type: "object" },
       annotations: { readOnlyHint: readOnly },
@@ -62,6 +68,32 @@ function setup(decision = "proceed", readOnly = false) {
   return { entry, context, port, write, check };
 }
 describe("cross-branch resource owner reconciliation", () => {
+  it("persists a rejected check as never started even under permissive local execution", async () => {
+    const { entry, context, write } = setup("unknown");
+    const registry = createToolRegistry();
+    registry.register(entry);
+    const executor = createToolExecutor({
+      registry,
+      permissionService: new PermissionService(),
+      mode: "yolo",
+      sessionId: context.sessionId as SessionId,
+      sessionStore: {
+        ...context.sessionStore,
+        getSession: async () => null,
+      } as unknown as SessionStorePort,
+      emitEvent: async () => {},
+    });
+    const result = await executor.execute({
+      id: "rejected-check",
+      name: entry.metadata.name,
+      input: { requestKey: "new-key" },
+    });
+    expect(result.error?.code).toBe("branch_effect_verification_required");
+    expect(result.success).toBe(false);
+    expect(result.effectExecution).toBe("not_started");
+    expect(completedToolPartMetadata(result).effectExecution).toBe("not_started");
+    expect(write).not.toHaveBeenCalled();
+  });
   it("queries the resource owner before an independently confirmed new action", async () => {
     const { entry, context, write, check } = setup();
     await entry.handler({ requestKey: "key-new" }, context as never);
@@ -148,7 +180,9 @@ describe("cross-branch resource owner reconciliation", () => {
   it("keeps writes closed if resource verification fails or stored effects are malformed", async () => {
     const { entry, context, check, write } = setup();
     check.mockRejectedValueOnce(new Error("synthetic_resource_offline"));
-    await expect(entry.handler({}, context as never)).rejects.toThrow("synthetic_resource_offline");
+    await expect(entry.handler({}, context as never)).rejects.toMatchObject({
+      code: "branch_effect_result_unknown",
+    });
     context.sessionStore.sessionEntries = async () => [
       { type: "runtime/branch_effects", data: [{ ...effect, outcome: "invalid" }] },
     ];

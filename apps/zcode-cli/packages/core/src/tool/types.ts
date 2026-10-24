@@ -452,6 +452,8 @@ export interface ToolExecutionModelContext {
 // -----------------------------------------------
 
 export interface ToolExecutionResult {
+  /** Set only by the native executor when the proposed effect was never invoked. */
+  effectExecution?: "not_started";
   toolCallId: string;
   toolName: string;
   success: boolean;

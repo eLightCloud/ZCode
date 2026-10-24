@@ -162,6 +162,8 @@ async function executeToolCallImpl(
           { recoverable: true },
         ),
       );
+      if (result.error) result.error.code = "branch_effect_verification_required";
+      result.effectExecution = "not_started";
       await emitToolCallError(
         deps,
         canonicalToolCall.id,

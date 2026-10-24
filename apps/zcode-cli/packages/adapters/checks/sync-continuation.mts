@@ -33,7 +33,8 @@ export async function verifyContinuation(
     }
   >();
   const unavailable = new Set<string>(),
-    busy = new Set<string>();
+    busy = new Set<string>(),
+    activationRefused = new Set<string>();
   async function location(name: string) {
     const directory = join(root, name);
     await mkdir(directory);
@@ -44,6 +45,7 @@ export async function verifyContinuation(
       async control(input) {
         if (input.kind === "capture" && busy.has(name)) throw new ConversationRuntimeError("busy");
         if (input.kind === "activate" || input.kind === "activateOffline") {
+          if (activationRefused.has(name)) throw new ConversationRuntimeError("model_unavailable");
           const version = await center.version(scope, session, input.version);
           assert(version);
           outbox.adopt(
@@ -128,8 +130,38 @@ export async function verifyContinuation(
     text: "Synthetic final C",
   } as never);
   const handoff = await intent("handoff", "runtime-cloud");
+  activationRefused.add("runtime-cloud");
+  const refusedActivation = await orchestrator().run(scope, handoff);
+  assert.equal(refusedActivation.status, "waiting");
+  assert.equal(refusedActivation.reason, "model");
+  assert.equal(refusedActivation.phase, "granted");
+  const grantBeforeRetry = await center.state(scope, session);
+  // Center activate receipt is already durable; the native activation barrier still owns admission.
+  assert.equal(grantBeforeRetry?.active?.location, "runtime-cloud");
+  assert.equal(grantBeforeRetry?.pending, null);
+  for (const value of [local, cloud])
+    await assert.rejects(
+      value.store.saveSessionInput({
+        id: "activation-refused-input",
+        sessionID: session,
+        kind: "prompt",
+        delivery: "startNow",
+        payload: { text: "must refuse" },
+      } as never),
+      /admission_closed/,
+    );
+  assert.equal((await orchestrator().run(scope, handoff)).reason, "model");
+  assert.deepEqual(await center.state(scope, session), grantBeforeRetry);
+  activationRefused.delete("runtime-cloud");
   const granted = await orchestrator().run(scope, handoff);
   assert.equal(granted.status, "ready");
+  assert.equal(
+    (await center.state(scope, session))?.active?.generation,
+    grantBeforeRetry?.active?.generation,
+  );
+  checks.push(
+    "async_activation_refusal_waits_same_intent_native_barriers_hold_and_retry_does_not_regrant",
+  );
   assert.equal(
     (await cloud.store.exportTextCheckpoint({ sessionID: session as SessionId })).messages[1]!
       .parts[0]!.type,
@@ -252,7 +284,20 @@ export async function verifyContinuation(
   const detached = await location("runtime-offline");
   unavailable.add("runtime-desktop");
   const offline = await intent("offline", "runtime-offline");
+  activationRefused.add("runtime-offline");
+  const primaryBeforeOffline = await center.state(scope, session);
+  assert.equal((await orchestrator().run(scope, offline)).reason, "model");
+  assert.equal(
+    (await center.continuations!.read(scope, session, offline.operation))?.result?.status,
+    "forward_only",
+  );
+  assert.equal((await orchestrator().run(scope, offline)).reason, "model");
+  assert.deepEqual(await center.state(scope, session), primaryBeforeOffline);
+  activationRefused.delete("runtime-offline");
   assert.equal((await orchestrator().run(scope, offline)).status, "ready");
+  checks.push(
+    "offline_async_activation_refusal_retries_original_forward_only_intent_without_primary_grant",
+  );
   unavailable.delete("runtime-desktop");
   assert.deepEqual(await center.continuations!.offlineLocations(scope, session), [
     "runtime-offline",

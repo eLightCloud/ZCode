@@ -79,21 +79,21 @@ export function createConversationContinuation(options: {
     });
     try {
       if (record.result?.status === "forward_only" && input.kind === "offline")
-        return complete(scope, input, input.version, 0, true);
+        return await complete(scope, input, input.version, 0, true);
       let state = await current(scope, input.session);
       const saved = await store.version(scope, input.session, input.version);
       if (!saved?.checkpoint) throw new ConversationSyncError("blocked");
       const chosen = await store.receipt(scope, input.session, step(input.operation, "select"));
       const granted = await store.receipt(scope, input.session, step(input.operation, "grant"));
       if (chosen?.state.pending)
-        return complete(
+        return await complete(
           scope,
           input,
           chosen.state.pending.version,
           chosen.state.pending.generation,
         );
       if (granted?.state.pending)
-        return complete(
+        return await complete(
           scope,
           input,
           granted.state.pending.version,
@@ -140,7 +140,7 @@ export function createConversationContinuation(options: {
         const committed = await journal.commitOffline(scope, input.session, input.operation);
         if (committed.result?.status === "cancelling")
           return cancel(scope, input.session, input.operation);
-        return complete(scope, input, input.version, 0, true);
+        return await complete(scope, input, input.version, 0, true);
       }
       if (input.kind === "handoff") {
         // 已就绪的离线分支即使尚无新检查点也可能有已接纳工作；不能以候选为空推定它不存在。
@@ -208,7 +208,7 @@ export function createConversationContinuation(options: {
           sourceBarrier: true,
           dependenciesVerified: true,
         });
-        return complete(scope, input, final.id, receipt.state.pending!.generation);
+        return await complete(scope, input, final.id, receipt.state.pending!.generation);
       }
       const independentSources: string[] = [];
       for (const id of state.candidates) {
@@ -261,7 +261,7 @@ export function createConversationContinuation(options: {
         location: input.target,
         recoveryVerified: true,
       });
-      return complete(scope, input, input.version, receipt.state.pending!.generation);
+      return await complete(scope, input, input.version, receipt.state.pending!.generation);
     } catch (error) {
       logger.warn("Continuation not ready", {
         event: "conversation.continuation",

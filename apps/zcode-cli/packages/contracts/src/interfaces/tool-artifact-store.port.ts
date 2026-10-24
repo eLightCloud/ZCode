@@ -104,6 +104,18 @@ export type MediaAttachmentPathResult =
   | { status: "unsupported" };
 
 export interface ToolArtifactStorePort {
+  /** Trusted cold recovery only. Fixed URI create-only; never overwrites different bytes. */
+  restoreFixedArtifact?(input: {
+    sessionId: SessionId;
+    uri: string;
+    bytes: Uint8Array;
+    contentType: string;
+  }): Promise<void>;
+  /** Same-session portable read rejects symlinks and ambiguous native identities. */
+  readFixedArtifact?(input: {
+    sessionId: SessionId;
+    uri: string;
+  }): Promise<ToolBinaryArtifactReadResult>;
   writeToolResultArtifact(
     request: ToolArtifactWriteRequest,
     options?: { signal?: AbortSignal },

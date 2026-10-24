@@ -265,6 +265,7 @@ interface WebBootstrapResult {
   initialWorkspaceAbsPath?: string;
   initialWorkspaceIdentity?: string;
   initialTaskId?: string;
+  initialWorkspacePurpose?: "conversation";
   restoreSession?: boolean;
   allowOpenWorkspace?: boolean;
 }
@@ -885,16 +886,18 @@ function resolveDefaultWsOrigin(): string {
 async function resolveWebBootstrap(): Promise<WebBootstrapResult> {
   const params = new URLSearchParams(window.location.search);
   const remoteId = params.get("remote");
+  const instance = params.get("instance_id");
+  const instanceQuery = instance ? "?" + new URLSearchParams({ instance_id: instance }) : "";
   const wsUrl = remoteId
     ? `${resolveDefaultWsOrigin()}/ws/remote/${remoteId}`
-    : `${resolveDefaultWsOrigin()}/ws`;
+    : `${resolveDefaultWsOrigin()}/ws${instanceQuery}`;
 
   if (remoteId) {
     return { wsUrl };
   }
 
   try {
-    const response = await fetch("/api/server-info", {
+    const response = await fetch("/api/server-info" + instanceQuery, {
       cache: "no-store",
     });
     if (!response.ok) {
@@ -2503,6 +2506,18 @@ async function bootstrapWebApp() {
     const services = await connectViaWebSocket(bootstrap.wsUrl, {
       onClose: () => {},
     });
+    // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
+    const conversation = params.get("conversation");
+    if (conversation && /^[a-zA-Z0-9_.:-]{1,128}$/.test(conversation)) {
+      const workspace = await services.fileService.ensureConversationWorkspace();
+      bootstrap = {
+        ...bootstrap,
+        initialWorkspaceAbsPath: workspace.path,
+        initialWorkspacePurpose: "conversation",
+        initialTaskId: conversation,
+        restoreSession: false,
+      };
+    }
     const platform = createWebPlatform();
     setApplicationDocumentTitle("ZCode - Web + Server");
 
@@ -2518,6 +2533,7 @@ async function bootstrapWebApp() {
             initialWorkspaceAbsPath={bootstrap.initialWorkspaceAbsPath}
             initialWorkspaceIdentity={bootstrap.initialWorkspaceIdentity}
             initialTaskId={bootstrap.initialTaskId}
+            initialWorkspacePurpose={bootstrap.initialWorkspacePurpose}
             restoreSession={bootstrap.restoreSession}
             allowOpenWorkspace={bootstrap.allowOpenWorkspace}
             preferDirectoryBrowser

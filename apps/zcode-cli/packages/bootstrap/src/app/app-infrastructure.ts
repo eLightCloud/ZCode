@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
-import { createNodeToolArtifactStore, NodeDeliverableStore } from "@zcode/adapters/storage";
+import { NodeDeliverableStore } from "@zcode/adapters/storage";
+import { createAppArtifactStore } from "./artifact-store.js";
 
 import { ConfigResult, resolvePath } from "@zcode/adapters/config";
 
@@ -58,14 +59,7 @@ export function createAppInfrastructure(
     allowMediumRiskInAutoMode: configResult.config.permission.allowMediumRiskInAuto,
   });
   const inputHistoryStore = options.inputHistoryStore ?? asInputHistoryStore(sessionStore);
-  const artifactStore =
-    options.artifactStore ??
-    createNodeToolArtifactStore({
-      imageCacheRootDir: join(storageRoot, "cli", "image-cache"),
-      pdfCacheRootDir: join(storageRoot, "cli", "pdf-cache"),
-      rootDir: join(storageRoot, "cli", "artifacts"),
-      videoCacheRootDir: join(storageRoot, "cli", "video-cache"),
-    });
+  const artifactStore = options.artifactStore ?? createAppArtifactStore(storageRoot);
   const imageProcessorPort = options.imageProcessorPort ?? createJimpImageProcessorAdapter();
   const deliverableStore =
     options.deliverableStore ??

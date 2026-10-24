@@ -3,6 +3,8 @@ import { textCheckpointSchema, type SyncScope } from "@zcode/contracts";
 import type { ConversationSyncOutbox } from "./outbox.js";
 import type { SyncCheckpointSource } from "./worker.js";
 import { digest } from "./canonical.js";
+import { captureRegisteredFiles } from "./registered-files.js";
+import type { ConversationSyncStore } from "@zcode/contracts";
 
 /** Real Host captures both owners under their barriers; this adapter owns durable versioning. */
 export function createHostConversationSyncSource(options: {
@@ -11,6 +13,7 @@ export function createHostConversationSyncSource(options: {
   trustedInstance: boolean;
   host: ConversationSyncHost;
   outbox: ConversationSyncOutbox;
+  center?: ConversationSyncStore;
   blocked(session: string, code: string): void;
 }): SyncCheckpointSource {
   return {
@@ -39,12 +42,25 @@ export function createHostConversationSyncSource(options: {
             options.blocked(session, "original_owner_unknown");
             continue;
           }
-          const latest = options.outbox.latest(options.scope, session);
-          const previous = latest?.command.kind === "receive" ? latest.command.version : null;
+          const previous = options.outbox.baseline(options.scope, session);
+          const files = checkpoint
+            ? await captureRegisteredFiles(
+                options.center?.files,
+                options.scope,
+                session,
+                checkpoint,
+                options.host.readArtifact
+                  ? (uri) => options.host.readArtifact!(session, uri)
+                  : undefined,
+              )
+            : [];
           if (
             previous &&
-            digest({ checkpoint: previous.checkpoint, management: previous.management }) ===
-              digest({ checkpoint, management })
+            digest({
+              checkpoint: previous.checkpoint,
+              management: previous.management,
+              files: previous.files ?? [],
+            }) === digest({ checkpoint, management, files })
           )
             continue;
           // Until native online admission is wired this is a local branch, never an execution grant.
@@ -52,9 +68,10 @@ export function createHostConversationSyncSource(options: {
           const content = {
             parent: previous?.id ?? null,
             location: options.location,
-            generation: 0,
+            generation: options.outbox.branchGeneration(options.scope, session),
             checkpoint,
             management,
+            ...(files.length ? { files } : {}),
           };
           items.push({
             session: session as import("@zcode/contracts").SessionId,

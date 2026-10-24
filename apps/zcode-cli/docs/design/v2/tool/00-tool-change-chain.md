@@ -1,5 +1,13 @@
 # Tool Change Chain Spec
 
+## 会话登记附件的固定字节恢复（2026-10-24）
+
+复用原生 AttachmentRef producer 与 artifact store；仅增加可信恢复 facade 的 create-only 固定 URI 写入，
+不新增工具，不改变工具 schema、执行、权限、prompt 或 Desktop continuous / 手机 replayable 投递。
+同步清单只收录原生输入和 file part 明确引用的同会话 artifact URI；不扫描目录，不携带本地路径。
+固定对象版本读取后核对摘要和长度，恢复只在持久接纳屏障内进行；同 URI 不同字节拒绝，
+历史工具不重放，文件缺失不得确认可接续。验证原始字节、冷读取、路径 / symlink 越界和重试。
+
 ## S0 质量门修复中的职责拆分（2026-10-24）
 
 本轮按既有职责拆分 CLI 超长实现与合同，保留原公开入口与唯一 owner；handler、

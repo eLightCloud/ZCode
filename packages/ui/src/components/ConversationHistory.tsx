@@ -2,6 +2,10 @@ import type { ConversationHistoryReader } from "@zcode/shared";
 import { useConversationHistory } from "../hooks/useConversationHistory.js";
 import { Button } from "./ui/button.js";
 import { useState, type ReactNode } from "react";
+import {
+  ConversationContinuation,
+  type ConversationContinuationLabels,
+} from "./ConversationContinuation.js";
 
 export interface ConversationHistoryLabels {
   title: string;
@@ -21,6 +25,7 @@ export interface ConversationHistoryLabels {
   choose: string;
   user: string;
   assistant: string;
+  continuation?: ConversationContinuationLabels;
   deletionChoice?: {
     action: string;
     warning: string;
@@ -39,11 +44,13 @@ export function ConversationHistory({
   labels,
   onWorkspace,
   status,
+  onContinue,
 }: {
   reader: ConversationHistoryReader;
   labels: ConversationHistoryLabels;
   onWorkspace(): void;
   status?: ReactNode;
+  onContinue?(session: string, location: string, instanceId: string): void;
 }) {
   const history = useConversationHistory(reader);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -161,6 +168,16 @@ export function ConversationHistory({
             <h2 className="text-ui-lg break-words font-semibold">{history.transcript.title}</h2>
           )}
           {history.transcript?.deleted && <p role="status">{labels.deleted}</p>}
+          {viewed && !viewed.deleted && reader.continuation && labels.continuation && (
+            <ConversationContinuation
+              key={viewed.session + ":" + viewed.version}
+              reader={reader}
+              session={viewed.session}
+              version={viewed.version}
+              labels={labels.continuation}
+              onReady={onContinue}
+            />
+          )}
           {deletionChoice &&
             choiceLabels &&
             (confirming === viewedKey ? (

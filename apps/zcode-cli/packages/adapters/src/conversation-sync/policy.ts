@@ -40,7 +40,7 @@ export function createConversationSyncPolicyStore(options: { pool: Pool; logger:
       )
         throw new ConversationSyncError("scope");
       const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 3)
+      if (schema.rows.length !== 1 || schema.rows[0].version !== 5)
         throw new ConversationSyncError("schema");
       const result = await work(client);
       await client.query("commit");

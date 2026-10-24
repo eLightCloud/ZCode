@@ -4,7 +4,7 @@ import { hostname } from "node:os";
 import type { Socket } from "node:net";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { WebSocket } from "ws";
 import type { WebSocketServer } from "ws";
 import {
@@ -28,6 +28,10 @@ import {
   ZCODE_RPC_HOST_CAPABILITY_HEADER,
   ZCODE_VERSION,
   type ServerRemoteInfo,
+  conversationRuntimeCommandSchema,
+  conversationContentRequestSchema,
+  conversationRuntimeIdentitySchema,
+  type ConversationRuntimePort,
 } from "@zcode/shared";
 import { createHostCapabilityStore, type HostCapabilityStore } from "./hostCapability.js";
 
@@ -98,7 +102,9 @@ function exposeWebSocket(
   resourcePeers?: TopicResourcePeers,
 ): Promise<void> {
   let resolveSettled!: () => void;
-  const settled = new Promise<void>(resolve => { resolveSettled = resolve; });
+  const settled = new Promise<void>((resolve) => {
+    resolveSettled = resolve;
+  });
   const socket = wrapWebSocket(ws);
   const protocol = new SocketProtocol(socket);
   const rawServer = new ChannelServer(protocol, "server");
@@ -125,7 +131,9 @@ function exposeWebSocket(
     reverseClient?.dispose();
     rawServer.dispose();
     void Promise.all([scope?.dispose(), rawServer.whenCallsSettled()]).then(resolveSettled, () => {
-      log.warn(undefined, "Connection scope retirement unconfirmed", { event: "server.scope_retirement_failed" });
+      log.warn(undefined, "Connection scope retirement unconfirmed", {
+        event: "server.scope_retirement_failed",
+      });
     });
   });
   return settled;
@@ -142,6 +150,8 @@ export async function createCoreHttpServer(
     hostCapabilityStore?: HostCapabilityStore;
     topicResourcePeers?: TopicResourcePeers;
     initiallyPaused?: boolean;
+    continuation?: ConversationRuntimePort;
+    continuationIdentity?: () => Promise<unknown>;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
@@ -152,7 +162,9 @@ export async function createCoreHttpServer(
     rpcScopes.add(pending);
     void pending.then(() => rpcScopes.delete(pending));
   };
-  app.use("*", async (context, next) => accepting ? await next() : context.json({ error: "Server stopping" }, 503));
+  app.use("*", async (context, next) =>
+    accepting ? await next() : context.json({ error: "Server stopping" }, 503),
+  );
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
   const host = options.host ?? "127.0.0.1";
   const authToken = options.authToken?.trim();
@@ -199,6 +211,89 @@ export async function createCoreHttpServer(
   // 使用与 packages/server 兼容的 TTL 一次性 store，使有效期和消费语义与返回信息一致。
   const capabilities = options.hostCapabilityStore ?? createHostCapabilityStore();
   app.get("/api/server-info", (context) => context.json(info));
+  app.get("/api/continuation-identity", async (context) => {
+    if (!options.continuationIdentity || (!authToken && !authTokenHash))
+      return context.json({ error: "unavailable" }, 503);
+    try {
+      return context.json(
+        conversationRuntimeIdentitySchema.parse(await options.continuationIdentity()),
+      );
+    } catch {
+      return context.json({ error: "unavailable" }, 503);
+    }
+  });
+  // Private instance control uses the existing non-browser instance credential.
+  // This port is not registered on the browser-facing RPC service collection.
+  const continuationHandler = (content: boolean) => async (context: Context) => {
+    if (!options.continuation || (!authToken && !authTokenHash))
+      return context.json({ error: "unavailable" }, 503);
+    const limit = 32 * 1024 * 1024;
+    if (Number(context.req.header("content-length") ?? 0) > limit)
+      return context.json({ error: "limit" }, 413);
+    const reader = context.req.raw.body?.getReader();
+    if (!reader) return context.json({ error: "invalid" }, 400);
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    let identity: { sessionId?: string; operationId?: string; action?: string } = {};
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > limit) {
+          await reader.cancel();
+          return context.json({ error: "limit" }, 413);
+        }
+        chunks.push(part.value);
+      }
+      const raw = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (content) {
+        if (!options.continuation.content) return context.json({ error: "unavailable" }, 503);
+        const input = conversationContentRequestSchema.parse(raw);
+        identity = {
+          sessionId: input.session,
+          operationId: input.kind === "restore" ? input.operation : undefined,
+          action: input.kind,
+        };
+        const result = await options.continuation.content(input);
+        log.info(undefined, "Continuation bytes verified", {
+          event: "conversation.continuation.control",
+          ...identity,
+          outcome: "completed",
+        });
+        return context.json(result);
+      }
+      const input = conversationRuntimeCommandSchema.parse(raw);
+      identity = { sessionId: input.session, operationId: input.operation, action: input.kind };
+      const result = await options.continuation.control(input);
+      log.info(undefined, "Continuation control completed", {
+        event: "conversation.continuation.control",
+        ...identity,
+        outcome: "completed",
+        phase: result.state,
+      });
+      return context.json(result);
+    } catch (error) {
+      const code =
+        error &&
+        typeof error === "object" &&
+        "data" in error &&
+        error.data &&
+        typeof error.data === "object" &&
+        "code" in error.data
+          ? String(error.data.code)
+          : "blocked";
+      log.warn(undefined, "Continuation control rejected", {
+        event: "conversation.continuation.control",
+        ...identity,
+        outcome: "blocked",
+        code,
+      });
+      return context.json({ error: code }, 409);
+    }
+  };
+  app.post("/api/continuation-control", continuationHandler(false));
+  app.post("/api/continuation-content", continuationHandler(true));
   app.get(
     "/ws",
     upgradeWebSocket(() => ({
@@ -218,12 +313,14 @@ export async function createCoreHttpServer(
     "/ws/host",
     upgradeWebSocket(() => ({
       onOpen(_event, socket) {
-        track(exposeWebSocket(
-          socket.raw as WebSocket,
-          services,
-          "desktop-continuous",
-          options.topicResourcePeers,
-        ));
+        track(
+          exposeWebSocket(
+            socket.raw as WebSocket,
+            services,
+            "desktop-continuous",
+            options.topicResourcePeers,
+          ),
+        );
       },
     })),
   );
@@ -240,7 +337,10 @@ export async function createCoreHttpServer(
   });
   const connections = new Set<Socket>();
   server.on("connection", (socket: Socket) => {
-    if (!accepting) { socket.destroy(); return; }
+    if (!accepting) {
+      socket.destroy();
+      return;
+    }
     connections.add(socket);
     socket.once("close", () => connections.delete(socket));
   });

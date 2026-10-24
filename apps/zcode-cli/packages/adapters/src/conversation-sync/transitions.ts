@@ -13,6 +13,7 @@ export interface VersionFacts {
   generation: number;
   checkpointDigest: string | null;
   managementDigest: string | null;
+  filesDigest?: string;
 }
 export function versionFacts(value: SyncVersion): VersionFacts {
   return {
@@ -22,6 +23,7 @@ export function versionFacts(value: SyncVersion): VersionFacts {
     generation: value.generation,
     checkpointDigest: value.checkpoint === null ? null : digest(value.checkpoint),
     managementDigest: value.management === undefined ? null : digest(value.management),
+    ...(value.files?.length ? { filesDigest: digest(value.files) } : {}),
   };
 }
 
@@ -69,6 +71,7 @@ export function transition(
   previous: SyncState,
   command: SyncCommand,
   versions: Map<string, VersionFacts>,
+  assignments?: ReadonlyMap<number, string>,
 ): SyncState {
   const state = structuredClone(previous);
   if ("revision" in command) requireRule(command.revision === state.revision, "stale");
@@ -175,7 +178,15 @@ export function transition(
       let cursor: string | null = value.id;
       while (cursor !== h.baseline) {
         const item = versionOf(versions, cursor!);
-        requireRule(item.location === h.source && item.generation === h.generation);
+        // 取消后，合法已保存前序保留原代次。只接受已有中心回执证明分配给同一源的
+        // 较早代次；离线 0、其它位置及无授予的自报代次不能夹入当前主线。
+        requireRule(
+          item.location === h.source &&
+            (item.generation === h.generation ||
+              (item.generation > 0 &&
+                item.generation < h.generation &&
+                assignments?.get(item.generation) === h.source)),
+        );
         cursor = item.parent;
         requireRule(cursor !== null, "stale");
       }

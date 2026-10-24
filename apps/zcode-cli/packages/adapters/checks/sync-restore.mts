@@ -39,7 +39,14 @@ try {
     "http-session",
   );
   assert.equal((await store.state(connection.scope, "worker-http"))!.revision, 1);
-  assert.equal((await store.list(connection.scope, null, 100)).length, 5);
+  assert.equal((await store.list(connection.scope, null, 100)).length, 6);
+  const continuation = await store.state(connection.scope, "session-runtime-continuation");
+  assert.equal(continuation?.active?.location, "runtime-desktop");
+  assert.equal(continuation?.handoff?.phase, "activated");
+  assert.equal(
+    await store.continuations!.read(connection.scope, "session-runtime-continuation"),
+    null,
+  );
   const capacity = await store.version(
     connection.capacityScope,
     "capacity-session",
@@ -79,7 +86,7 @@ try {
   process.stdout.write(
     JSON.stringify({
       restored: true,
-      schema: 3,
+      schema: 5,
       versionsAndReceipts: true,
       rls: true,
       noExecutionStarted: true,

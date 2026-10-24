@@ -19,3 +19,7 @@ export type { NativeSyncSourceOwner } from "./source.js";
 export { createConversationSyncGateway } from "./gateway.js";
 export { createHostConversationSyncSource } from "./host-source.js";
 export { createConversationSyncPolicyStore } from "./policy.js";
+export { createConversationContinuation } from "./continuation.js";
+export { createConversationRuntimeDirectory } from "./runtime-directory.js";
+export { createConversationObjectBytes } from "./object-bytes.js";
+export type { ConversationRuntimeDirectory } from "./continuation-runtime-steps.js";

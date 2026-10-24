@@ -134,10 +134,11 @@ export function projectTextCheckpoint(
   });
   const parsed = textCheckpointSchema.safeParse({
     format: "zcode.text-checkpoint",
-    version:
-      portableMessages.some(
-        (message) => (message.info as { metadata?: unknown }).metadata !== undefined,
-      ) || portableInputs.some((input) => fullIntent(input.payload.conversationInputIntent))
+    version: portableMessages.some((message) => message.parts.some((part) => part.type === "file"))
+      ? 3
+      : portableMessages.some(
+            (message) => (message.info as { metadata?: unknown }).metadata !== undefined,
+          ) || portableInputs.some((input) => fullIntent(input.payload.conversationInputIntent))
         ? 2
         : 1,
     session: {

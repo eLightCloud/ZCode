@@ -13,7 +13,12 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { canonical, digest } from "./canonical.js";
-import { conversationHistorySchema } from "@zcode/shared";
+import {
+  conversationHistorySchema,
+  conversationContinuationRecordSchema,
+  conversationFileSchema,
+} from "@zcode/shared";
+import { z } from "zod";
 
 /** Storage transport only. Privileged selection/barrier commands have no public HTTP mutation route. */
 export function createConversationSyncHttpClient(options: {
@@ -96,6 +101,39 @@ export function createConversationSyncHttpClient(options: {
     return decoded;
   }
   return {
+    files: {
+      async put(scope, file, bytes) {
+        const saved = z
+          .object({ saved: z.literal(true) })
+          .strict()
+          .safeParse(
+            await request(
+              scope,
+              "/file",
+              {},
+              {
+                file: conversationFileSchema.parse(file),
+                dataBase64: Buffer.from(bytes).toString("base64"),
+              },
+            ),
+          );
+        if (!saved.success) throw new ConversationSyncError("invalid");
+      },
+      async read(scope, file) {
+        const value = z
+          .object({ dataBase64: z.string().max(24 * 1024 * 1024) })
+          .strict()
+          .safeParse(
+            await request(scope, "/file-read", {}, { file: conversationFileSchema.parse(file) }),
+          );
+        if (!value.success) throw new ConversationSyncError("invalid");
+        return Buffer.from(value.data.dataBase64, "base64");
+      },
+    },
+    async continuation(scope, session, operation) {
+      const data = await request(scope, "/continuation-operation", { session, operation });
+      return data === null ? null : conversationContinuationRecordSchema.parse(data);
+    },
     async history(scope, after, limit) {
       return conversationHistorySchema.parse(
         await request(scope, "/history", {

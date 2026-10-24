@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -48,7 +49,7 @@
     },
     "test": {
       "dependsOn": ["build"],
-      "inputs": ["**"],
+      "inputs": ["**", "$TURBO_ROOT$/../../scripts/run-isolated-tests.mjs"],
       "env": ["ZCODE_CUA_REPO", "VITEST_MAX_WORKERS"],
       "outputs": []
     },

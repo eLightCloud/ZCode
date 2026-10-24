@@ -95,4 +95,6 @@ Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽�
 
 affected 只选择根 Vitest UT，工具 Node 测试另行执行，不代替 CLI 的原生 `pnpm --filter zcode-cli test`。CLI 的 CUA 同步测试使用明确传入的 `ZCODE_CUA_REPO` 定位 producer checkout，Turbo 的 test task 将其计入缓存键并传入测试；不记录本机绝对路径，不更改 producer pin。`VITEST_MAX_WORKERS` 同样传入并参与缓存键，资源受限的全量验证可显式限制单套件并发，不能靠扩大超时掩盖断言失败。
 
-CLI 全量入口通过 pretest 构建根 workspace 的 `@zcode/model-option-map`，确保 SEA 测试从干净 checkout 也能读取运行时资源；不能依赖先前手动构建的 dist。
+CLI 全量入口通过 pretest 构建根 workspace 的 `@zcode/model-option-map` 与 `packages/shared` 的正式 TypeScript 产物，确保 SEA 测试从干净 checkout 也能读取运行时资源；不能依赖先前手动构建的 dist。
+
+CLI `pnpm test` 和根 `pnpm test:unit` 共同使用 `scripts/run-isolated-tests.mjs`：在启动测试进程前分配独立 HOME / USERPROFILE / XDG 目录，保留调用者已经固定的 Node 与 PATH；根单测仍排除 desktop E2E，CLI 仍执行全部 Turbo test task，参数、失败退出码和测试原时限保持。成功与失败均清理本次临时目录。不要以直接执行 Turbo / Vitest 来替代这两个全量入口：只设置 storage.dir 或两条已知夹具的 dbPath 不能保护其它默认路径调用。相关低敏启动 / 结果 / 清理事件只记录 scope、关联 ID 和临时目录引用，不记录个人配置或正文。CLI Turbo 显式透传这些目录变量，测试输入包含隔离入口源码，防止缓存跨越隔离实现变更。必须实际全量复验时传 `--force`，不得把缓存结果标为本轮新执行。此隔离不回滚历史测试已经发生的默认库变化，也不宣称所有单独运行的测试命令都已具备同一隔离。

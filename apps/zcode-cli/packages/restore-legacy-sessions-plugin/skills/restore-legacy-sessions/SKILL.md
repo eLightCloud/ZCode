@@ -76,6 +76,10 @@ node scripts/restore-conversation.mjs --snapshot ~/.zcode/v2/sessions/<workspace
 
 ## Mutation Rules
 
+The restore script is a legacy writer. Targets containing session migration `0026_portable_context_writer` or newer, or portable context protection triggers, are rejected with `legacy_restore_target_requires_current_writer` before backups or writes to either database. Scanning and `--dry-run` are still available. Never add a v4 capability function, remove triggers, or delete migration records to bypass this rejection.
+
+For those targets, restore into an independent, stopped pre-0026 schema copy first, validate the restored history using its matching reader, then forward migrate the copy through the current native owner. Preserve the original snapshot and never open the upgraded copy with an old writer. Do not present this sequence as support for writing directly into the current live stores.
+
 Do not write data during selection. Before any apply step:
 
 - Create timestamped backups of `tasks-index.sqlite` and `db.sqlite`.

@@ -139,7 +139,7 @@ function traceFor(name: string) {
  * 测试直接持端口扮演模型（那样漏掉注册门、allowlist 补回、工具结果回灌三段）。
  */
 type ActorPlan =
-  | PlannedResponse
+  | (PlannedResponse & { onRequest?: () => void })
   | { kind: "escalate"; question: string; context?: string }
   // 一次真的 `Write` 工具调用：让「子代理写文件 → 执行器发 ToolCallStarted → driver 上报 → 引擎关导入缓存」
   // 整条线经真实工具层跑一遍（apps/zcode-cli/packages/dynamic-workflow/docs/execution-engine.md「Amend-resume」）。
@@ -151,7 +151,7 @@ type ActorPlan =
   // 拒绝接续它的在飞 ask，见 workflow-driver-quiescence.ts）。本种类才是正常形状。
   | { kind: "hang-until-cancelled" }
   // 模型请求以 adapter 错误 reject（模型侧错误收容用例）。
-  | { kind: "throw"; error: unknown };
+  | { kind: "throw"; error: unknown; beforeThrow?: () => Promise<void> };
 
 /** 一次 generateText 请求的观察面：模型这一轮看见的消息与被提供的工具。 */
 interface ModelRequestLog {
@@ -178,7 +178,10 @@ function scriptedModelAdapter(
         text: "(no further scripted response)",
       };
       // 挂起：模拟一个在飞 turn（取消/恢复用例靠它把 run 停在可预测的节点上）。
-      if (planned.kind === "hang") return new Promise(() => {});
+      if (planned.kind === "hang") {
+        planned.onRequest?.();
+        return new Promise(() => {});
+      }
       if (planned.kind === "hang-until-cancelled") {
         const signal = request?.abortSignal;
         // 没有信号就退化成 hang（不该发生：driver 每个 ask 都建 AbortController）。
@@ -189,7 +192,10 @@ function scriptedModelAdapter(
           else signal.addEventListener("abort", fail, { once: true });
         });
       }
-      if (planned.kind === "throw") throw planned.error;
+      if (planned.kind === "throw") {
+        if (planned.beforeThrow) await planned.beforeThrow();
+        throw planned.error;
+      }
       const usage = { inputTokens: 12, outputTokens: 8, totalTokens: 20 };
       if (planned.kind === "submit") {
         return {
@@ -8021,11 +8027,17 @@ describe("dynamic workflow run service — 模型侧错误的收容（apps/zcode
     });
 
   it("一个子代理撞上确定性模型错误 → run stopped(provider)，兄弟在飞 ask 被 abort，可恢复", async () => {
+    let betaStarted!: () => void;
+    const betaReady = new Promise<void>((resolve) => {
+      betaStarted = resolve;
+    });
+    // 用例要求两个 ask 已在飞；首个模型不能在兄弟接纳前就报错，否则只会取消一个节点。
     const harness = makeHarness({
       actorScripts: {
         "actor#1@1": [
           {
             kind: "throw",
+            beforeThrow: () => betaReady,
             error: adapterError(
               {
                 reason: "auth_failed",
@@ -8038,7 +8050,7 @@ describe("dynamic workflow run service — 模型侧错误的收容（apps/zcode
             ),
           },
         ],
-        "actor#2@1": [{ kind: "hang" }],
+        "actor#2@1": [{ kind: "hang", onRequest: betaStarted }],
       },
     });
     const runId = await submitRun(harness, {

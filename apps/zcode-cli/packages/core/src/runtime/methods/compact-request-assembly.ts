@@ -1,23 +1,10 @@
-import type { CompactActiveOptions } from "./compact-active.js";
+import type { CompactActiveOptions } from "./compact-active-options.js";
 import { prepareRuntimeProviderRequest } from "../helpers/runtime-provider-request-messages.js";
-import {
-  CompactPhase,
-  CompactReason,
-  CompactTrigger,
-  MAX_OUTPUT_TOKENS_FOR_SUMMARY,
-  SessionEventType,
-  traceContextToLogContext,
-} from "../deps.js";
+import { MAX_OUTPUT_TOKENS_FOR_SUMMARY, SessionEventType, traceContextToLogContext } from "../deps.js";
 
 import type { ModelToolContract, SessionEvent, TraceContext } from "../deps.js";
 
-import {
-  logCompactMediaRetryProjection,
-  logMediaBudgetProjection,
-  logMediaCapabilityProjection,
-  projectCompactMediaForRetry,
-  projectMessagesForModelMediaPolicy,
-} from "../helpers/index.js";
+import { logCompactMediaRetryProjection, logMediaBudgetProjection, logMediaCapabilityProjection, projectCompactMediaForRetry, projectMessagesForModelMediaPolicy } from "../helpers/index.js";
 
 import type { CompactTimelineContext } from "../types.js";
 

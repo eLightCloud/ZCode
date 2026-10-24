@@ -1,47 +1,15 @@
+import { type PrefetchedMemory, type ProjectMemoryRecallPrefetch } from "./project-memory-recall-types.js";
+export type { ProjectMemoryRecallPrefetch } from "./project-memory-recall-types.js";
 import type { AgentTelemetryCausation, Model } from "@zcode/contracts";
 import type { TraceContext } from "../deps.js";
-import {
-  canStartMemoryRecall,
-  createMemoryRecallState,
-  filterMemorySelections,
-  findLatestMemoryRecallQuery,
-  formatRelevantMemoryAttachment,
-  getMemoryRecallManifest,
-  isMemoryRecallQueryEligible,
-  readRecalledMemories,
-  recordRecalledMemories,
-  runMemorySelector,
-  type MemoryManifestEntry,
-  type MemoryRecallState,
-  type RecalledMemory,
-} from "../../memory/recall/index.js";
+import { canStartMemoryRecall, createMemoryRecallState, filterMemorySelections, findLatestMemoryRecallQuery, formatRelevantMemoryAttachment, getMemoryRecallManifest, isMemoryRecallQueryEligible, readRecalledMemories, recordRecalledMemories, runMemorySelector, type MemoryManifestEntry, type MemoryRecallState, type RecalledMemory } from "../../memory/recall/index.js";
 import type { ReadFileStateMap } from "../../tool/types.js";
-import {
-  createReadFileStateKey,
-  createReadFileStatePathKey,
-  normalizeReadFileStateMtimeMs,
-} from "../../tool/read-file-state.js";
+import { createReadFileStateKey, createReadFileStatePathKey, normalizeReadFileStateMtimeMs } from "../../tool/read-file-state.js";
 import type { ProjectMemoryRetrievalBranch } from "../../memory/project-memory-retrieval-branch.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "../methods/model-runtime-headers.js";
 import { withModelInvocationContext } from "../methods/runtime-model.js";
-import {
-  systemReminderAttachmentEntry,
-  type RuntimeMessageEntry,
-} from "../../agent/message-history.js";
-
-interface PrefetchedMemory {
-  entry: MemoryManifestEntry;
-  memory: RecalledMemory;
-}
-
-export interface ProjectMemoryRecallPrefetch {
-  abortController: AbortController;
-  consumed: boolean;
-  detachTurnAbort: () => void;
-  memories: PrefetchedMemory[];
-  settled: boolean;
-}
+import { systemReminderAttachmentEntry, type RuntimeMessageEntry } from "../../agent/message-history.js";
 
 export function startProjectMemoryRecallPrefetch(
   runtime: AgentRuntimeInternal,

@@ -12,3 +12,5 @@
 - 本次登记不改变桌面 continuous 或手机 replayable 投递。
 
 运行时回归位于 `tests/runtime-tool-result-settlement.test.ts` 和 `tests/runtime-streaming-tool-part-identity.test.ts`。
+
+此方法与合同现属于受管的 cli-runtime 组件。它没有独立状态 owner；原公开方法和回归保持不变，不再单独声明允许穿透 Runtime 私有实现的模块。

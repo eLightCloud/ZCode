@@ -1,6 +1,6 @@
-import type { CompactActiveOptions } from "./compact-active.js";
-import { CompactPhase } from "../deps.js";
-import { CompactReason } from "../deps.js";
+import type { CompactActiveOptions } from "./compact-active-options.js";
+
+
 import { CompactTimelineStatus } from "../deps.js";
 import { CompactTrigger } from "../deps.js";
 import { SessionEventType } from "../deps.js";
@@ -24,8 +24,8 @@ import { selectCompactEntriesAfterPromptTooLong } from "../helpers/index.js";
 import { throwIfTurnAborted } from "../helpers/index.js";
 import { truncateCompactSummaryRequestEntriesAfterPromptTooLong } from "../helpers/index.js";
 import type { CompactTimelineContext } from "../types.js";
-import type { RuntimeModelTextResult } from "../types.js";
-import type { Model } from "../deps.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { CompactAttemptOutcome } from "./turn-loop-state.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";

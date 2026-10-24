@@ -2,7 +2,7 @@ import { selectActiveConversationBranch } from "../deps.js";
 
 import type { MessageId, MessageWithParts, SessionInfo } from "../deps.js";
 
-import type { StableConversationForkTarget } from "../types.js";
+import type { StableConversationForkTarget } from "../workspace-recovery-types.js";
 
 import { stableForkError } from "./fork-model-selection.js";
 

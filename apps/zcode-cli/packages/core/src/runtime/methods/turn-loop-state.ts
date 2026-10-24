@@ -1,20 +1,9 @@
 import { OFF_PEAK_EXECUTION_TOOL_DENYLIST } from "@zcode/shared";
-import type {
-  CompactPhase,
-  CompactReason,
-  MessageId,
-  ModelStreamRecoveryStatus,
-  Model,
-  ModelSelection,
-  OutputStylePromptConfig,
-  SessionEvent,
-  TraceContext,
-  TraceId,
-  TurnId,
-} from "../deps.js";
+import type { CompactPhase, CompactReason, MessageId, ModelStreamRecoveryStatus, Model, ModelSelection, OutputStylePromptConfig, SessionEvent, TraceContext, TraceId, TurnId } from "../deps.js";
 import type { ActiveTurnSteeringState } from "../types.js";
 import type { ModelToolContract, SubagentRunOptions } from "@zcode/contracts";
-import type { DrainedPendingInputDiagnostics, ModelExecutionContext } from "../types.js";
+import type { DrainedPendingInputDiagnostics } from "../types.js";
+import type { ModelExecutionContext } from "../model-execution-types.js";
 import type { TurnMachineImpl } from "../deps.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 

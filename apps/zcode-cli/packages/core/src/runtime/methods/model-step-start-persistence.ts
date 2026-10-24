@@ -3,11 +3,12 @@ import { beginLocalTurnPreparation } from "@zcode/contracts";
 
 import { SessionEventType, createPartId } from "../deps.js";
 
-import type { MessageId, Model, ModelToolContract, TraceContext } from "../deps.js";
+import type { MessageId, Model, TraceContext } from "../deps.js";
 
-import { type RuntimeMessageEntry } from "../../agent/message-history.js";
 
-import type { DrainedPendingInputDiagnostics, RunModelTextRequestOptions } from "../types.js";
+
+
+
 
 import type { AgentRuntimeInternal } from "../internal.js";
 

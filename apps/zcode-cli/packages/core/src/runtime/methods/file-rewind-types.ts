@@ -1,6 +1,6 @@
 import type { CheckpointCreatedPayload, WorkspaceCheckpointArtifact } from "../deps.js";
 
-import type { WorkspaceFileRewindPreview, WorkspaceFileRewindUnsafeReason } from "../types.js";
+import type { WorkspaceFileRewindPreview, WorkspaceFileRewindUnsafeReason } from "../workspace-recovery-types.js";
 
 export type PlannedFileState = {
   content: string | null;

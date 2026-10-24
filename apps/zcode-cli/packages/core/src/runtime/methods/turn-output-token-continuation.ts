@@ -1,12 +1,7 @@
-import type { RuntimeModelTextResult } from "../types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { toTokenUsageInfo } from "../helpers/index.js";
-import {
-  countContextPrefixMessages,
-  createRuntimeAssistantEntry,
-  createRuntimeUserEntry,
-  type RuntimeMessageEntry,
-} from "../../agent/message-history.js";
+import { countContextPrefixMessages, createRuntimeAssistantEntry, createRuntimeUserEntry, type RuntimeMessageEntry } from "../../agent/message-history.js";
 import type { RegularTurnLoopState, TurnRequestState } from "./turn-loop-state.js";
 
 export const OUTPUT_TOKEN_CONTINUE_PROMPT =

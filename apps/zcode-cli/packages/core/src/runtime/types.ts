@@ -1,115 +1,50 @@
+import { type ModelExecutionContext } from "./model-execution-types.js";
+export type {
+  ModelExecutionContext,
+  ProviderContextUsageSnapshot,
+  RunModelTextRequestOptions,
+  RuntimeModelStreamSnapshot,
+  StreamedToolExecutionResult,
+  RuntimeModelTextResult,
+  ContextUsageTokenMethod,
+  ContextUsageConfidence,
+  ContextUsageMetric,
+  ContextUsageCategory,
+  ContextUsageToolDetail,
+  ContextUsageSkillDetail,
+  ContextUsageMessageRoleBreakdown,
+} from "./model-execution-types.js";
+export type {
+  WorkspaceRewindRestoredFile,
+  WorkspaceRewindResult,
+  WorkspaceFileRewindAction,
+  WorkspaceFileRewindUnsafeReason,
+  WorkspaceFileRewindSafeFile,
+  WorkspaceFileRewindUnsafeFile,
+  WorkspaceFileRewindIgnoredFile,
+  WorkspaceFileRewindPreview,
+  WorkspaceFileRewindApplyResult,
+  ConversationRewindResult,
+  WorkspaceForkResult,
+  StableConversationForkTarget,
+  StableConversationForkGoalBoundary,
+  StableConversationForkChildMetadata,
+  StableConversationForkOptions,
+  SelectionSideChatCreateOptions,
+  ConversationBeforeInputForkOptions,
+  WorkspaceCheckpointSummary,
+} from "./workspace-recovery-types.js";
 import type { DeliverableStorePort } from "@zcode/contracts";
 import type { ToolSearchExecutionContext, ToolSearchMode } from "@zcode/contracts";
 import type { RequestVerificationReason } from "@zcode/shared";
 import type { GetAgentDefinitions, LoadAgentDefinitions } from "../subagent/definitions.js";
-import type { RuntimeInputPresentation, TurnExecutionModelFallbackReason } from "@zcode/contracts";
-/* eslint-disable max-lines -- Runtime 类型集中承载 core/runtime 对外结构，拆分需要单独迁移。 */
+import type { RuntimeInputPresentation } from "@zcode/contracts";
 import { PermissionService, ToolScheduler } from "./deps.js";
-import type {
-  JsonSchema,
-  AgentExecutionTelemetryPort,
-  AgentTelemetryCausation,
-  BackgroundResultOriginMeta,
-  ContextUsageBreakdownItem,
-  CoordinatorResponsePort,
-  ForkCommitBundle,
-  ForkChildSessionMetadata,
-  ModelRequestAuth,
-  ModelRequestDependencies,
-  ModelSelection,
-  PluginReferenceCatalog,
-  ResolvedUserInstructions,
-  StableForkGoalBoundaryMetadata,
-  StableForkTargetMetadata,
-  WorkspaceHookBundleSnapshot,
-  WorkspaceId,
-} from "@zcode/contracts";
+import type { JsonSchema, AgentExecutionTelemetryPort, AgentTelemetryCausation, BackgroundResultOriginMeta, CoordinatorResponsePort, ModelRequestAuth, ModelRequestDependencies, ModelSelection, PluginReferenceCatalog, ResolvedUserInstructions, WorkspaceHookBundleSnapshot, WorkspaceId } from "@zcode/contracts";
 import type { ZCodeProviderAccountAccess } from "@zcode/shared";
 import type { EffectiveModelSelectionResult } from "@zcode/shared/model-selection";
 import type { RuntimeMessageEntry } from "../agent/message-history.js";
-import type {
-  CompactPhase,
-  CompactReason,
-  CompactTrigger,
-  CollaborationMode,
-  EmbeddedSearchBackend,
-  Logger,
-  AttachmentStorageMetadata,
-  MessageId,
-  MessageVisibility,
-  FilePartSource,
-  ModelRequestAdmission,
-  Model,
-  ModelNetworkStatusEvent,
-  ModelMessageContentBlock,
-  ModelReasoningContentBlock,
-  ModelStreamRecoveryStatus,
-  ModelToolCall,
-  ModelToolContract,
-  ModelUsage,
-  ModelUsageSummary,
-  ModelInputMessage,
-  MessageWithParts,
-  PendingTurnInput,
-  TurnInputIntentMetadata,
-  TurnSteerResult,
-  PartId,
-  PermissionBrokerPort,
-  PermissionUpdate,
-  QueryId,
-  RewindScope,
-  RewindStrategy,
-  SessionEvent,
-  SessionEventSink,
-  SessionEventStorePort,
-  SessionId,
-  SessionTaskType,
-  SessionMailboxPort,
-  SessionProjection,
-  SessionStorePort,
-  ContextSourcePort,
-  DynamicWorkflowRunPort,
-  DynamicWorkflowSnippetPort,
-  ModelCatalogPort,
-  ExecutionPort,
-  BrowserControlPort,
-  ExecutionShellSelection,
-  AutomationPort,
-  OffPeakPort,
-  TopicResourcePort,
-  FileSystemPort,
-  HttpClientPort,
-  ImageProcessorPort,
-  PdfDocumentPort,
-  HooksRuntimeConfig,
-  SkillPort,
-  McpPort,
-  McpServerConfig,
-  SubagentPort,
-  ToolArtifactStorePort,
-  ToolCallId,
-  WorkflowPort,
-  WorkflowEscalatePort,
-  WorkflowSubmitPort,
-  TraceContext,
-  TraceId,
-  TurnId,
-  CheckpointCreatedPayload,
-  RewindTargetEvaluation,
-  SessionHistoryHydrationResult,
-  SyntheticUserMessageSource,
-  HookRunner,
-  ToolExecutionResult,
-  ToolExecutor,
-  ToolRegistry,
-  ContextBuilder,
-  EnvInfo,
-  ProjectContext,
-  UserInstructionsOptions,
-  AutoCompactPolicyConfig,
-  ModelAnomalyGuardConfig,
-  OutputStylePromptConfig,
-} from "./deps.js";
+import type { CompactPhase, CompactReason, CompactTrigger, CollaborationMode, EmbeddedSearchBackend, Logger, AttachmentStorageMetadata, MessageId, MessageVisibility, FilePartSource, ModelRequestAdmission, Model, ModelMessageContentBlock, ModelUsageSummary, MessageWithParts, PendingTurnInput, TurnInputIntentMetadata, TurnSteerResult, PartId, PermissionBrokerPort, PermissionUpdate, QueryId, RewindScope, SessionEvent, SessionEventSink, SessionEventStorePort, SessionId, SessionTaskType, SessionMailboxPort, SessionProjection, SessionStorePort, ContextSourcePort, DynamicWorkflowRunPort, DynamicWorkflowSnippetPort, ModelCatalogPort, ExecutionPort, BrowserControlPort, ExecutionShellSelection, AutomationPort, OffPeakPort, TopicResourcePort, FileSystemPort, HttpClientPort, ImageProcessorPort, PdfDocumentPort, HooksRuntimeConfig, SkillPort, McpPort, McpServerConfig, SubagentPort, ToolArtifactStorePort, WorkflowPort, WorkflowEscalatePort, WorkflowSubmitPort, TraceContext, TraceId, TurnId, SessionHistoryHydrationResult, SyntheticUserMessageSource, HookRunner, ToolExecutionResult, ToolExecutor, ToolRegistry, ContextBuilder, EnvInfo, ProjectContext, UserInstructionsOptions, AutoCompactPolicyConfig, ModelAnomalyGuardConfig, OutputStylePromptConfig } from "./deps.js";
 import type { AgentProfile } from "../subagent/profile.js";
 import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type { BashTimeoutPolicy } from "../tool/bash-timeout-policy.js";
@@ -451,40 +386,6 @@ export interface TurnResult {
   projection: SessionProjection;
 }
 
-/**
- * 标准 Submission Selection 的执行期约束。它不携带 Provider/Model 静态事实，
- * 也不会成为 Session Selection 的第二份来源。
- */
-export interface ModelExecutionContext {
-  offPeak?: { executionId: string; ticketId: string; providerErrorCode: string };
-  /** 仅当前 Turn 跳过自动 Project Memory Extraction；不修改 Session Memory 配置。 */
-  memoryExtraction?: "skip";
-  selectionScope: "execution";
-  /** 接纳加速输入前固定的 Session 候选；仅在内存中随本条命令传递。 */
-  highspeedFallbackSelection?: ModelSelection;
-  requestDependencies?: ModelRequestDependencies;
-  subagents?: {
-    foregroundModel: "submission";
-    background: "deny" | "allow";
-  };
-  /**
-   * 本次执行的 Selection 失败时，同一 Turn 内退回原模型继续跑完（保留已提交历史，只替换后续请求的
-   * 模型），而不是让整轮直接失败。触发条件必须由发起方声明：`providerId` 限定只匹配本轮 execution
-   * Selection 指向的 provider，`rules` 按声明顺序匹配、首个命中决定退回原因，`providerErrorCode` 缺省
-   * 表示该 provider 的任何失败。core 不按 provider id、模型名或错误文案硬编码。
-   * 退回目标先取 `target`（发起方抽卡时的提交选择，即会话原模型），再取本轮接纳前复制的会话常驻 Session Selection；
-   * 两者都解析不出时无处可退，按真实错误失败。
-   */
-  selectionFallback?: {
-    providerId: string;
-    rules: Array<{
-      reason: TurnExecutionModelFallbackReason;
-      providerErrorCode?: string;
-    }>;
-    target?: ModelSelection;
-  };
-}
-
 export interface ExecuteTurnOptionsBase {
   /** 内存后台命令归属；不进入 canonical intent 或持久化模型默认。 */
   offPeakExecutionId?: string;
@@ -605,142 +506,6 @@ export interface ActiveTurnInfo {
   turnId: TurnId;
 }
 
-export interface WorkspaceRewindRestoredFile {
-  action: "delete" | "restore";
-  bytesWritten?: number;
-  path: string;
-}
-
-export interface WorkspaceRewindResult {
-  checkpoint?: CheckpointCreatedPayload;
-  evaluation?: RewindTargetEvaluation;
-  restoredFiles: WorkspaceRewindRestoredFile[];
-  response: string;
-  rewindId: string;
-  strategy: RewindStrategy;
-}
-
-export type WorkspaceFileRewindAction = "restore" | "delete";
-
-export type WorkspaceFileRewindUnsafeReason =
-  | "checkpoint_missing"
-  | "checkpoint_unreadable"
-  | "external_modified"
-  | "file_read_failed"
-  | "unsupported_checkpoint";
-
-export interface WorkspaceFileRewindSafeFile {
-  action: WorkspaceFileRewindAction;
-  operationCount: number;
-  path: string;
-  toolNames: string[];
-}
-
-export interface WorkspaceFileRewindUnsafeFile {
-  currentHash?: string;
-  expectedHash?: string;
-  message?: string;
-  operationCount: number;
-  path: string;
-  reason: WorkspaceFileRewindUnsafeReason;
-  toolNames: string[];
-}
-
-export interface WorkspaceFileRewindIgnoredFile {
-  operationCount: number;
-  path: string;
-  reason: "bash_ignored";
-  toolNames: string[];
-}
-
-export interface WorkspaceFileRewindPreview {
-  canApply: boolean;
-  ignoredFiles: WorkspaceFileRewindIgnoredFile[];
-  safeFiles: WorkspaceFileRewindSafeFile[];
-  unsafeFiles: WorkspaceFileRewindUnsafeFile[];
-}
-
-export interface WorkspaceFileRewindApplyResult {
-  applied: boolean;
-  preview: WorkspaceFileRewindPreview;
-  response: string;
-}
-
-export interface ConversationRewindResult {
-  branchGeneration?: number;
-  evaluation?: RewindTargetEvaluation;
-  keptMessageCount: number;
-  response: string;
-  rewindId: string;
-  strategy: RewindStrategy;
-  targetMessageId: MessageId;
-}
-
-export interface WorkspaceForkResult {
-  checkpoint?: CheckpointCreatedPayload;
-  copiedMessageCount: number;
-  forkedSessionId: SessionId;
-  parentSessionId: SessionId;
-  targetMessageId: MessageId;
-  targetCheckpointId?: string;
-  restoredFiles: WorkspaceRewindRestoredFile[];
-  response: string;
-}
-
-/** V4 resolver 已固定的目标 product turn raw transcript segment。 */
-export type StableConversationForkTarget = StableForkTargetMetadata;
-
-/** 显式 none 或完整 fork 点 goal/verifier 快照；undefined 不属于新数据。 */
-export type StableConversationForkGoalBoundary = StableForkGoalBoundaryMetadata;
-
-export type StableConversationForkChildMetadata = ForkChildSessionMetadata;
-
-export interface StableConversationForkOptions {
-  forkedSessionId?: SessionId;
-  modelSelection?: ModelSelection;
-  goalBoundary: StableConversationForkGoalBoundary;
-  sourceCommandId: string;
-  revisionAtDecision?: number;
-  target: StableConversationForkTarget;
-  traceContext?: TraceContext;
-}
-
-/** 从父会话稳定落盘边界创建隐藏副屏 child；不复制 goal/queue/阻塞运行态。 */
-export interface SelectionSideChatCreateOptions {
-  modelSelection?: ModelSelection;
-  sourceCommandId: string;
-  revisionAtDecision?: number;
-  traceContext?: TraceContext;
-}
-
-export interface ConversationBeforeInputForkOptions {
-  modelSelection?: ModelSelection;
-  forkedSessionId?: SessionId;
-  goalBoundary: StableConversationForkGoalBoundary;
-  sourceCommandId: string;
-  targetMessageId: MessageId;
-  targetProductTurnId: string;
-  targetTranscriptTurnId: string;
-  initialInput: ForkCommitBundle["initialInput"];
-  commandFact: ForkCommitBundle["commandFact"];
-  traceContext?: TraceContext;
-}
-
-export interface WorkspaceCheckpointSummary {
-  checkpointId: string;
-  compactBoundaryId?: string;
-  coveredByCompact?: boolean;
-  createdAt: Date;
-  diffRef?: string;
-  fileCount?: number;
-  messageId: MessageId;
-  targetMessageId?: MessageId;
-  toolMessageId?: MessageId;
-  preview?: string;
-  scope: RewindScope;
-  snapshotRef: string;
-}
-
 export interface RuntimeTurnFileChangeEntry {
   afterContent?: string;
   beforeContent: string | null;
@@ -859,63 +624,6 @@ export interface DrainedPendingInputDiagnostics {
   toolDisallowlist?: readonly string[];
 }
 
-export interface ProviderContextUsageSnapshot {
-  cacheReadTokens?: number;
-  cacheWriteTokens?: number;
-  contextUsageTokens?: number;
-  inputTokens: number;
-  messageCount: number;
-  model: { providerId: Model["providerId"]; modelId: Model["modelId"] };
-  outputTokens?: number;
-  recordedAt: number;
-  traceId: TraceId;
-  turnId?: TurnId;
-}
-
-export interface RunModelTextRequestOptions {
-  toolSearchEnabled?: boolean;
-  abortSignal?: AbortSignal;
-  assistantMessageId: MessageId;
-  events: SessionEvent[];
-  maxOutputTokens?: number;
-  latestRealUserMessageIndex?: number;
-  messages: ModelInputMessage[];
-  /** 与 messages 按索引对应的 canonical 来源，仅用于本地用量统计。 */
-  sourceEntries?: readonly (RuntimeMessageEntry | undefined)[];
-  model: Model;
-  onStreamSnapshot?: (snapshot: RuntimeModelStreamSnapshot) => void;
-  onStreamReasoningDelta?: (text: string) => void;
-  onStreamTextDelta?: (text: string) => void;
-  onStreamToolCall?: (toolCall: ModelToolCall) => void;
-  onModelNetworkStatus?: (event: ModelNetworkStatusEvent) => void;
-  streamRecovery?: ModelStreamRecoveryStatus;
-  tools: ModelToolContract[];
-  traceContext: TraceContext;
-}
-
-export interface RuntimeModelStreamSnapshot {
-  reasoning: ModelReasoningContentBlock[];
-  text: string;
-}
-
-export interface StreamedToolExecutionResult {
-  input: Record<string, unknown>;
-  ledgerRecorded?: boolean;
-  partID: PartId;
-  result: ToolExecutionResult;
-  toolCallId: ToolCallId;
-}
-
-export interface RuntimeModelTextResult {
-  contextUsageBreakdown?: ContextUsageBreakdownItem[];
-  finishReason: string;
-  providerMetadata?: Record<string, unknown>;
-  reasoning?: ModelReasoningContentBlock[];
-  text: string;
-  toolCalls?: ModelToolCall[];
-  usage: ModelUsage;
-}
-
 export type ParsedRewindCommand =
   | {
       action: "apply";
@@ -938,48 +646,3 @@ export type ParsedRewindCommand =
   | {
       action: "status";
     };
-
-export type ContextUsageTokenMethod = "estimated" | "provider_count" | "proportional_estimate";
-
-export type ContextUsageConfidence = "high" | "medium" | "low";
-
-export interface ContextUsageMetric {
-  chars: number;
-  confidence: ContextUsageConfidence;
-  tokenMethod: ContextUsageTokenMethod;
-  tokenizer: string;
-  tokens: number;
-}
-
-export interface ContextUsageCategory extends ContextUsageMetric {
-  name: string;
-  percentTokens: number;
-  source:
-    | "system_prompt"
-    | "meta_user_context"
-    | "skills"
-    | "tool_prompt"
-    | "system_tool_schemas"
-    | "mcp_tool_schemas"
-    | "messages";
-}
-
-export interface ContextUsageToolDetail extends ContextUsageMetric {
-  name: string;
-  readOnly?: boolean;
-  serverName?: string;
-  sideEffectScope?: string;
-  source: "system_tool" | "mcp_tool";
-}
-
-export interface ContextUsageSkillDetail extends ContextUsageMetric {
-  name: string;
-  path: string;
-  scope: string;
-  source: string;
-}
-
-export interface ContextUsageMessageRoleBreakdown extends ContextUsageMetric {
-  count: number;
-  role: string;
-}

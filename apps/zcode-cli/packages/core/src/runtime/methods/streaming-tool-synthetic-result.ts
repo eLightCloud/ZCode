@@ -1,14 +1,8 @@
 import { SessionEventType, createPartId } from "../deps.js";
-import type {
-  ModelToolCall,
-  SessionEvent,
-  ToolCallId,
-  ToolExecutionResult,
-  TraceContext,
-} from "../deps.js";
+import type { ModelToolCall, SessionEvent, ToolCallId, ToolExecutionResult, TraceContext } from "../deps.js";
 import { toRecordInput } from "../helpers/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { StreamedToolExecutionResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../model-execution-types.js";
 
 const STREAM_RECOVERY_TOOL_ERROR_TYPE = "stream_recovery_interrupted_tool";
 

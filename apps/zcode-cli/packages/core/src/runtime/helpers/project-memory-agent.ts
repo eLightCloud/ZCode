@@ -1,33 +1,15 @@
-import type { Model, ModelToolContract, TraceContext } from "../deps.js";
-import type { AgentTelemetryCausation, ModelApiOperation } from "@zcode/contracts";
-import {
-  PermissionService,
-  createDenyPermissionBroker,
-  createToolExecutor,
-  defaultPermissionConfig,
-  traceContextToLogContext,
-} from "../deps.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
-import type { ReadFileStateMap } from "../../tool/types.js";
+import { type ProjectMemoryAgentContext } from "./project-memory-agent-types.js";
+export type { ProjectMemoryAgentContext } from "./project-memory-agent-types.js";
+
+import type { Model, TraceContext } from "../deps.js";
+import type { ModelApiOperation } from "@zcode/contracts";
+import { PermissionService, createDenyPermissionBroker, createToolExecutor, defaultPermissionConfig, traceContextToLogContext } from "../deps.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import { getSessionShellSelectionFromConfig } from "../methods/session-shell-environment.js";
 import { prepareRuntimeProviderRequest } from "./runtime-provider-request-messages.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "../methods/model-runtime-headers.js";
 import { createRuntimeModel, withModelInvocationContext } from "../methods/runtime-model.js";
-
-export interface ProjectMemoryAgentContext {
-  causation?: AgentTelemetryCausation;
-  memoryRoot: string;
-  providerEntries: readonly RuntimeMessageEntry[];
-  midConversationSystem: AgentRuntimeInternal["config"]["midConversationSystem"];
-  model: Model;
-  operation: ModelApiOperation;
-  readFileState: ReadFileStateMap;
-  tools: readonly ModelToolContract[];
-  traceContext: TraceContext;
-  workingDirectory: string;
-  workspaceRoot: string;
-}
 
 export function captureProjectMemoryAgentContext(
   runtime: AgentRuntimeInternal,

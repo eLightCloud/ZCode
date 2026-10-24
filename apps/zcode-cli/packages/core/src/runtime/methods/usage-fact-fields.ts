@@ -6,7 +6,7 @@ import type { SessionEvent } from "@zcode/contracts";
 import type { TraceContext } from "@zcode/contracts";
 import type { TurnId } from "@zcode/contracts";
 import type { UsageStorePort } from "@zcode/contracts";
-import type { RuntimeModelTextResult } from "../types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { ModelUsage } from "@zcode/contracts";
 

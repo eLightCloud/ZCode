@@ -4,23 +4,13 @@ import { type CreateSessionInput } from "@zcode/contracts";
 
 import { createMessageId, createPartId, createToolCallId, createTurnId } from "../deps.js";
 
-import type {
-  MessageId,
-  MessageWithParts,
-  PartId,
-  SessionEntryInfo,
-  SessionGoal,
-  SessionId,
-  SessionInfo,
-  TargetCompletionVerificationPayload,
-  TurnId,
-} from "../deps.js";
+import type { MessageId, MessageWithParts, PartId, SessionEntryInfo, SessionGoal, SessionId, SessionInfo, TargetCompletionVerificationPayload, TurnId } from "../deps.js";
 
 import { slugify } from "../helpers/index.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type { StableConversationForkGoalBoundary } from "../types.js";
+import type { StableConversationForkGoalBoundary } from "../workspace-recovery-types.js";
 
 import { asRecord } from "./fork-history.js";
 

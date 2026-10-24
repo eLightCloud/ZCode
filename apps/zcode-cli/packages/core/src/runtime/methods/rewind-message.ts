@@ -1,43 +1,7 @@
-/* eslint-disable max-lines -- rewind message primitive 与 cascade 封装共享 conversation/workspace 语义，避免拆分时误改原 /rewind 行为。 */
-import {
-  RewindScope,
-  RewindStrategy,
-  SessionEventType,
-  activeSessionMessages,
-  createMessageId,
-  evaluateRewindTarget,
-  hydrateMessageHistoryFromSession,
-  hydrateReadFileStateFromSession,
-  parseWorkspaceCheckpointArtifact,
-  selectActiveConversationBranch,
-  traceContextToLogContext,
-} from "../deps.js";
-import type {
-  CheckpointCreatedPayload,
-  MessageId,
-  MessageWithParts,
-  SessionEvent,
-  TraceContext,
-  TurnId,
-  WorkspaceCheckpointArtifact,
-} from "../deps.js";
-import {
-  activeSuffixMessageIdsForRewind,
-  buildMessageRewindEvaluationItems,
-  createTurnCancelledError,
-  formatUnavailableRewindResponse,
-  formatWorkspaceRewindNoticeBody,
-  getLatestActiveSessionMessageId,
-  isTurnCancellationError,
-  selectCheckpointForMessage,
-  selectCheckpointsForMessages,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
-import type {
-  ConversationRewindResult,
-  WorkspaceRewindRestoredFile,
-  WorkspaceRewindResult,
-} from "../types.js";
+import { RewindScope, RewindStrategy, SessionEventType, activeSessionMessages, createMessageId, evaluateRewindTarget, hydrateMessageHistoryFromSession, hydrateReadFileStateFromSession, parseWorkspaceCheckpointArtifact, selectActiveConversationBranch, traceContextToLogContext } from "../deps.js";
+import type { CheckpointCreatedPayload, MessageId, MessageWithParts, SessionEvent, TraceContext, TurnId, WorkspaceCheckpointArtifact } from "../deps.js";
+import { activeSuffixMessageIdsForRewind, buildMessageRewindEvaluationItems, createTurnCancelledError, formatUnavailableRewindResponse, formatWorkspaceRewindNoticeBody, getLatestActiveSessionMessageId, isTurnCancellationError, selectCheckpointForMessage, selectCheckpointsForMessages, throwIfTurnAborted } from "../helpers/index.js";
+import type { ConversationRewindResult, WorkspaceRewindRestoredFile, WorkspaceRewindResult } from "../workspace-recovery-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
 import { mainTurnCacheHitAggregateFromMessages } from "./turn-model-step-usage.js";

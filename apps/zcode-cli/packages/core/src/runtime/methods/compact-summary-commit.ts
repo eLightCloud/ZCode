@@ -1,4 +1,4 @@
-import type { CompactActiveOptions } from "./compact-active.js";
+import type { CompactActiveOptions } from "./compact-active-options.js";
 import type { CompactPhase } from "@zcode/contracts";
 import type { CompactReason } from "@zcode/contracts";
 import type { CompactTrigger } from "@zcode/contracts";
@@ -21,7 +21,7 @@ import { countCompactPreservedRuntimeMessages } from "../helpers/index.js";
 import { estimateRuntimeEntryTokens } from "../helpers/index.js";
 import { readApprovedPlanFileReferenceEntry } from "../helpers/index.js";
 import type { CompactTimelineContext } from "../types.js";
-import type { RuntimeModelTextResult } from "../types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { Model } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { legacySyntheticRuntimeMetadata } from "../../agent/message-history.js";

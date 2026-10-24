@@ -1,30 +1,7 @@
-import type {
-  CheckpointCreatedPayload,
-  MessageId,
-  MessageWithParts,
-  RewindScope,
-  RewindTargetEvaluation,
-  SessionEvent,
-  SessionId,
-  TraceContext,
-  TurnId,
-  WorkspaceCheckpointArtifact,
-} from "./deps.js";
+import type { CheckpointCreatedPayload, MessageId, MessageWithParts, RewindScope, RewindTargetEvaluation, SessionEvent, SessionId, TraceContext, TurnId, WorkspaceCheckpointArtifact } from "./deps.js";
 
-import type {
-  ConversationBeforeInputForkOptions,
-  ConversationRewindResult,
-  ParsedRewindCommand,
-  SelectionSideChatCreateOptions,
-  StableConversationForkOptions,
-  TurnResult,
-  WorkspaceCheckpointSummary,
-  WorkspaceFileRewindApplyResult,
-  WorkspaceFileRewindPreview,
-  WorkspaceForkResult,
-  WorkspaceRewindRestoredFile,
-  WorkspaceRewindResult,
-} from "./types.js";
+import type { ParsedRewindCommand, TurnResult } from "./types.js";
+import type { ConversationBeforeInputForkOptions, ConversationRewindResult, SelectionSideChatCreateOptions, StableConversationForkOptions, WorkspaceCheckpointSummary, WorkspaceFileRewindApplyResult, WorkspaceFileRewindPreview, WorkspaceForkResult, WorkspaceRewindRestoredFile, WorkspaceRewindResult } from "./workspace-recovery-types.js";
 
 export interface InternalTurnRewindMethods {
   executeRewindCommand(

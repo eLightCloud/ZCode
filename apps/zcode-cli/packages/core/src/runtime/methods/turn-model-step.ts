@@ -1,15 +1,15 @@
 import type { ModelStepRequestOptions } from "./model-step-contract.js";
 import { createMessageId } from "../deps.js";
-import type { ModelToolContract } from "../deps.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+
+
 import { isTurnCancellationError } from "../helpers/index.js";
-import type { DrainedPendingInputDiagnostics } from "../types.js";
-import type { RunModelTextRequestOptions } from "../types.js";
+
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import type { ModelStepResult } from "./model-step-contract.js";
 import { runModelBackedTurnStepImpl } from "./model-step-execution.js";
-import type { ToolSearchExecutionContext } from "@zcode/contracts";
+
 
 export async function runModelBackedTurnStep(
   this: AgentRuntimeInternal,

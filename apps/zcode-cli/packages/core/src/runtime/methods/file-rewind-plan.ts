@@ -1,55 +1,22 @@
 import { applyPatch, type StructuredPatch } from "diff";
 
-import {
-  RewindScope,
-  SessionEventType,
-  getCurrentTraceContext,
-  parseWorkspaceCheckpointArtifact,
-} from "../deps.js";
+import { RewindScope, SessionEventType, getCurrentTraceContext, parseWorkspaceCheckpointArtifact } from "../deps.js";
 
-import type {
-  CheckpointCreatedPayload,
-  MessageId,
-  TraceContext,
-  TurnId,
-  WorkspaceCheckpointArtifact,
-} from "../deps.js";
+import type { CheckpointCreatedPayload, MessageId, TraceContext, TurnId, WorkspaceCheckpointArtifact } from "../deps.js";
 
-import {
-  selectCheckpointForRewind,
-  selectCheckpointsForMessages,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
+import { selectCheckpointForRewind, selectCheckpointsForMessages, throwIfTurnAborted } from "../helpers/index.js";
 
-import type { WorkspaceFileRewindUnsafeFile } from "../types.js";
+import type { WorkspaceFileRewindUnsafeFile } from "../workspace-recovery-types.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
 import { FileAggregate } from "./file-rewind-types.js";
 
-import type {
-  FileCheckpointOperation,
-  IgnoredFileAggregate,
-  PlannedFileState,
-  WorkspaceFileRewindPlan,
-} from "./file-rewind-types.js";
+import type { FileCheckpointOperation, IgnoredFileAggregate, PlannedFileState, WorkspaceFileRewindPlan } from "./file-rewind-types.js";
 
-import {
-  hashContent,
-  isIgnoredShellTool,
-  readCurrentFileState,
-  resolveCheckpointFilePath,
-} from "./file-rewind-files.js";
+import { hashContent, isIgnoredShellTool, readCurrentFileState, resolveCheckpointFilePath } from "./file-rewind-files.js";
 
-import {
-  addIgnoredFile,
-  compareByPath,
-  ensureFileAggregate,
-  markUnsafe,
-  toIgnoredFile,
-  toSafeFile,
-  toUnsafeFile,
-} from "./file-rewind-preview.js";
+import { addIgnoredFile, compareByPath, ensureFileAggregate, markUnsafe, toIgnoredFile, toSafeFile, toUnsafeFile } from "./file-rewind-preview.js";
 
 export async function buildWorkspaceFileRewindPlan(
   this: AgentRuntimeInternal,

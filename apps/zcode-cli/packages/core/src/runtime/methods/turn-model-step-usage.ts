@@ -1,13 +1,11 @@
 import { createModelUsageSummaryFromEvents } from "../deps.js";
 import type { MessageId, MessageWithParts, Model, ModelUsage, TraceContext } from "../deps.js";
-import type { MainTurnCacheHitAggregate, RuntimeModelTextResult } from "../types.js";
+import type { MainTurnCacheHitAggregate } from "../types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
-import {
-  persistedTokenUsageBaseline,
-  type PersistedTokenUsageBaseline,
-} from "../../agent/message-history-usage.js";
+import { persistedTokenUsageBaseline, type PersistedTokenUsageBaseline } from "../../agent/message-history-usage.js";
 import { recordModelUsageFact } from "./usage-observability.js";
 
 interface RecordMainTurnModelUsageInput {

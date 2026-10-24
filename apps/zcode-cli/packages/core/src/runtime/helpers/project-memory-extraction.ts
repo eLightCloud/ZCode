@@ -1,29 +1,16 @@
+import { type ProjectMemoryExtractionSnapshot } from "./project-memory-extraction-types.js";
+export type { ProjectMemoryExtractionScheduler } from "./project-memory-extraction-types.js";
 import { selectActiveConversationBranch, type TraceContext } from "../deps.js";
-import {
-  buildMemoryExtractionPrompt,
-  createMemoryExtractionScheduler,
-  type MemoryExtractionScheduler,
-  type MemoryExtractionSnapshot,
-} from "../../memory/extraction.js";
+import { buildMemoryExtractionPrompt, createMemoryExtractionScheduler } from "../../memory/extraction.js";
 import { runMemoryAgentLoop } from "../../memory/memory-agent-loop.js";
 import { scanMemoryManifest } from "../../memory/recall/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import {
-  prepareProjectMemoryAgentRequest,
-  captureProjectMemoryAgentContext,
-  createProjectMemoryAgentToolExecutor,
-  type ProjectMemoryAgentContext,
-} from "./project-memory-agent.js";
+import { prepareProjectMemoryAgentRequest, captureProjectMemoryAgentContext, createProjectMemoryAgentToolExecutor } from "./project-memory-agent.js";
+import { type ProjectMemoryAgentContext } from "./project-memory-agent-types.js";
 import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
 
 const EXTRACTION_MAX_TURNS = 5;
 const EXTRACTION_DRAIN_TIMEOUT_MS = 60_000;
-
-interface ProjectMemoryExtractionSnapshot
-  extends MemoryExtractionSnapshot, ProjectMemoryAgentContext {}
-
-export type ProjectMemoryExtractionScheduler =
-  MemoryExtractionScheduler<ProjectMemoryExtractionSnapshot>;
 
 export function isProjectMemoryEnabled(this: AgentRuntimeInternal): boolean {
   return resolveEnabledProjectMemoryRoot(this.config, this.workspaceRoot) !== undefined;

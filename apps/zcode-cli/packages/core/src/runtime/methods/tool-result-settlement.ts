@@ -1,24 +1,9 @@
 import { traceContextToLogContext, TurnMachineImpl } from "../deps.js";
-import type {
-  MessageId,
-  PartId,
-  ToolCall,
-  ToolCallId,
-  ToolExecutionResult,
-  TraceContext,
-} from "../deps.js";
-import {
-  createStreamRecoveryAnchorId,
-  emitStreamRecoveryAnchor,
-  emitStreamingToolLedgerUpdate,
-  isErrorForToolResult,
-  isTurnCancellationError,
-  modelContentForToolResult,
-  stringifyToolResultOutput,
-} from "../helpers/index.js";
+import type { MessageId, PartId, ToolCall, ToolCallId, ToolExecutionResult, TraceContext } from "../deps.js";
+import { createStreamRecoveryAnchorId, emitStreamRecoveryAnchor, emitStreamingToolLedgerUpdate, isErrorForToolResult, isTurnCancellationError, modelContentForToolResult, stringifyToolResultOutput } from "../helpers/index.js";
 import { persistToolResultMediaAttachments } from "../helpers/tool-result-media-persistence.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { StreamedToolExecutionResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../model-execution-types.js";
 import { createRuntimeToolResultEntry } from "../../agent/message-history.js";
 import { recordBrowserTurnToolResult } from "../../repl/browser-turn-state.js";
 import { completedToolPartMetadata, mcpToolPartMetadata } from "./tool-part-metadata.js";

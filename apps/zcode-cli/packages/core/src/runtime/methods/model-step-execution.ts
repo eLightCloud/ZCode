@@ -7,8 +7,8 @@ import { getModelUsageTotalTokens } from "../deps.js";
 import { traceContextToLogContext } from "../deps.js";
 import type { MessageId } from "../deps.js";
 import type { ModelNetworkStatusEvent } from "../deps.js";
-import type { ModelToolContract } from "../deps.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+
+
 import { buildTurnFileChangeSummary } from "../helpers/index.js";
 import { createModelContextExceededFinishError } from "../helpers/index.js";
 import { finalizeSuspiciousEmptyModelResult } from "../helpers/index.js";
@@ -17,10 +17,10 @@ import { isSuspiciousEmptyModelResult } from "../helpers/index.js";
 import { objectKeys } from "../helpers/index.js";
 import { readRawFinishReason } from "../helpers/index.js";
 import { throwIfTurnAborted } from "../helpers/index.js";
-import type { DrainedPendingInputDiagnostics } from "../types.js";
-import type { RunModelTextRequestOptions } from "../types.js";
-import type { RuntimeModelStreamSnapshot } from "../types.js";
-import type { RuntimeModelTextResult } from "../types.js";
+
+
+import type { RuntimeModelStreamSnapshot } from "../model-execution-types.js";
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { captureAssistantPersistenceAnchor } from "./turn-stop.js";
 import { createStreamingToolCoordinator } from "./streaming-tool-coordinator.js";
@@ -39,7 +39,7 @@ import { buildAutomationCreateLimitFallback } from "./model-step-automation-limi
 import { recoverModelStepAfterContextExceeded } from "./model-step-context-recovery.js";
 import { settleModelStepTools } from "./model-step-tools.js";
 import { persistModelStepStart } from "./model-step-start-persistence.js";
-import type { ToolSearchExecutionContext } from "@zcode/contracts";
+
 
 export async function runModelBackedTurnStepImpl(
   this: AgentRuntimeInternal,

@@ -1,7 +1,7 @@
 import { createPartId } from "../deps.js";
 import type { MessageId, TraceContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { RuntimeModelStreamSnapshot } from "../types.js";
+import type { RuntimeModelStreamSnapshot } from "../model-execution-types.js";
 import { hasAssistantReasoningContent } from "./turn-output-token-continuation.js";
 
 export async function persistCancelledStreamSnapshot(

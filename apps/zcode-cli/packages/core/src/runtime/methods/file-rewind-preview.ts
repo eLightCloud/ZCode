@@ -1,16 +1,6 @@
-import type {
-  WorkspaceFileRewindIgnoredFile,
-  WorkspaceFileRewindPreview,
-  WorkspaceFileRewindSafeFile,
-  WorkspaceFileRewindUnsafeFile,
-  WorkspaceFileRewindUnsafeReason,
-} from "../types.js";
+import type { WorkspaceFileRewindIgnoredFile, WorkspaceFileRewindPreview, WorkspaceFileRewindSafeFile, WorkspaceFileRewindUnsafeFile, WorkspaceFileRewindUnsafeReason } from "../workspace-recovery-types.js";
 
-import {
-  FileAggregate,
-  FileCheckpointOperation,
-  IgnoredFileAggregate,
-} from "./file-rewind-types.js";
+import { FileAggregate, FileCheckpointOperation, IgnoredFileAggregate } from "./file-rewind-types.js";
 
 import type { WorkspaceFileRewindPlan } from "./file-rewind-types.js";
 

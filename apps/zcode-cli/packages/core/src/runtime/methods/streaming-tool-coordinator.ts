@@ -2,35 +2,17 @@ import { resolveDeferredToolCall } from "../../tool/deferred-call.js";
 import type { ToolSearchExecutionContext } from "@zcode/contracts";
 import { TurnMachineImpl, createPartId } from "../deps.js";
 
-import type {
-  MessageId,
-  Model,
-  ModelToolCall,
-  ToolCall,
-  ToolCallId,
-  TraceContext,
-} from "../deps.js";
+import type { MessageId, Model, ModelToolCall, ToolCall, ToolCallId, TraceContext } from "../deps.js";
 
-import {
-  emitStreamingToolLedgerUpdate,
-  requireRuntimeToolCallName,
-  throwIfTurnAborted,
-  toRecordInput,
-} from "../helpers/index.js";
+import { emitStreamingToolLedgerUpdate, requireRuntimeToolCallName, throwIfTurnAborted, toRecordInput } from "../helpers/index.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type { StreamedToolExecutionResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../model-execution-types.js";
 
 import { createSyntheticStreamedToolResult } from "./streaming-tool-synthetic-result.js";
 
-import {
-  beginStreamRecoveryAttempt,
-  emitStreamRecoveryRetryEvents,
-  emitStreamRecoveryStarted,
-  hasStreamRecoveryBudget,
-  recoverPartialAssistantOutputFailure,
-} from "./streaming-recovery.js";
+import { beginStreamRecoveryAttempt, emitStreamRecoveryRetryEvents, emitStreamRecoveryStarted, hasStreamRecoveryBudget, recoverPartialAssistantOutputFailure } from "./streaming-recovery.js";
 
 import { executeToolCallsForModelStep } from "./turn-tools.js";
 
@@ -38,22 +20,13 @@ import { mcpToolPartMetadata } from "./tool-part-metadata.js";
 
 import { persistPendingToolPart } from "./tool-part-persistence.js";
 
-import {
-  isAutomationMutationRestrictedTurn,
-  isOffPeakCreateRestrictedTurn,
-  recordModelHistoryRound,
-  type RegularTurnLoopState,
-} from "./turn-loop-state.js";
+import { isAutomationMutationRestrictedTurn, isOffPeakCreateRestrictedTurn, recordModelHistoryRound, type RegularTurnLoopState } from "./turn-loop-state.js";
 
 import { createRuntimeAssistantEntry } from "../../agent/message-history.js";
 
 import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
 
-import {
-  STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS,
-  collectCompletedResults,
-  raceWithTimeout,
-} from "./streaming-tool-settlement.js";
+import { STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS, collectCompletedResults, raceWithTimeout } from "./streaming-tool-settlement.js";
 
 const STREAMING_TOOL_EXECUTION_MODE = "readOnly";
 

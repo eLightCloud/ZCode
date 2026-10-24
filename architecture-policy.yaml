@@ -564,18 +564,6 @@ modules:
     layers: { app: . }
     owner: agent
 
-  - id: tool-result-settlement
-    roots:
-      - apps/zcode-cli/packages/core/src/runtime/tool-result-settlement
-      - apps/zcode-cli/packages/core/src/runtime/methods/tool-result-settlement.ts
-      - apps/zcode-cli/packages/core/tests/tool-result-settlement
-    managed: true
-    requires: [ zcode-cli ]
-    publicEntrypoints:
-      - apps/zcode-cli/packages/core/src/runtime/methods/tool-result-settlement.ts
-      - apps/zcode-cli/packages/core/src/runtime/tool-result-settlement/contract.ts
-    layers: { app: . }
-    owner: agent
   - id: channel-reply-tool
     roots:
       - apps/zcode-cli/packages/core/src/tool/channel-reply
@@ -826,8 +814,27 @@ modules:
       - apps/zcode-cli/packages/contracts/src/model/contract.ts
     layers:
       domain: .
-      adapters: [invocation-context.ts, index.ts, contract.ts, contract.example.ts, contract.test.ts]
+      adapters: [ invocation-context.ts, index.ts, contract.ts, contract.example.ts, contract.test.ts ]
     owner: model-protocol
+  # cli-runtime：由 architecture:adopt 登记
+  - id: cli-runtime
+    roots:
+      - apps/zcode-cli/packages/core/src/runtime
+      - apps/zcode-cli/packages/core/src/runtime.ts
+      - apps/zcode-cli/packages/core/tests/tool-result-settlement
+      - apps/zcode-cli/packages/core/tests/runtime-contract
+    managed: true
+    requires:
+      - gen-ui-service
+      - mcp-apps-protocol
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/runtime.ts
+      - apps/zcode-cli/packages/core/src/runtime/contract.ts
+    layers:
+      app: .
+    owner: native-execution
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

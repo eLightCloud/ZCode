@@ -2,19 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION, traceContextToLogContext } from "../deps.js";
 
-import type {
-  GoalStatus,
-  MessageId,
-  SessionEntryInfo,
-  SessionId,
-  SessionStorePort,
-  TargetCompletionVerificationPayload,
-  TraceContext,
-} from "../deps.js";
+import type { GoalStatus, MessageId, SessionEntryInfo, SessionId, SessionStorePort, TargetCompletionVerificationPayload, TraceContext } from "../deps.js";
 
 import type { AgentRuntimeInternal } from "../internal.js";
 
-import type { StableConversationForkGoalBoundary } from "../types.js";
+import type { StableConversationForkGoalBoundary } from "../workspace-recovery-types.js";
 
 import { stableForkError } from "./fork-model-selection.js";
 

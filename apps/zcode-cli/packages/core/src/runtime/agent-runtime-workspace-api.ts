@@ -1,21 +1,8 @@
 import type { MessageId, SessionEvent, SessionId, TraceContext, TurnId } from "./deps.js";
 
-import type {
-  ModelConnectivityTestInput,
-  WorkspaceGenerateTextInput,
-  WorkspaceGenerateTextResult,
-} from "./methods/workspace-generate-text.js";
+import type { ModelConnectivityTestInput, WorkspaceGenerateTextInput, WorkspaceGenerateTextResult } from "./methods/workspace-generate-text.js";
 
-import type {
-  ConversationBeforeInputForkOptions,
-  ConversationRewindResult,
-  SelectionSideChatCreateOptions,
-  StableConversationForkOptions,
-  WorkspaceCheckpointSummary,
-  WorkspaceFileRewindApplyResult,
-  WorkspaceFileRewindPreview,
-  WorkspaceForkResult,
-} from "./types.js";
+import type { ConversationBeforeInputForkOptions, ConversationRewindResult, SelectionSideChatCreateOptions, StableConversationForkOptions, WorkspaceCheckpointSummary, WorkspaceFileRewindApplyResult, WorkspaceFileRewindPreview, WorkspaceForkResult } from "./workspace-recovery-types.js";
 
 export interface AgentRuntimeWorkspaceApi {
   listWorkspaceCheckpoints(options?: { limit?: number }): Promise<WorkspaceCheckpointSummary[]>;

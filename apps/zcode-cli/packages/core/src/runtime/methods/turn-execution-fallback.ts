@@ -1,16 +1,9 @@
-import {
-  STREAM_RECOVERY_DISCARDED_ERROR_NAME,
-  STREAM_RECOVERY_DISCARDED_FINISH,
-  ModelErrorCode,
-  SessionEventType,
-  TurnMachineImpl,
-  traceContextToLogContext,
-} from "../deps.js";
+import { STREAM_RECOVERY_DISCARDED_ERROR_NAME, STREAM_RECOVERY_DISCARDED_FINISH, ModelErrorCode, SessionEventType, TurnMachineImpl, traceContextToLogContext } from "../deps.js";
 import type { MessageId, Model, TraceContext } from "../deps.js";
 import type { ModelSelection } from "@zcode/contracts";
 import { isModelContextExceededError, projectExecutionErrorPayload } from "../helpers/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { ModelExecutionContext } from "../types.js";
+import type { ModelExecutionContext } from "../model-execution-types.js";
 import { recordModelHistoryRound, type RegularTurnLoopState } from "./turn-loop-state.js";
 import { createTurnModel } from "./turn-model.js";
 

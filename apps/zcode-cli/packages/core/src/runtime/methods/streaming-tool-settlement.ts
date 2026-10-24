@@ -1,6 +1,6 @@
 import type { ModelToolCall } from "../deps.js";
 
-import type { StreamedToolExecutionResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../model-execution-types.js";
 
 export const STREAMING_TOOL_CANCEL_DRAIN_TIMEOUT_MS = 250;
 

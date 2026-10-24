@@ -6,14 +6,14 @@ import { createCoreError } from "../deps.js";
 import type { MessageId } from "../deps.js";
 import type { Model } from "../deps.js";
 import type { ModelToolCall } from "../deps.js";
-import type { ModelToolContract } from "../deps.js";
+
 import type { TraceContext } from "../deps.js";
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+
 import { projectExecutionErrorPayload } from "../helpers/index.js";
-import type { DrainedPendingInputDiagnostics } from "../types.js";
-import type { RunModelTextRequestOptions } from "../types.js";
-import type { RuntimeModelTextResult } from "../types.js";
-import type { StreamedToolExecutionResult } from "../types.js";
+
+
+import type { RuntimeModelTextResult } from "../model-execution-types.js";
+
 import type { AgentRuntimeInternal } from "../internal.js";
 import { executeToolCallsForModelStep } from "./turn-tools.js";
 import { AssistantPersistenceAnchor } from "./turn-stop.js";

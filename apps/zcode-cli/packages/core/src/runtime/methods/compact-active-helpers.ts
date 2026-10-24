@@ -1,17 +1,7 @@
-import {
-  COMPACT_PROMPT_TOO_LONG_USER_MESSAGE,
-  CoreErrorType,
-  createCoreError,
-  formatCompactSummary,
-} from "../deps.js";
+import { COMPACT_PROMPT_TOO_LONG_USER_MESSAGE, CoreErrorType, createCoreError, formatCompactSummary } from "../deps.js";
 import type { CompactTimelinePayload, SessionEvent, SessionEventType, TraceContext } from "../deps.js";
-import {
-  buildProviderRequestMessages,
-  createModelContextExceededFinishError,
-  isContextExceededFinishReason,
-  readRawFinishReason,
-} from "../helpers/index.js";
-import type { RuntimeModelTextResult, RunModelTextRequestOptions } from "../types.js";
+import { buildProviderRequestMessages, createModelContextExceededFinishError, isContextExceededFinishReason, readRawFinishReason } from "../helpers/index.js";
+import type { RuntimeModelTextResult, RunModelTextRequestOptions } from "../model-execution-types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 

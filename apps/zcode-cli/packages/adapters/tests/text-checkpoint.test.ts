@@ -257,7 +257,7 @@ describe("native text checkpoint contract", () => {
 it("rejects restored session identifiers that could escape the artifact namespace", async () => {
   const root = await mkdtemp(join(tmpdir(), "checkpoint-session-id-"));
   roots.push(root);
-  const store = createSqliteSessionStore({ dbPath: join(root, "target.sqlite") });
+  const store = await createSqliteSessionStore({ dbPath: join(root, "target.sqlite") });
   try {
     for (const id of [".", "..", "../outside", "nested/session"]) {
       const value = example();

@@ -223,7 +223,7 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
   expect(
     db
       .prepare(
-        "SELECT 1 FROM schema_migration WHERE id >= '0020' AND id != '0025_session_continuation'",
+        "SELECT 1 FROM schema_migration WHERE id >= '0020'",
       )
       .get(),
   ).toBeUndefined();

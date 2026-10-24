@@ -93,7 +93,7 @@ Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽�
 
 ### CLI 原生测试环境
 
-CLI 的 Node 原生测试以 `--test-concurrency=1` 逐文件运行，避免真实子进程启动与其他测试文件争用资源；保留全部用例及各自原超时。内置搜索的取消夹具在退出处理器就绪后写 PID，失败清理也必须取消并等待子进程结束，不能让首个断言失败留下存活句柄。
+TUI 测试使用已选定的 Node 通过 `--import tsx` 加载现有 loader，避免嵌套 CLI workspace 的 bin 搜索遗漏根工具；不依赖额外临时 PATH。CLI 的 Node 原生测试以 `--test-concurrency=1` 逐文件运行，避免真实子进程启动与其他测试文件争用资源；保留全部用例及各自原超时。内置搜索的取消夹具在退出处理器就绪后写 PID，失败清理也必须取消并等待子进程结束，不能让首个断言失败留下存活句柄。
 
 affected 只选择根 Vitest UT，工具 Node 测试另行执行，不代替 CLI 的原生 `pnpm --filter zcode-cli test`。CLI 的 CUA 同步测试使用明确传入的 `ZCODE_CUA_REPO` 定位 producer checkout，Turbo 的 test task 将其计入缓存键并传入测试；不记录本机绝对路径，不更改 producer pin。`VITEST_MAX_WORKERS` 同样传入并参与缓存键，资源受限的全量验证可显式限制单套件并发，不能靠扩大超时掩盖断言失败。
 

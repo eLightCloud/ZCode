@@ -1317,6 +1317,7 @@ describe("session persistence", () => {
 
   it("reads built-in expert workflow snapshots without requiring an external expert definition file", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "zcode-bootstrap-workflow-builtin-"));
+    const store = createSqliteSessionStore({ dbPath: join(tempRoot, "sessions.sqlite") });
     const workflowStore = createNodeWorkflowStore({
       rootDir: join(tempRoot, "cli", "workflows"),
     });
@@ -1361,8 +1362,11 @@ describe("session persistence", () => {
     try {
       await workflowStore.writeSnapshot(snapshot);
       const app = await createZCodeApp({
+        sessionStore: store,
         env: {
           ZCODE_STORAGE_DIR: tempRoot,
+          // storage.dir 不会重绑默认会话库，测试必须显式隔离持久化路径。
+          ZCODE_SESSION_DB_PATH: join(tempRoot, "sessions.sqlite"),
         },
         modelExecutor: {
           setModelIoFullRetentionEnabled() {},
@@ -1394,6 +1398,7 @@ describe("session persistence", () => {
         status: "completed",
       });
     } finally {
+      store.close();
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
@@ -2043,6 +2048,7 @@ describe("session persistence", () => {
 
   it("keeps sendInput(auto) queued until the command layer promotes it", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "zcode-send-input-steer-"));
+    const store = createSqliteSessionStore({ dbPath: join(tempRoot, "sessions.sqlite") });
     const modelStarted = deferred();
     const finishFirstModel = deferred();
     const liveEventTypes: string[] = [];
@@ -2051,7 +2057,12 @@ describe("session persistence", () => {
 
     try {
       const app = await createZCodeApp({
-        env: {},
+        sessionStore: store,
+        // 会话排队测试只使用自有临时库，不打开开发者的默认会话库。
+        env: {
+          ZCODE_STORAGE_DIR: tempRoot,
+          ZCODE_SESSION_DB_PATH: join(tempRoot, "sessions.sqlite"),
+        },
         eventStore: createInMemorySessionEventStore(),
         modelExecutor: {
           async generateText(request: { messages: Array<{ content: string; role: string }> }) {
@@ -2086,6 +2097,7 @@ describe("session persistence", () => {
           workingDirectory: tempRoot,
         },
         sessionId: createSessionId("send-input-steer"),
+        skipUserConfig: true,
       });
 
       const pendingTurn = app.submitPrompt("first prompt", {
@@ -2108,6 +2120,7 @@ describe("session persistence", () => {
       expect(liveEventTypes).toContain(SessionEventType.TurnSteerQueued);
       expect(liveEventTypes).not.toContain(SessionEventType.TurnSteerDrained);
     } finally {
+      store.close();
       await rm(tempRoot, { recursive: true, force: true });
     }
   });

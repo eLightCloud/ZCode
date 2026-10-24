@@ -548,6 +548,7 @@ describe("SQLite session store", () => {
         "0.16.5",
         "0.16.5",
         "0.16.5",
+        "0.16.9",
       ]);
       const modelUsageColumns = db.prepare("pragma table_info(model_usage)").all() as Array<{
         name: string;

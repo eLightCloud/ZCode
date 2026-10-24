@@ -161,6 +161,8 @@ export const ZCODE_MCP_NODE_REPL_CUA_APP_META_KEY = "zcode/nodeReplCuaApp";
 export const ZCODE_MCP_SERVER_REQUEST_ID_META_KEY = "zcode/officialMcpServerRequestId";
 
 export interface McpToolDescriptor {
+  /** Existing resource owner's read-only operation/confirmation check. */
+  effectCheckTool?: string;
   alwaysLoad?: boolean;
   searchHint?: string;
   serverName: string;

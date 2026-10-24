@@ -16,3 +16,5 @@
 私有 HTTP、Host 出站控制及字节存储仅是适配。Desktop continuous 与 Web
 replayable 的接纳仍由同一 Core 实现；schema / RLS、取消与未知 ACK、真实
 打包恢复、离线分支及独立迁移分别由对应回归证明。
+
+生产扫描仅使用 Host source；直接 store source 仅保留在 checks 夹具。永久版本拒绝按会话隔离因果后继，scope / transport 中止本轮；错误码保持低敏可诊断。

@@ -116,6 +116,26 @@ export function createConversationSyncHttpHandler(options: {
             });
           return;
         }
+        if (url.pathname === "/enroll") {
+          if (!options.continuation) throw new ConversationSyncError("blocked");
+          const parsed = z
+            .object({ session: z.string().min(1), version: z.string().min(1) })
+            .strict()
+            .safeParse(body);
+          const location = request.headers["x-zcode-sync-location"];
+          if (!parsed.success || typeof location !== "string")
+            throw new ConversationSyncError("invalid");
+          reply(
+            200,
+            await options.continuation.enroll(
+              scope,
+              location,
+              parsed.data.session,
+              parsed.data.version,
+            ),
+          );
+          return;
+        }
         if (url.pathname === "/continue" || url.pathname === "/continue-cancel") {
           if (!options.continuation) throw new ConversationSyncError("blocked");
           const parsed = (
@@ -205,6 +225,23 @@ export function createConversationSyncHttpHandler(options: {
           200,
           await options.continuation.options(scope, url.searchParams.get("session") ?? ""),
         );
+      } else if (request.method === "GET" && url.pathname === "/effects") {
+        reply(
+          200,
+          (await options.store.effects?.(scope, url.searchParams.get("session") ?? "")) ?? [],
+        );
+      } else if (request.method === "GET" && url.pathname === "/attachment") {
+        const item = await options.store.version(
+          scope,
+          url.searchParams.get("session") ?? "",
+          url.searchParams.get("version") ?? "",
+        );
+        const file = item?.files?.find((file) => file.uri === url.searchParams.get("uri"));
+        if (!file || !options.store.files) throw new ConversationSyncError("not_found");
+        reply(200, {
+          file,
+          dataBase64: Buffer.from(await options.store.files.read(scope, file)).toString("base64"),
+        });
       } else if (request.method === "GET" && url.pathname === "/transcript") {
         const session = url.searchParams.get("session") ?? "";
         const version = url.searchParams.get("version") ?? "";
@@ -218,15 +255,34 @@ export function createConversationSyncHttpHandler(options: {
                 version,
                 deleted: checkpoint === null,
                 title: item.management?.titleOverride ?? checkpoint?.session.title ?? "",
+                files: item.files ?? [],
+                effects: (await options.store.effects?.(scope, session)) ?? [],
                 messages:
-                  checkpoint?.messages.map((message) => ({
-                    id: message.info.id,
-                    role: message.info.role,
-                    text: message.parts
-                      .filter((part) => part.type === "text")
-                      .map((part) => part.text)
-                      .join("\n"),
-                  })) ?? [],
+                  checkpoint?.messages
+                    .filter(
+                      (message) =>
+                        message.info.semantics?.transcriptVisibility !== "hidden" &&
+                        !(message.info.role === "user" && message.info.visibility === "model-only"),
+                    )
+                    .map((message) => ({
+                      id: message.info.id,
+                      role: message.info.role,
+                      text: message.parts
+                        .flatMap((part) =>
+                          part.type === "text"
+                            ? part.ignored || part.metadata?.visibility === "model-only"
+                              ? []
+                              : [part.text]
+                            : part.type === "tool"
+                              ? [
+                                  part.state.status === "completed"
+                                    ? part.state.output
+                                    : part.state.error,
+                                ]
+                              : [],
+                        )
+                        .join("\n"),
+                    })) ?? [],
               }
             : null,
         );

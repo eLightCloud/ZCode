@@ -168,6 +168,7 @@ export async function serializeOutput(
         truncated: protectedProjection.truncated,
         budgetStrategy: effectiveBudget.strategy,
         artifactPath: resolvedArtifactPath,
+        ...(artifact?.uri ? { artifactUri: artifact.uri } : {}),
       };
     }
   }
@@ -186,6 +187,7 @@ export async function serializeOutput(
       truncated: false,
       budgetStrategy: effectiveBudget.strategy,
       artifactPath: resolvedArtifactPath,
+      ...(artifact?.uri ? { artifactUri: artifact.uri } : {}),
     };
   }
 
@@ -207,6 +209,7 @@ export async function serializeOutput(
         truncated: true,
         budgetStrategy: effectiveBudget.strategy,
         artifactPath: resolvedArtifactPath,
+        ...(artifact?.uri ? { artifactUri: artifact.uri } : {}),
       };
     }
   }
@@ -228,6 +231,7 @@ export async function serializeOutput(
     truncated: true,
     budgetStrategy: effectiveBudget.strategy,
     artifactPath: resolvedArtifactPath,
+    ...(artifact?.uri ? { artifactUri: artifact.uri } : {}),
   };
 }
 

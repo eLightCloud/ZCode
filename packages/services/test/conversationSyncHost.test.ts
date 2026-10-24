@@ -164,3 +164,31 @@ it("records the application bootstrap declaration before the first snapshot writ
     createConversationSyncHost({ index, agent }).capture("first-snapshot"),
   ).resolves.toHaveProperty("dataBase64", "opaque");
 });
+
+it("requires exact legacy preview before marking purpose and rejects directory or changed-summary metadata", async () => {
+  const task = meta("legacy");
+  await index.applyCliFacts({ meta: task });
+  const host = createConversationSyncHost({
+    index,
+    agent: {
+      captureTextCheckpoint: async () => ({
+        dataBase64: "opaque",
+        originCommandId: "original-command",
+      }),
+    },
+  });
+  const preview = await host.legacy!(task.taskId);
+  expect(preview.originCommandId).toBe("original-command");
+  await expect(
+    host.legacy!(task.taskId, true, { ...preview, dataBase64: "changed" }),
+  ).rejects.toThrow("legacy_changed");
+  expect((await index.getTaskMeta(task))?.workspacePurpose).toBeUndefined();
+  await host.legacy!(task.taskId, true, preview);
+  expect((await index.getTaskMeta(task))?.workspacePurpose).toBe("conversation");
+  await index.applyCliFacts({
+    meta: { ...task, taskId: "summary", changeSummary: { summary: "unsupported" } } as never,
+  });
+  await expect(host.legacy!("summary")).rejects.toThrow("unsupported_index");
+  await index.applyCliFacts({ meta: meta("directory", join(root, "project")) });
+  await expect(host.legacy!("directory")).rejects.toThrow("ineligible");
+});

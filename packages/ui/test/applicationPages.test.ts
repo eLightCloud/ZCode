@@ -9,12 +9,27 @@ import {
 } from "@/root/ApplicationPages.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+const navigation = vi.hoisted(() => ({
+  addTab: vi.fn(),
+  setActiveTask: vi.fn(),
+  local: vi.fn(async () => ({ workspacePath: "/synthetic-local" })),
+  remote: vi.fn(async () => ({ workspacePath: "/synthetic-remote" })),
+}));
 
 vi.mock("@/store/TabStoreProvider.js", () => ({
   useTabStore: () => undefined,
+  useTabStoreApi: () => ({ getState: () => ({ addTab: navigation.addTab }) }),
 }));
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
-  useWorkspaceServicesResolution: () => ({ services: {}, rpcReady: false }),
+  useBaseWorkspaceServices: () => ({ projectService: { prepareSession: navigation.local } }),
+  useWorkspaceServicesResolution: () => ({
+    services: { projectService: { prepareSession: navigation.remote } },
+    rpcReady: false,
+  }),
+}));
+vi.mock("@/store/zcodeSessionStore.js", () => ({
+  useZCodeSessionStore: (select: (state: unknown) => unknown) =>
+    select({ setActiveTaskId: navigation.setActiveTask }),
 }));
 vi.mock("@/DesktopOverlayWindowControls.js", () => ({
   DesktopOverlayWindowControls: () => null,
@@ -33,6 +48,36 @@ function element(pages: ApplicationPage[], headerPageId?: string) {
   });
 }
 describe("trusted application page lifecycle", () => {
+  it("opens a local continuation through the base Host even when a remote workspace is active", async () => {
+    navigation.local.mockClear();
+    navigation.remote.mockClear();
+    const pages: ApplicationPage[] = [
+      {
+        id: "history",
+        label: "History",
+        standalone: true,
+        render: (context) =>
+          createElement(
+            "button",
+            { onClick: () => void context.openConversation?.("same-session") },
+            "Open exact conversation",
+          ),
+      },
+    ];
+    render(element(pages, "history"));
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open exact conversation" }));
+    await vi.waitFor(() => expect(navigation.local).toHaveBeenCalledOnce());
+    expect(navigation.remote).not.toHaveBeenCalled();
+    expect(navigation.addTab).toHaveBeenCalledWith("/synthetic-local", {
+      workspacePurpose: "conversation",
+    });
+    expect(navigation.setActiveTask).toHaveBeenCalledWith(
+      "/synthetic-local",
+      "same-session",
+      undefined,
+    );
+  });
   it("opens an explicit standalone header target and preserves the underlying draft", () => {
     const pages: ApplicationPage[] = [
       { id: "admin", label: "Admin", render: () => createElement("p", null, "admin content") },

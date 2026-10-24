@@ -12,6 +12,9 @@ export interface ConversationContinuationLabels {
   keepModel: string;
   modelWarning: string;
   capability: string;
+  requiredSkill?: string;
+  modelUnavailable?: string;
+  filesUnavailable?: string;
   target: string;
   prepareTarget: string;
   choose: string;
@@ -45,7 +48,7 @@ export function ConversationContinuation({
   session: string;
   version: string;
   labels: ConversationContinuationLabels;
-  onReady?(session: string, location: string, instanceId: string): void;
+  onReady?(session: string, location: string, instanceId?: string): void;
 }) {
   const state = useConversationContinuation(reader, session);
   const [target, setTarget] = useState("");
@@ -75,21 +78,27 @@ export function ConversationContinuation({
               ? labels.forwardOnly
               : result?.status === "stale"
                 ? labels.stale
-                : result?.reason === "capability"
-                  ? labels.capability
-                  : result?.reason === "busy"
-                    ? labels.busy
-                    : result
-                      ? labels.waiting
-                      : null;
+                : result?.reason === "required_skill"
+                  ? (labels.requiredSkill ?? labels.capability)
+                  : result?.reason === "model"
+                    ? (labels.modelUnavailable ?? labels.capability)
+                    : result?.reason === "files"
+                      ? (labels.filesUnavailable ?? labels.capability)
+                      : result?.reason === "capability"
+                        ? labels.capability
+                        : result?.reason === "busy"
+                          ? labels.busy
+                          : result
+                            ? labels.waiting
+                            : null;
   return (
     <div
       className="border-border space-y-3 rounded-md border p-3 text-ui-base"
       aria-busy={state.busy}
     >
       {message && <p role={state.error ? "alert" : "status"}>{message}</p>}
-      {result?.status === "ready" && readyTarget?.instanceId && onReady && (
-        <Button onClick={() => onReady(session, result.location!, readyTarget.instanceId!)}>
+      {result?.status === "ready" && readyTarget && onReady && (
+        <Button onClick={() => onReady(session, result.location!, readyTarget.instanceId)}>
           {labels.open}
         </Button>
       )}

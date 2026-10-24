@@ -1,3 +1,5 @@
+import { conversationArtifactUriSchema } from "@zcode/shared";
+import { z } from "zod";
 import {
   SESSION_ENTRY_EXECUTION_STATE,
   SESSION_ENTRY_MODEL_SELECTION,
@@ -10,8 +12,17 @@ import {
   type TextCheckpoint,
 } from "@zcode/contracts";
 
-function unsupported(): never {
-  throw new TextCheckpointError("unsupported_state");
+export const checkpointOriginSchema = z
+  .object({
+    missingTitleSource: z.boolean(),
+    missingTitleMessageID: z.boolean(),
+    title: z.string(),
+    titleSource: z.string().nullable(),
+    titleMessageID: z.string().nullable(),
+  })
+  .strict();
+function unsupported(cause?: unknown): never {
+  throw new TextCheckpointError("unsupported_state", cause === undefined ? undefined : { cause });
 }
 function empty(value: unknown): boolean {
   return (
@@ -44,11 +55,12 @@ export function projectTextCheckpoint(
   messages: MessageWithParts[],
   entries: SessionEntryInfo[],
   inputs: SessionInputRecord[],
+  todos?: unknown[],
 ): TextCheckpoint {
   if (
-    session.taskType !== "interactive" ||
-    session.parentID ||
-    session.revert ||
+    !["interactive", "fork"].includes(session.taskType) ||
+    (session.revert &&
+      (session.revert.kind !== "conversation_rewind" || session.revert.scope !== "conversation")) ||
     session.time.compacting ||
     // 软删除已归原生会话 owner；导出不得把删除会话当成可恢复的活动文本。
     session.time.deleted ||
@@ -57,17 +69,39 @@ export function projectTextCheckpoint(
     unsupported();
   const selected = entries.filter((entry) => entry.type === SESSION_ENTRY_MODEL_SELECTION);
   if (selected.length !== 1) unsupported();
+  let origin: z.infer<typeof checkpointOriginSchema> | undefined;
+  let execution: unknown;
+  let branchEffects: unknown;
+  const commandFacts: unknown[] = [];
   for (const entry of entries) {
     if (entry.type === SESSION_ENTRY_MODEL_SELECTION) continue;
+    if (entry.type === "v4/command_fact") {
+      commandFacts.push({ id: entry.id, time: entry.time, data: entry.data });
+      continue;
+    }
+    if (entry.type === "runtime/checkpoint_origin") {
+      const parsed = checkpointOriginSchema.safeParse(entry.data);
+      if (!parsed.success) unsupported();
+      origin = parsed.data;
+      continue;
+    }
+    if (entry.type === "runtime/branch_effects") {
+      branchEffects =
+        entry.data && typeof entry.data === "object" && "effects" in entry.data
+          ? entry.data.effects
+          : entry.data;
+      continue;
+    }
     if (entry.type !== SESSION_ENTRY_EXECUTION_STATE) unsupported();
     const state = entry.data as { mode?: unknown; planEnabled?: unknown } | null;
     if (
       !state ||
       !["build", "guarded"].includes(String(state.mode)) ||
-      state.planEnabled !== false ||
+      typeof state.planEnabled !== "boolean" ||
       Object.keys(state).some((key) => !["mode", "planEnabled"].includes(key))
     )
       unsupported();
+    execution = { id: entry.id, time: entry.time, data: entry.data };
   }
   const omitted = new Set(messages.filter(regenerable).map((message) => String(message.info.id)));
   const portableMessages = messages
@@ -99,16 +133,57 @@ export function projectTextCheckpoint(
         portableInfo = { ...rest, anchor: commonAnchor, ...(empty(metadata) ? {} : { metadata }) };
       } else {
         const { path: _sourcePath, metadata, ...rest } = original;
-        if (!empty(metadata)) unsupported();
-        portableInfo = { ...rest, anchor: commonAnchor };
+        portableInfo = { ...rest, anchor: commonAnchor, ...(empty(metadata) ? {} : { metadata }) };
       }
       return {
         info: portableInfo,
-        parts: parts.map((item) => {
-          const { sessionID, messageID, ...rest } = item;
-          if (sessionID !== session.id || messageID !== info.id) unsupported();
-          return rest;
-        }),
+        parts: parts
+          .filter((item) => item.type !== "reasoning")
+          .map((item) => {
+            const { sessionID, messageID, ...rest } = item;
+            if (sessionID !== session.id || messageID !== info.id) unsupported();
+            if (item.type === "tool") {
+              if (item.state.status !== "completed" && item.state.status !== "error") unsupported();
+              const state = { ...item.state };
+              const display = state.metadata?.display;
+              if (
+                display &&
+                typeof display === "object" &&
+                "kind" in display &&
+                display.kind === "bash_output" &&
+                "outputPath" in display &&
+                display.outputPath
+              )
+                unsupported();
+              if (
+                state.metadata?.serialization &&
+                typeof state.metadata.serialization === "object"
+              ) {
+                const serialization = {
+                  ...(state.metadata.serialization as Record<string, unknown>),
+                };
+                const uri = serialization.artifactUri ?? serialization.artifactPath;
+                if (
+                  serialization.artifactPath !== undefined &&
+                  !conversationArtifactUriSchema.safeParse(uri).success
+                )
+                  unsupported();
+                if (uri) {
+                  serialization.artifactUri = uri;
+                  serialization.artifactPath = uri;
+                }
+                state.metadata = { ...state.metadata, serialization };
+              }
+              if (state.status === "completed" && state.attachments)
+                state.attachments = state.attachments.map((file) => {
+                  const { sessionID: owner, messageID: message, ...portable } = file;
+                  if (owner !== session.id || message !== info.id) unsupported();
+                  return portable as typeof file;
+                });
+              return { ...rest, state };
+            }
+            return rest;
+          }),
       };
     });
   const portableInputs = inputs.map((input) => {
@@ -133,18 +208,55 @@ export function projectTextCheckpoint(
       },
     };
   });
+  const preserveMissingTitle = origin?.title === session.title;
+  const titleSource =
+    preserveMissingTitle &&
+    origin?.missingTitleSource &&
+    origin.titleSource === (session.titleSource ?? null)
+      ? undefined
+      : session.titleSource;
+  const titleMessageID =
+    preserveMissingTitle &&
+    origin?.missingTitleMessageID &&
+    origin.titleMessageID === (session.titleMessageID ?? null)
+      ? undefined
+      : session.titleMessageID;
   const parsed = textCheckpointSchema.safeParse({
     format: "zcode.text-checkpoint",
-    version: portableMessages.some((message) => message.parts.some((part) => part.type === "file"))
-      ? 3
-      : portableMessages.some(
-            (message) => (message.info as { metadata?: unknown }).metadata !== undefined,
-          ) || portableInputs.some((input) => fullIntent(input.payload.conversationInputIntent))
-        ? 2
-        : 1,
+    version:
+      commandFacts.length ||
+      session.parentID ||
+      session.revert ||
+      titleSource ||
+      session.lastOutcome ||
+      branchEffects ||
+      execution ||
+      todos?.length ||
+      portableMessages.some(
+        (m) =>
+          m.parts.some((p) => ["tool", "compaction"].includes(p.type)) ||
+          (m.info as { synthetic?: boolean; summary?: unknown }).synthetic ||
+          (m.info as { summary?: unknown }).summary,
+      )
+        ? 4
+        : portableMessages.some((message) => message.parts.some((part) => part.type === "file"))
+          ? 3
+          : portableMessages.some(
+                (message) => (message.info as { metadata?: unknown }).metadata !== undefined,
+              ) || portableInputs.some((input) => fullIntent(input.payload.conversationInputIntent))
+            ? 2
+            : 1,
     session: {
       id: session.id,
       traceID: session.traceID,
+      ...(session.parentID ? { parentID: session.parentID, taskType: session.taskType } : {}),
+      ...(session.revert ? { revert: session.revert } : {}),
+      ...(titleSource ? { titleSource } : {}),
+      ...(titleMessageID ? { titleMessageID } : {}),
+      ...(session.lastOutcome ? { lastOutcome: session.lastOutcome } : {}),
+      ...(session.lastOutcomeInputId
+        ? { lastOutcomeInputId: session.lastOutcomeInputId, lastOutcomeAt: session.lastOutcomeAt }
+        : {}),
       slug: session.slug,
       title: session.title,
       version: session.version,
@@ -154,7 +266,11 @@ export function projectTextCheckpoint(
     modelSelectionEntryId: selected[0]!.id,
     messages: portableMessages,
     inputs: portableInputs,
+    ...(execution ? { execution } : {}),
+    ...(branchEffects ? { branchEffects } : {}),
+    ...(commandFacts.length ? { commandFacts } : {}),
+    ...(todos?.length ? { todos } : {}),
   });
-  if (!parsed.success) unsupported();
+  if (!parsed.success) unsupported(parsed.error);
   return parsed.data;
 }

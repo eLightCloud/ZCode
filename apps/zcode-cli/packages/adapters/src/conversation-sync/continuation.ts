@@ -127,7 +127,16 @@ export function createConversationContinuation(options: {
           canonical([...new Set(input.candidates)].sort())
         )
           return progress(input, "stale", "preparing", "changed");
-        await stageRuntime(store, scope, target, input.session, input.operation, saved, "offline", input.targetModel);
+        await stageRuntime(
+          store,
+          scope,
+          target,
+          input.session,
+          input.operation,
+          saved,
+          "offline",
+          input.targetModel,
+        );
         const committed = await journal.commitOffline(scope, input.session, input.operation);
         if (committed.result?.status === "cancelling")
           return cancel(scope, input.session, input.operation);
@@ -180,7 +189,16 @@ export function createConversationContinuation(options: {
           input.operation,
           input.version,
         );
-        await stageRuntime(store, scope, target, input.session, input.operation, final, "primary", input.targetModel);
+        await stageRuntime(
+          store,
+          scope,
+          target,
+          input.session,
+          input.operation,
+          final,
+          "primary",
+          input.targetModel,
+        );
         state = await current(scope, input.session);
         const receipt = await command(scope, input, "grant", {
           kind: "grant",
@@ -225,7 +243,16 @@ export function createConversationContinuation(options: {
         canonical([...state.candidates].sort()) !== canonical([...new Set(input.candidates)].sort())
       )
         return progress(input, "stale", "preparing", "changed");
-      await stageRuntime(store, scope, target, input.session, input.operation, saved, "primary", input.targetModel);
+      await stageRuntime(
+        store,
+        scope,
+        target,
+        input.session,
+        input.operation,
+        saved,
+        "primary",
+        input.targetModel,
+      );
       const receipt = await command(scope, input, "select", {
         kind: "select",
         revision: state.revision,
@@ -257,7 +284,17 @@ export function createConversationContinuation(options: {
         input,
         "waiting",
         granted ? "granted" : "settling",
-        runtimeCode(error) === "busy" ? "busy" : ["model_unavailable", "unsupported"].includes(runtimeCode(error)) ? "capability" : "unavailable",
+        runtimeCode(error) === "busy"
+          ? "busy"
+          : runtimeCode(error) === "required_skill_unavailable"
+            ? "required_skill"
+            : runtimeCode(error) === "model_unavailable"
+              ? "model"
+              : runtimeCode(error).startsWith("artifact_")
+                ? "files"
+                : runtimeCode(error) === "unsupported"
+                  ? "capability"
+                  : "unavailable",
         granted?.state.pending?.version ?? input.version,
       );
     }
@@ -266,6 +303,39 @@ export function createConversationContinuation(options: {
   return {
     run,
     cancel,
+    async enroll(scope: SyncScope, location: string, session: string, version: string) {
+      const state = await current(scope, session);
+      const operation = step("enroll:" + session + ":" + version, location);
+      const pending = await journal.read(scope, session, operation);
+      if (pending) return run(scope, pending.intent);
+      // 仅首次在线登记，不因重连抢占已有 owner，不把分歧或外部版本当本机事实。
+      if ((await journal.offlineLocations(scope, session)).length) return null;
+      if (
+        state.active ||
+        state.pending ||
+        state.selected ||
+        state.candidates.length !== 1 ||
+        state.candidates[0] !== version
+      )
+        return null;
+      const saved = await store.version(scope, session, version);
+      if (!saved?.checkpoint || saved.location !== location || saved.generation !== 0)
+        throw new ConversationSyncError("blocked");
+      const intent: ConversationContinuationIntent = {
+        session,
+        operation,
+        kind: "select",
+        target: location,
+        version,
+        revision: state.revision,
+        candidates: state.candidates,
+      };
+      // 与 offline 接纳共用会话行锁；预检后发生离线激活也不能被自动登记抢占。
+      await journal.begin(scope, intent, true);
+      const value = await run(scope, intent);
+      if (value.status === "stale") await cancel(scope, session, operation);
+      return value;
+    },
     async options(scope: SyncScope, session: string) {
       const state = await current(scope, session),
         pending = await journal.read(scope, session);

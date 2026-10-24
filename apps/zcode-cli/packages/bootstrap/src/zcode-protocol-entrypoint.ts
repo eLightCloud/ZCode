@@ -1,3 +1,6 @@
+import { createAppSkillPort } from "./app/app-agent-assembly.js";
+import { createTraceId, type TraceId } from "@zcode/contracts";
+import { requiredPluginFromFacts } from "@zcode/core";
 import { createConfig, resolvePath } from "@zcode/adapters/config";
 import { createAppArtifactStore } from "./app/artifact-store.js";
 import { continuationModelValidator } from "./zcode-protocol/continuation-model.js";
@@ -278,6 +281,44 @@ export async function runZCodeProtocolAgent(
     const server = (serverForCleanup = new ZCodeProtocolAgentServer({
       continuationArtifacts: createAppArtifactStore(resolvePath(configResult.config.storage.dir)),
       validateContinuationSelection: continuationModelValidator(modelSelectionFacade),
+      validateContinuationDependencies: async (checkpoint) => {
+        const pluginId = requiredPluginFromFacts(
+          checkpoint.messages.map((message) => ({
+            text: message.parts
+              .flatMap((part) => (part.type === "text" ? [part.text] : []))
+              .join("\n"),
+            realUser:
+              message.info.role === "user" &&
+              !message.info.synthetic &&
+              message.info.semantics?.kind !== "compact_summary",
+            pluginReference:
+              message.info.role === "user" && message.info.source === "plugin_reference",
+          })),
+        );
+        if (!pluginId) return;
+        const port = createAppSkillPort({
+          options: {
+            env: options.env,
+            providerRegistry: activeProviderRegistryRuntime.runtime.registryService,
+          },
+          configResult,
+          workingDirectory: options.cwd ?? process.cwd(),
+          cliStorageRoot: resolvePath(configResult.config.storage.dir),
+          logger,
+          startupTimer,
+        });
+        if (!port?.loadRequiredPluginSkill)
+          throw new Error("continuation_required_skill_unavailable");
+        await port.loadRequiredPluginSkill(
+          {
+            pluginId,
+            workingDirectory: options.cwd ?? process.cwd(),
+            maxBytes: 100000,
+            trace: { traceId: (checkpoint.session.traceID as TraceId) ?? createTraceId() },
+          },
+          {},
+        );
+      },
       createZCodeApp: (appOptions = {}) =>
         createZCodeApp({
           ...applyProtocolProviderRegistry(

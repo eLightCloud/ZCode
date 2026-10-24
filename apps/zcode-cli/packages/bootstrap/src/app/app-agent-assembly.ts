@@ -136,54 +136,17 @@ export function createAppAgentRuntime(
     contextSourcePort:
       options.contextSourcePort ?? createNodeContextSourceAdapter({ env: options.env }),
     deliverableStore,
-    skillPort:
-      configResult.config.features.skill && configResult.config.skills.enabled
-        ? (options.skillPort ??
-          createNodeSkillAdapter({
-            additionalDirectories: options.additionalDirectories,
-            resolveRequiredPlugins: () => {
-              const current = resolveEffectiveConfigResult(
-                createConfig({
-                  env: options.env,
-                  projectConfigPath: options.projectConfigPath,
-                  workingDirectory,
-                  workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
-                  skipUserConfig: options.skipUserConfig,
-                  userConfigPath: options.userConfigPath,
-                  cliOverrides: createConfigCliOverrides(options),
-                }),
-                options,
-              );
-              const outcome = resolveStartupPlugins({
-                cliStorageRoot,
-                configResult: current,
-                env: options.env,
-                logger,
-                options,
-                startupTimer,
-                workingDirectory,
-              });
-              if (!current.config.features.skill || !current.config.skills.enabled) {
-                outcome.plugins = [];
-                outcome.skillRoots = [];
-              }
-              return {
-                outcome,
-                disabledPaths: collectDisabledPaths(current.config.skillOverrides),
-              };
-            },
-            extraRoots: configResult.config.skills.roots,
-            extraResolvedRoots: [...pluginOutcome.skillRoots, ...bundledSkillRoots],
-            disabledPaths: [
-              ...collectDisabledPaths(configResult.config.skillOverrides),
-              // 动态工作流关闭时不提供 dynamic-workflows 技能：
-              // 十个工具都不在场，再让模型读到「怎么写工作流脚本」只会诱导它去调不存在的工具。
-              ...(runtimeConfig.dynamicWorkflowEnabled === false
-                ? collectDynamicWorkflowDisabledSkillPaths(bundledSkillRoots)
-                : []),
-            ],
-          }))
-        : undefined,
+    skillPort: createAppSkillPort({
+      options,
+      configResult,
+      workingDirectory,
+      cliStorageRoot,
+      logger,
+      startupTimer,
+      pluginSkillRoots: pluginOutcome.skillRoots,
+      bundledSkillRoots,
+      dynamicWorkflowEnabled: runtimeConfig.dynamicWorkflowEnabled,
+    }),
     mcpPort,
     eventSink: options.eventSink,
     onOffPeakLifecycleEvent: options.onOffPeakLifecycleEvent
@@ -208,4 +171,75 @@ export function createAppAgentRuntime(
     traceContext,
   });
   return runtime;
+}
+
+/** One configured skill reader for runtime admission and continuation preflight. */
+export function createAppSkillPort({
+  options,
+  configResult,
+  workingDirectory,
+  cliStorageRoot,
+  logger,
+  startupTimer,
+  pluginSkillRoots = [],
+  bundledSkillRoots = [],
+  dynamicWorkflowEnabled,
+}: {
+  options: ZCodeAppOptions;
+  configResult: ConfigResult;
+  workingDirectory: string;
+  cliStorageRoot: string;
+  logger: Logger;
+  startupTimer: StartupTimer;
+  pluginSkillRoots?: SkillRoot[];
+  bundledSkillRoots?: SkillRoot[];
+  dynamicWorkflowEnabled?: boolean;
+}) {
+  return configResult.config.features.skill && configResult.config.skills.enabled
+    ? (options.skillPort ??
+        createNodeSkillAdapter({
+          additionalDirectories: options.additionalDirectories,
+          resolveRequiredPlugins: () => {
+            const current = resolveEffectiveConfigResult(
+              createConfig({
+                env: options.env,
+                projectConfigPath: options.projectConfigPath,
+                workingDirectory,
+                workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
+                skipUserConfig: options.skipUserConfig,
+                userConfigPath: options.userConfigPath,
+                cliOverrides: createConfigCliOverrides(options),
+              }),
+              options,
+            );
+            const outcome = resolveStartupPlugins({
+              cliStorageRoot,
+              configResult: current,
+              env: options.env,
+              logger,
+              options,
+              startupTimer,
+              workingDirectory,
+            });
+            if (!current.config.features.skill || !current.config.skills.enabled) {
+              outcome.plugins = [];
+              outcome.skillRoots = [];
+            }
+            return {
+              outcome,
+              disabledPaths: collectDisabledPaths(current.config.skillOverrides),
+            };
+          },
+          extraRoots: configResult.config.skills.roots,
+          extraResolvedRoots: [...pluginSkillRoots, ...bundledSkillRoots],
+          disabledPaths: [
+            ...collectDisabledPaths(configResult.config.skillOverrides),
+            // 动态工作流关闭时不提供 dynamic-workflows 技能：
+            // 十个工具都不在场，再让模型读到「怎么写工作流脚本」只会诱导它去调不存在的工具。
+            ...(dynamicWorkflowEnabled === false
+              ? collectDynamicWorkflowDisabledSkillPaths(bundledSkillRoots)
+              : []),
+          ],
+        }))
+    : undefined;
 }

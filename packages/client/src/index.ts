@@ -1,4 +1,7 @@
-export { setApplicationInputPreparation } from "./applicationInputPreparation.js";
+export {
+  setApplicationInputPreparation,
+  ApplicationInputRejected,
+} from "./applicationInputPreparation.js";
 export { RemoteServiceAccess } from "./remoteServiceAccess.js";
 export { connectViaProtocol, connectViaWebSocket } from "./websocket.js";
 export type { WebSocketConnectionCloseEvent } from "./websocket.js";

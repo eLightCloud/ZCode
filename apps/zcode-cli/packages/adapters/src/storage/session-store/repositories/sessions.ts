@@ -92,6 +92,8 @@ export async function updateSession(
   set("title_message_id", input.titleMessageID);
   set("share_url", input.shareURL);
   set("last_outcome", input.lastOutcome);
+  set("last_outcome_input_id", input.lastOutcomeInputId);
+  set("last_outcome_at", input.lastOutcomeAt);
   if (input.summary !== undefined) {
     set("summary_additions", input.summary?.additions ?? null);
     set("summary_deletions", input.summary?.deletions ?? null);

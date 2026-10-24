@@ -1,5 +1,15 @@
 # Tool Change Chain Spec
 
+## 跨分支效果核对（2026-10-25）
+
+原生中心从已保存版本收集 MCP 效果引用，选择正文不删除该上下文。恢复只把低敏引用写入
+原生 session entry，不复制授权或重放工具。MCP 可通过 tools/list 的 `zcode/effectCheckTool`
+声明同一 server 的只读核对工具；新写动作遇到该 server 的其它分支引用时必须先查询它。
+核对工具必须有 readOnlyHint；返回绑定准确新动作的 proceed 或准确原回执 replay 才继续，
+unknown / blocked / 不支持核对均拒绝该动作。普通“继续”不构成资源业务确认；业务 owner
+负责当前身份、精确目标、请求键和确认政策。不新增通用业务账本、全局去重或个人工具 Gateway。
+来源效果仍标记为资源报告，只有当前资源核对回执可以支撑本次动作；模型不能自报成功。
+
 ## 会话登记附件的固定字节恢复（2026-10-24）
 
 复用原生 AttachmentRef producer 与 artifact store；仅增加可信恢复 facade 的 create-only 固定 URI 写入，

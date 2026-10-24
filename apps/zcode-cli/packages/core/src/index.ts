@@ -194,3 +194,5 @@ export type {
   SessionEventSink,
 } from "@zcode/contracts";
 export { LogLevel, SessionEventType } from "@zcode/contracts";
+
+export { requiredPluginFromFacts } from "./runtime/methods/required-plugin.js";

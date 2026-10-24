@@ -44,6 +44,8 @@ export interface SessionInfo {
   titleMessageID?: MessageId;
   version: string;
   lastOutcome?: SessionLastOutcome;
+  lastOutcomeInputId?: string;
+  lastOutcomeAt?: number;
   shareURL?: string;
   summaryAdditions?: number;
   summaryDeletions?: number;
@@ -136,6 +138,8 @@ export interface ForkCommitBundle {
 export interface UpdateSessionInput {
   id: SessionId;
   lastOutcome?: SessionLastOutcome;
+  lastOutcomeInputId?: string | null;
+  lastOutcomeAt?: number;
   directory?: string;
   path?: string | null;
   timeUpdated?: number;

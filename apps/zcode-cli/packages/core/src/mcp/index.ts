@@ -1,5 +1,7 @@
 // MCP tool bridge - projects MCP descriptors into core tool entries
 
+import { conversationEffectSchema } from "@zcode/shared";
+import { reconcileBranchEffects } from "./branch-effects.js";
 import {
   SessionEventType,
   resolveMcpToolVisibility,
@@ -208,6 +210,7 @@ export function createMcpToolEntry(
       description: descriptor.description,
       name,
       mcpPresentation: {
+        readOnly,
         serverName: descriptor.serverName,
         toolName: descriptor.toolName,
         ...(descriptor.description ? { description: descriptor.description } : {}),
@@ -250,6 +253,15 @@ export function createMcpToolEntry(
     },
     handler: async (input, context) => {
       const startedAt = Date.now();
+      const original = await reconcileBranchEffects({
+        descriptor,
+        readOnly,
+        port: mcpPort,
+        context,
+        timeoutMs,
+        arguments: toMcpRuntimeArguments(input, isCuaAppObservation),
+      });
+      if (original) return original;
       const result = await mcpPort.callTool(
         {
           serverName: descriptor.serverName,
@@ -290,6 +302,17 @@ export function createMcpToolEntry(
             : {}),
         },
       );
+      // 效果仅是当前资源报告；不能借返回字段冒充另一 server 的回执。
+      if (result._meta && "zcode/effect" in result._meta) {
+        const effect = conversationEffectSchema.safeParse(result._meta["zcode/effect"]);
+        const { ["zcode/effect"]: _unverifiedEffect, ...metadata } = result._meta;
+        result._meta = {
+          ...metadata,
+          ...(effect.success
+            ? { "zcode/effect": { ...effect.data, server: descriptor.serverName } }
+            : {}),
+        };
+      }
       // MCP server 会返回大 base64 图片；resultBudget 只看到图片占位文本，
       // 必须在 handler 阶段保存副本并替换模型可见内容，避免 provider 请求体被打爆。
       return normalizeMcpToolResultForModel({

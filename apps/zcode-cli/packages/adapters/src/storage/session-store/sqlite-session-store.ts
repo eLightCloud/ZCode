@@ -159,6 +159,7 @@ export class SqliteSessionStore
       });
     }
     try {
+      db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
       const migration = await runSqliteSessionMigrationsAsync(
         db,
         dbPath,

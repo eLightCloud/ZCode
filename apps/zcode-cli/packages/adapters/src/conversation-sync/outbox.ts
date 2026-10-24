@@ -17,17 +17,42 @@ import {
 import { canonical, digest } from "./canonical.js";
 
 export interface ConversationSyncOutbox {
+  legacyAttribution(
+    scope: SyncScope,
+    session: string,
+  ): { checkpoint: string; operation: string } | null;
+  attributeLegacy(
+    scope: SyncScope,
+    session: string,
+    checkpoint: string,
+    operation: string,
+    firstCommand?: string,
+  ): void;
+  checkLegacyOwner(scope: SyncScope, session: string, firstCommand?: string): void;
+  rejection(
+    scope: SyncScope,
+    session: string,
+  ): { operation: string; code: "invalid" | "conflict" | "blocked" | "stale" | "not_found" } | null;
+  reject(
+    scope: SyncScope,
+    session: string,
+    operation: string,
+    code: "invalid" | "conflict" | "blocked" | "stale" | "not_found",
+  ): void;
+  retry(scope: SyncScope, session: string): void;
   location(): string;
   controlIdentity(enroll?: boolean): NativeControlIdentityView;
   signControlChallenge(nonce: string): string;
   bindInput(scope: SyncScope, command: string, session: string | null): void;
-  ownsSession(scope: SyncScope, session: string, command?: string): boolean;
+  ownsSession(scope: SyncScope, session: string, command?: string, parent?: string): boolean;
   stage(scope: SyncScope, request: SyncRequest): void;
   pending(scope: SyncScope): SyncRequest[];
   latest(scope: SyncScope, session: string): SyncRequest | null;
   knownSessions(scope: SyncScope): string[];
   baseline(scope: SyncScope, session: string): SyncVersion | null;
   branchGeneration(scope: SyncScope, session: string): number;
+  /** Local-only divergence; does not grant or revoke any center/runtime owner. */
+  markOffline(scope: SyncScope, session: string): void;
   advanceGeneration(scope: SyncScope, session: string, generation: number): void;
   /** Exact verified selected version, not a fabricated upload acknowledgement. */
   adopt(
@@ -40,13 +65,15 @@ export interface ConversationSyncOutbox {
   branchMode(scope: SyncScope, session: string): "primary" | "offline";
   acknowledge(scope: SyncScope, receipt: SyncReceipt): void;
   watermark(scope: SyncScope, session: string): SyncReceipt | null;
+  /** Exact acknowledged upload or verified adoption; independent of mutable candidate membership. */
+  savedVersion(scope: SyncScope, session: string): string | null;
   /** Cursor and staged versions share one SQLite transaction; caller re-scans after source commit. */
   capture(scope: SyncScope, cursor: number, expectedCursor: number, requests: SyncRequest[]): void;
   cursor(scope: SyncScope): number;
   close(): void;
 }
 const OUTBOX_APPLICATION_ID = 0x5a435359;
-const OUTBOX_SCHEMA_VERSION = 5;
+const OUTBOX_SCHEMA_VERSION = 6;
 const OUTBOX_BUSY_TIMEOUT_MS = 5000;
 
 /** Separate native sync metadata file; never opens or migrates a session/plugin database. */
@@ -57,7 +84,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     const application = Number(db.prepare("pragma application_id").get()?.application_id);
     const tables = db.prepare("select name from sqlite_master where type='table'").all();
     if (
-      ![0, 1, 2, 3, 4, OUTBOX_SCHEMA_VERSION].includes(version) ||
+      ![0, 1, 2, 3, 4, 5, OUTBOX_SCHEMA_VERSION].includes(version) ||
       (version === 0 && (tables.length > 0 || application !== 0)) ||
       (version > 0 && application !== OUTBOX_APPLICATION_ID)
     )
@@ -100,6 +127,10 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     if (version < 5)
       db.exec(`create table sync_control_identity(singleton integer primary key check(singleton=1), private_key text not null);
       pragma user_version=5;`);
+    if (version < 6)
+      db.exec(
+        `create table sync_legacy_attribution(session text primary key,tenant text not null,subject text not null,checkpoint text not null,operation text not null); create table sync_rejections(tenant text not null,subject text not null,session text not null,operation text not null,code text not null,primary key(tenant,subject,session)); pragma user_version=6;`,
+      );
     db.prepare(
       "insert into sync_installation(singleton,location) values(1,?) on conflict do nothing",
     ).run("host:" + randomUUID());
@@ -112,6 +143,15 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
   function scopeValues(scope: SyncScope) {
     const parsed = syncScopeSchema.parse(scope);
     return [parsed.tenant, parsed.subject];
+  }
+  function checkLegacyOwner(scope: SyncScope, session: string, firstCommand?: string) {
+    const [tenant, subject] = scopeValues(scope);
+    const foreign = db
+      .prepare(
+        "select 1 from sync_session_owners where session=? and (tenant<>? or subject<>?) union all select 1 from sync_input_owners where (session=? or command=?) and (tenant<>? or subject<>?)",
+      )
+      .get(session, tenant!, subject!, session, firstCommand ?? "", tenant!, subject!);
+    if (foreign) throw new ConversationSyncError("scope");
   }
   function stage(scope: SyncScope, input: SyncRequest) {
     const request = syncRequestSchema.parse(input);
@@ -134,6 +174,80 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     return row ? Number(row.cursor) : 0;
   }
   return {
+    checkLegacyOwner,
+    rejection(scope, session) {
+      return (
+        (db
+          .prepare(
+            "select operation,code from sync_rejections where tenant=? and subject=? and session=?",
+          )
+          .get(...scopeValues(scope), session) as
+          | NonNullable<ReturnType<ConversationSyncOutbox["rejection"]>>
+          | undefined) ?? null
+      );
+    },
+    reject(scope, session, operation, code) {
+      if (!["invalid", "conflict", "blocked", "stale", "not_found"].includes(code))
+        throw new ConversationSyncError("invalid");
+      const pending = db
+        .prepare(
+          "select 1 from sync_outbox where tenant=? and subject=? and session=? and operation=? and receipt is null",
+        )
+        .get(...scopeValues(scope), session, operation);
+      if (!pending) throw new ConversationSyncError("invalid");
+      db.prepare(
+        "insert into sync_rejections values(?,?,?,?,?) on conflict(tenant,subject,session) do nothing",
+      ).run(...scopeValues(scope), session, operation, code);
+    },
+    retry(scope, session) {
+      db.prepare("delete from sync_rejections where tenant=? and subject=? and session=?").run(
+        ...scopeValues(scope),
+        session,
+      );
+    },
+    legacyAttribution(scope, session) {
+      const row = db
+        .prepare(
+          "select checkpoint,operation from sync_legacy_attribution where tenant=? and subject=? and session=?",
+        )
+        .get(...scopeValues(scope), session);
+      return row ? { checkpoint: String(row.checkpoint), operation: String(row.operation) } : null;
+    },
+    attributeLegacy(scope, session, checkpoint, operation, firstCommand) {
+      const [tenant, subject] = scopeValues(scope);
+      if (
+        !/^[a-f0-9]{64}$/.test(checkpoint) ||
+        !syncRequestSchema.shape.operation.safeParse(operation).success
+      )
+        throw new ConversationSyncError("invalid");
+      db.exec("begin immediate");
+      try {
+        checkLegacyOwner(scope, session, firstCommand);
+        const prior = db
+          .prepare("select * from sync_legacy_attribution where session=?")
+          .get(session);
+        if (
+          prior &&
+          (prior.tenant !== tenant ||
+            prior.subject !== subject ||
+            prior.checkpoint !== checkpoint ||
+            prior.operation !== operation)
+        )
+          throw new ConversationSyncError("conflict");
+        db.prepare(
+          "insert into sync_legacy_attribution values(?,?,?,?,?) on conflict do nothing",
+        ).run(session, tenant!, subject!, checkpoint, operation);
+        db.prepare("insert into sync_session_owners values(?,?,?) on conflict do nothing").run(
+          session,
+          tenant!,
+          subject!,
+        );
+        db.exec("commit");
+      } catch (error) {
+        db.exec("rollback");
+        throw error;
+      }
+    },
     controlIdentity: (enroll) => outboxControlIdentity(db).prepare(enroll),
     signControlChallenge: (nonce) => outboxControlIdentity(db).sign(nonce),
     location: () =>
@@ -143,6 +257,13 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     bindInput(scope, command, session) {
       if (!/^[a-zA-Z0-9_.:-]{1,256}$/.test(command)) throw new ConversationSyncError("invalid");
       const [tenant, subject] = scopeValues(scope);
+      if (session !== null) {
+        const existing = db
+          .prepare("select tenant,subject from sync_session_owners where session=?")
+          .get(session);
+        if (existing && (existing.tenant !== tenant || existing.subject !== subject))
+          throw new ConversationSyncError("scope");
+      }
       db.prepare("insert into sync_input_owners values(?,?,?,?) on conflict do nothing").run(
         command,
         tenant!,
@@ -167,10 +288,22 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       )
         throw new ConversationSyncError("scope");
     },
-    ownsSession(scope, session, command) {
+    ownsSession(scope, session, command, parent) {
       const [tenant, subject] = scopeValues(scope);
       const row = db.prepare("select * from sync_session_owners where session=?").get(session);
       if (row) return row.tenant === tenant && row.subject === subject;
+      if (parent) {
+        const origin = db.prepare("select * from sync_session_owners where session=?").get(parent);
+        if (origin && origin.tenant === tenant && origin.subject === subject) {
+          db.prepare("insert into sync_session_owners values(?,?,?) on conflict do nothing").run(
+            session,
+            tenant!,
+            subject!,
+          );
+          const own = db.prepare("select * from sync_session_owners where session=?").get(session)!;
+          return own.tenant === tenant && own.subject === subject;
+        }
+      }
       if (!command) return false;
       const input = db.prepare("select * from sync_input_owners where command=?").get(command);
       if (
@@ -222,6 +355,18 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
           .prepare("select generation from sync_bases where tenant=? and subject=? and session=?")
           .get(...scopeValues(scope), session)?.generation ?? 0,
       );
+    },
+    markOffline(scope, session) {
+      const values = [...scopeValues(scope), session];
+      const owned = db
+        .prepare("select tenant,subject from sync_session_owners where session=?")
+        .get(session);
+      if (!owned || owned.tenant !== values[0] || owned.subject !== values[1])
+        throw new ConversationSyncError("scope");
+      // 只改变后续捕获的分支代次；原 pending、原指纹与已确认前序一字不改。
+      db.prepare(
+        "update sync_bases set generation=0,mode='offline' where tenant=? and subject=? and session=?",
+      ).run(...values);
     },
     advanceGeneration(scope, session, generation) {
       if (!Number.isSafeInteger(generation) || generation < 1)
@@ -344,6 +489,15 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       db.prepare(
         "update sync_outbox set receipt=? where tenant=? and subject=? and session=? and operation=?",
       ).run(canonical(receipt), ...values);
+    },
+    savedVersion(scope, session) {
+      const row = db
+        .prepare(`select version from (
+        select json_extract(request,'$.command.version.id') as version,sequence,0 as adopted from sync_outbox where tenant=? and subject=? and session=? and receipt is not null
+        union all select json_extract(version,'$.id') as version,after_sequence as sequence,1 as adopted from sync_bases where tenant=? and subject=? and session=?
+      ) order by sequence desc,adopted desc limit 1`)
+        .get(...scopeValues(scope), session, ...scopeValues(scope), session);
+      return row ? String(row.version) : null;
     },
     watermark(scope, session) {
       const row = db

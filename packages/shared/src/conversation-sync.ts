@@ -1,5 +1,18 @@
 import { z } from "zod";
+import { conversationFileSchema } from "./conversation-files.js";
 import { zcodeTaskMetaSchema } from "./validation.js";
+/** Resource-reported references, never copied authorization or a global effects ledger. */
+export const conversationEffectSchema = z
+  .object({
+    server: z.string().min(1).max(256),
+    owner: z.string().min(1).max(256),
+    operation: z.string().min(1).max(256),
+    requestKey: z.string().min(1).max(256),
+    receiptUri: z.string().regex(/^mcp-effect:\/\/[A-Za-z0-9_.:\/-]{1,900}$/),
+    outcome: z.enum(["applied", "not_applied", "unknown"]),
+  })
+  .strict();
+export type ConversationEffect = z.infer<typeof conversationEffectSchema>;
 /** Native session IDs may become artifact directory segments after recovery. */
 export const conversationSessionIdSchema = z
   .string()
@@ -45,6 +58,7 @@ export type ConversationCenterConfiguration = z.infer<typeof conversationCenterC
 /** Unique Host-owned actions. Absence in old packages means unknown, never false. */
 export const conversationIndexFactsSchema = z
   .object({
+    parentSessionId: conversationSessionIdSchema.optional(),
     titleOverride: z.string().max(4096).nullable(),
     archived: z.boolean(),
     deleted: z.boolean(),
@@ -67,6 +81,7 @@ export const conversationIndexProjectionSchema = z
     meta: zcodeTaskMetaSchema
       .pick({
         taskId: true,
+        forkedFromTaskId: true,
         traceId: true,
         title: true,
         createdAt: true,
@@ -88,6 +103,7 @@ export const conversationCheckpointResultSchema = z
       .min(1)
       .max(32 * 1024 * 1024),
     indexProjection: conversationIndexProjectionSchema.optional(),
+    originCommandId: z.string().min(1).optional(),
   })
   .strict();
 export const conversationCheckpointParamsSchema = z
@@ -95,6 +111,12 @@ export const conversationCheckpointParamsSchema = z
   .strict();
 export type ConversationCheckpointResult = z.infer<typeof conversationCheckpointResultSchema>;
 export interface ConversationSyncHost {
+  /** Explicit local legacy attribution only; caller binds the exact preview and current identity. */
+  legacy?(
+    session: string,
+    attribute?: boolean,
+    expected?: { dataBase64: string; management: ConversationIndexFacts },
+  ): Promise<{ dataBase64: string; management: ConversationIndexFacts; originCommandId?: string }>;
   readArtifact?(
     session: string,
     uri: string,
@@ -138,6 +160,8 @@ export const conversationTranscriptSchema = z
     version: z.string(),
     title: z.string(),
     deleted: z.boolean(),
+    files: z.array(conversationFileSchema).optional(),
+    effects: z.array(conversationEffectSchema).optional(),
     messages: z.array(
       z.object({ id: z.string(), role: z.enum(["user", "assistant"]), text: z.string() }).strict(),
     ),
@@ -194,6 +218,12 @@ export interface ConversationHistoryReader {
     ): Promise<import("./conversation-continuation.js").ConversationContinuationResult>;
   };
   history(after: string | null, signal: AbortSignal): Promise<ConversationHistoryItem[]>;
+  file?(
+    session: string,
+    version: string,
+    uri: string,
+    signal: AbortSignal,
+  ): Promise<import("./conversation-files.js").ConversationContentResult>;
   transcript(
     session: string,
     version: string,
@@ -208,6 +238,22 @@ export const conversationSyncStatusSchema = z
     pending: z.number().int().nonnegative().nullable(),
     scanning: z.boolean(),
     checkedAt: z.number().int().nonnegative().nullable(),
+    sessions: z
+      .array(
+        z
+          .object({
+            session: z.string(),
+            localVersion: z.string().nullable(),
+            serverVersion: z.string().nullable(),
+            selected: z.string().nullable(),
+            candidates: z.array(z.string()),
+            location: z.string().nullable(),
+            pending: z.number().int().nonnegative(),
+            blocked: z.string().nullable(),
+          })
+          .strict(),
+      )
+      .optional(),
     blocked: z.array(z.object({ session: z.string(), code: z.string() }).strict()),
   })
   .strict();

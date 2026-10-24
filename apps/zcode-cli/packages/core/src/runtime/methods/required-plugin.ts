@@ -35,13 +35,34 @@ export function requiredPluginSelection(text: string): string | null | undefined
 export function requiredPluginFromHistory(
   entries: readonly RuntimeMessageEntry[],
 ): string | null | undefined {
-  for (const entry of entries.toReversed()) {
-    if (entry.kind !== "attachment") {
-      if (entry.message.role !== "user" || entry.metadata?.source !== "real_user") continue;
-      const selection = requiredPluginSelection(modelMessageContentToText(entry.message.content));
-      if (selection !== undefined) return selection;
-    } else if (entry.metadata.source === "plugin_reference" && entry.content.startsWith(PREFIX)) {
-      const value = entry.content.slice(PREFIX.length).split("\n", 1)[0]!;
+  return requiredPluginFromFacts(
+    entries.map((entry) =>
+      entry.kind === "attachment"
+        ? {
+            text: entry.content,
+            pluginReference: entry.metadata.source === "plugin_reference",
+            realUser: false,
+          }
+        : {
+            text: modelMessageContentToText(entry.message.content),
+            pluginReference: false,
+            realUser: entry.message.role === "user" && entry.metadata?.source === "real_user",
+          },
+    ),
+  );
+}
+
+export function requiredPluginFromFacts(
+  facts: readonly { text: string; realUser: boolean; pluginReference: boolean }[],
+): string | null | undefined {
+  for (const fact of facts.toReversed()) {
+    if (fact.realUser) {
+      const selected = requiredPluginSelection(fact.text);
+      if (selected !== undefined) return selected;
+    } else if (fact.pluginReference && fact.text.startsWith(PREFIX)) {
+      const value = fact.text.slice(PREFIX.length).split("\n", 1)[0]!;
+      if (value !== "none" && !isValidPluginStableId(value))
+        throw new Error("required_skill.invalid_reference");
       return value === "none" ? null : value;
     }
   }

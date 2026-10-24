@@ -1,3 +1,7 @@
+import {
+  persistedToolMediaLayoutSchema,
+  type PersistedToolMediaLayoutEntry,
+} from "@zcode/contracts";
 import type {
   AttachmentRef,
   FilePart,
@@ -63,10 +67,6 @@ export async function filePartToContentBlock(
   return { type: "text", text: `[Attached ${part.mime}: ${label}]` };
 }
 
-type PersistedToolMediaLayoutEntry =
-  | { type: "attachment"; attachmentIndex: number }
-  | { type: "text"; text: string };
-
 export function projectPersistedToolMediaContent(
   value: unknown,
   attachmentBlocks: ModelMessageContentBlock[],
@@ -89,26 +89,8 @@ export function projectPersistedToolMediaContent(
 function parsePersistedToolMediaLayout(
   value: unknown,
 ): PersistedToolMediaLayoutEntry[] | undefined {
-  if (!Array.isArray(value) || value.length === 0) return undefined;
-  const layout: PersistedToolMediaLayoutEntry[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) return undefined;
-    if (entry.type === "text" && typeof entry.text === "string") {
-      layout.push({ type: "text", text: entry.text });
-      continue;
-    }
-    if (
-      entry.type === "attachment" &&
-      typeof entry.attachmentIndex === "number" &&
-      Number.isInteger(entry.attachmentIndex) &&
-      entry.attachmentIndex >= 0
-    ) {
-      layout.push({ type: "attachment", attachmentIndex: entry.attachmentIndex });
-      continue;
-    }
-    return undefined;
-  }
-  return layout;
+  const parsed = persistedToolMediaLayoutSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 async function filePartDataUrl(
@@ -178,8 +160,4 @@ function concreteMediaType(mime: string, dataUrl: string): string {
   if (mime !== "image/*") return mime;
   const match = /^data:([^;,]+)(?:;base64)?,/i.exec(dataUrl);
   return match?.[1]?.toLowerCase() ?? "image/png";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

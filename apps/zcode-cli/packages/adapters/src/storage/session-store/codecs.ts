@@ -61,6 +61,8 @@ export function decodeSessionRow(row: SessionRow): SessionInfo {
     path: row.path ?? undefined,
     title: row.title,
     lastOutcome: row.last_outcome ?? undefined,
+    lastOutcomeInputId: row.last_outcome_input_id ?? undefined,
+    lastOutcomeAt: row.last_outcome_at ?? undefined,
     titleSource: decodeSessionTitleSource(row.title_source),
     titleMessageID: row.title_message_id ? (row.title_message_id as MessageId) : undefined,
     version: row.version,

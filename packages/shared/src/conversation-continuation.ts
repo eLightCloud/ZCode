@@ -35,7 +35,9 @@ export const conversationContinuationResultSchema = z
     phase: z.enum(["settling", "preparing", "granted", "ready", "cancelled"]),
     location: key.nullable(),
     version: key.nullable(),
-    reason: z.enum(["busy", "changed", "capability", "unavailable"]).optional(),
+    reason: z
+      .enum(["busy", "changed", "capability", "required_skill", "model", "files", "unavailable"])
+      .optional(),
   })
   .strict();
 export type ConversationContinuationResult = z.infer<typeof conversationContinuationResultSchema>;
@@ -66,6 +68,8 @@ export interface ConversationContinuationJournal {
   begin(
     scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
     input: ConversationContinuationIntent,
+    /** First online enrollment must atomically refuse existing or offline owners. */
+    enrollment?: boolean,
   ): Promise<ConversationContinuationRecord>;
   read(
     scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],

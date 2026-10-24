@@ -94,8 +94,8 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
       expect.objectContaining({
         migration: {
           kind: "initialize",
-          executedCount: 4,
-          committedCount: 4,
+          executedCount: 5,
+          committedCount: 5,
           lastAppliedMigrationId: null,
         },
       }),
@@ -104,7 +104,7 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
     await prepareTasksIndexStorage(path, (phase, migration) => second.push({ phase, migration }));
     expect(second.some((s) => s.phase === "migrating")).toBe(false);
     expect(second.at(-1)).toMatchObject({
-      migration: { lastAppliedMigrationId: "0004_conversation_workspace_purpose" },
+      migration: { lastAppliedMigrationId: "0005_conversation_index_barrier" },
     });
     expect(second.some((s) => s.phase === "maintaining")).toBe(true);
     expect(second).toContainEqual(
@@ -135,8 +135,8 @@ it("retains committed facts if closing the migration connection fails", async ()
     expect(states.at(-1)).toMatchObject({
       migration: {
         kind: "initialize",
-        executedCount: 4,
-        committedCount: 4,
+        executedCount: 5,
+        committedCount: 5,
         lastAppliedMigrationId: null,
       },
     });
@@ -176,8 +176,9 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
     await prepareTasksIndexStorage(path, () => {});
     const db = new DatabaseSync(path);
     try {
+      // 还原到 0003 的真实表结构与账本，新增屏障表 / trigger 不能留在旧库夹具中。
       db.exec(
-        "DELETE FROM tasks_schema_migration WHERE id='0004_conversation_workspace_purpose'; DROP TABLE conversation_workspace_purpose",
+        "DROP TRIGGER conversation_index_actions_fenced; DROP TABLE conversation_index_barriers; DELETE FROM tasks_schema_migration WHERE id >= '0004'; DROP TABLE conversation_workspace_purpose",
       );
     } finally {
       db.close();
@@ -188,8 +189,8 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
       phase: "ready",
       migration: {
         kind: "upgrade",
-        executedCount: 1,
-        committedCount: 1,
+        executedCount: 2,
+        committedCount: 2,
         lastAppliedMigrationId: "0003_official_glm_selection",
       },
     });

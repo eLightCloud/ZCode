@@ -13,11 +13,34 @@ import { getConversationWorkspaceDir } from "../paths.js";
 export function createConversationSyncHost(options: {
   index: TaskIndexRepo;
   agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
+  continuation?: () => import("@zcode/shared").ConversationRuntimePort | undefined;
 }): ConversationSyncHost {
   function target(taskId: string) {
     return { workspacePath: getConversationWorkspaceDir(), taskId };
   }
   return {
+    async readArtifact(session, uri) {
+      const port = options.continuation?.();
+      if (!port?.content) throw new Error("continuation_files_unavailable");
+      return port.content({ kind: "read", session, uri });
+    },
+    async continuationState(session, operation) {
+      const port = options.continuation?.();
+      if (!port) throw new Error("continuation_unavailable");
+      return port.control({ kind: "read", session, operation });
+    },
+    async captureContinuation(session, operation) {
+      return options.index.withConversationSyncFacts(
+        { ...target(session), continuationOperation: operation },
+        async (management) => ({
+          ...(await options.agent.captureTextCheckpoint({
+            workspacePath: getConversationWorkspaceDir(),
+            sessionId: session,
+          })),
+          management,
+        }),
+      );
+    },
     async rebuildIndex(input) {
       const facts = conversationIndexFactsSchema.parse(input.management);
       if (facts.pinned === undefined) throw new Error("conversation_sync_rebuild_unsupported");

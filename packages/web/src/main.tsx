@@ -5,7 +5,11 @@ import {
   ApplicationShell,
   prepareApplication,
 } from "virtual:zcode-application-root";
-import { sessionCreateTelemetrySchema, type RendererTelemetryEventPayload } from "@zcode/shared";
+import {
+  conversationSessionIdSchema,
+  sessionCreateTelemetrySchema,
+  type RendererTelemetryEventPayload,
+} from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
 import { createRoot } from "react-dom/client";
 import {
@@ -265,6 +269,7 @@ interface WebBootstrapResult {
   initialWorkspaceAbsPath?: string;
   initialWorkspaceIdentity?: string;
   initialTaskId?: string;
+  initialWorkspacePurpose?: "conversation";
   restoreSession?: boolean;
   allowOpenWorkspace?: boolean;
 }
@@ -885,16 +890,18 @@ function resolveDefaultWsOrigin(): string {
 async function resolveWebBootstrap(): Promise<WebBootstrapResult> {
   const params = new URLSearchParams(window.location.search);
   const remoteId = params.get("remote");
+  const instance = params.get("instance_id");
+  const instanceQuery = instance ? "?" + new URLSearchParams({ instance_id: instance }) : "";
   const wsUrl = remoteId
     ? `${resolveDefaultWsOrigin()}/ws/remote/${remoteId}`
-    : `${resolveDefaultWsOrigin()}/ws`;
+    : `${resolveDefaultWsOrigin()}/ws${instanceQuery}`;
 
   if (remoteId) {
     return { wsUrl };
   }
 
   try {
-    const response = await fetch("/api/server-info", {
+    const response = await fetch("/api/server-info" + instanceQuery, {
       cache: "no-store",
     });
     if (!response.ok) {
@@ -2503,6 +2510,18 @@ async function bootstrapWebApp() {
     const services = await connectViaWebSocket(bootstrap.wsUrl, {
       onClose: () => {},
     });
+    // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
+    const conversation = conversationSessionIdSchema.safeParse(params.get("conversation"));
+    if (conversation.success) {
+      const workspace = await services.fileService.ensureConversationWorkspace();
+      bootstrap = {
+        ...bootstrap,
+        initialWorkspaceAbsPath: workspace.path,
+        initialWorkspacePurpose: "conversation",
+        initialTaskId: conversation.data,
+        restoreSession: false,
+      };
+    }
     const platform = createWebPlatform();
     setApplicationDocumentTitle("ZCode - Web + Server");
 
@@ -2518,6 +2537,7 @@ async function bootstrapWebApp() {
             initialWorkspaceAbsPath={bootstrap.initialWorkspaceAbsPath}
             initialWorkspaceIdentity={bootstrap.initialWorkspaceIdentity}
             initialTaskId={bootstrap.initialTaskId}
+            initialWorkspacePurpose={bootstrap.initialWorkspacePurpose}
             restoreSession={bootstrap.restoreSession}
             allowOpenWorkspace={bootstrap.allowOpenWorkspace}
             preferDirectoryBrowser

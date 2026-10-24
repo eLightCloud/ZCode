@@ -319,7 +319,10 @@ describe("AutomationRepo 调度状态机", () => {
 
     const db = new DatabaseSync(dbPath);
     db.exec("ALTER TABLE automations DROP COLUMN scheduled_run_count");
-    db.exec("DELETE FROM tasks_schema_migration");
+    // 退回旧库时同步删除新增用途 / 屏障实体，保留原有计数迁移断言。
+    db.exec(
+      "DROP TRIGGER conversation_index_actions_fenced; DROP TABLE conversation_index_barriers; DROP TABLE conversation_workspace_purpose; DELETE FROM tasks_schema_migration",
+    );
     db.close();
 
     repo = new AutomationRepo(dbPath);

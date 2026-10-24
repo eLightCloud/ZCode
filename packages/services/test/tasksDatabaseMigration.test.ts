@@ -28,6 +28,7 @@ describe("DB109 App 库统一迁移", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "automation_runs",
       "automations",
+      "conversation_index_barriers",
       "conversation_workspace_purpose",
       "off_peak_tasks",
       "task_group_members",
@@ -38,7 +39,7 @@ describe("DB109 App 库统一迁移", () => {
       "tasks_schema_migration",
     ]);
     const ledger = db.prepare("SELECT * FROM tasks_schema_migration").all();
-    expect(ledger).toHaveLength(4);
+    expect(ledger).toHaveLength(5);
     runTasksDatabaseMigrations(db);
     expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toEqual(ledger);
   });
@@ -157,7 +158,10 @@ describe("DB109 App 库统一迁移", () => {
   it("DB109-02/05：部分旧 schema 补列，数据转换中途失败连补列一起回滚", () => {
     const db = open();
     runTasksDatabaseMigrations(db);
+    // 构造旧库必须同时移除新屏障表及 trigger，不能仅回退账本。
     db.exec(`DELETE FROM tasks_schema_migration;
+      DROP TRIGGER conversation_index_actions_fenced;
+      DROP TABLE conversation_index_barriers;
       DROP TABLE conversation_workspace_purpose;
       ALTER TABLE automations DROP COLUMN model_selection;
       ALTER TABLE automations DROP COLUMN scheduled_run_count;
@@ -224,8 +228,11 @@ describe("DB109 App 库统一迁移", () => {
     const workers: Worker[] = [];
     try {
       runTasksDatabaseMigrations(db);
+      // 线程竞争沿真实旧 schema 升级，保留原来的单次转换断言。
       db.exec(`DELETE FROM tasks_schema_migration;
-        DROP TABLE conversation_workspace_purpose;
+        DROP TRIGGER conversation_index_actions_fenced;
+      DROP TABLE conversation_index_barriers;
+      DROP TABLE conversation_workspace_purpose;
         INSERT INTO automations(automation_id,cron_expr,prompt,workspace_key,workspace_path,created_at,updated_at,model)
         VALUES('old','* * * * *','正文','ws','/ws',1,2,'proxy/model');
         CREATE TABLE migration_probe(value INTEGER);
@@ -260,7 +267,7 @@ describe("DB109 App 库统一迁移", () => {
       Atomics.store(new Int32Array(gate), 0, 1);
       Atomics.notify(new Int32Array(gate), 0);
       expect(await Promise.all(exits)).toEqual([[0], [0]]);
-      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(4);
+      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(5);
       expect(db.prepare("SELECT * FROM migration_probe").all()).toHaveLength(1);
       expect(db.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
     } finally {

@@ -196,6 +196,7 @@ async function resolveReaddirEntryType(
 
 export interface CreateFileServiceOptions {
   workspaceFileSearchFilter?: WorkspaceFileSearchFilter;
+  onConversationWorkspaceEnsured?(): Promise<void>;
 }
 
 /**
@@ -456,6 +457,7 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
       if (!workspaceStat.isDirectory()) {
         throw new Error(`Workspace path is not a directory: ${workspacePath}`);
       }
+      await options.onConversationWorkspaceEnsured?.();
       return {
         path: workspacePath,
         created,

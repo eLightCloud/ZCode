@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { textCheckpointSchema } from "./text-checkpoint.js";
+import {
+  conversationIndexFactsSchema,
+  conversationScopeSchema,
+  type ConversationIndexFacts,
+  type ConversationHistoryItem,
+} from "@zcode/shared";
 
 const key = z
   .string()
@@ -11,8 +17,12 @@ const uuid = z
   .uuid()
   .transform((value) => value.toLowerCase());
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const syncScopeSchema = z.object({ tenant: uuid, subject: uuid }).strict();
-export type SyncScope = z.infer<typeof syncScopeSchema>;
+export type SyncScope = import("@zcode/shared").ConversationCenterPolicy["subjects"][number];
+// CLI and shared use different Zod majors. Keep the shared validator authoritative
+// without emitting its Zod v4 schema types into the CLI's Zod v3 declarations.
+export const syncScopeSchema = z
+  .custom<SyncScope>((value) => conversationScopeSchema.safeParse(value).success)
+  .transform((value): SyncScope => conversationScopeSchema.parse(value));
 const expected = { revision };
 const binding = z.object({ location: key, generation: revision, version: key }).strict();
 export const syncVersionSchema = z
@@ -22,6 +32,11 @@ export const syncVersionSchema = z
     location: key,
     generation: revision,
     checkpoint: textCheckpointSchema.nullable(),
+    management: z
+      .custom<ConversationIndexFacts>(
+        (value) => conversationIndexFactsSchema.safeParse(value).success,
+      )
+      .optional(),
   })
   .strict();
 export type SyncVersion = z.infer<typeof syncVersionSchema>;
@@ -169,6 +184,11 @@ export class ConversationSyncError extends Error {
   }
 }
 export interface ConversationSyncStore {
+  history(
+    scope: SyncScope,
+    after: string | null,
+    limit: number,
+  ): Promise<ConversationHistoryItem[]>;
   /** Trusted native assembly only; browser payloads must not supply scope/proofs. */
   execute(scope: SyncScope, request: SyncRequest): Promise<SyncReceipt>;
   state(scope: SyncScope, session: string): Promise<SyncState | null>;

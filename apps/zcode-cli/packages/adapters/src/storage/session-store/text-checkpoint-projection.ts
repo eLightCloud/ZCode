@@ -17,11 +17,14 @@ function empty(value: unknown): boolean {
   return (
     value === undefined ||
     value === null ||
-    (typeof value === "object" && Object.keys(value).length === 0)
+    (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0)
   );
 }
 function noExtra(value: Record<string, unknown>): void {
   if (Object.values(value).some((item) => item !== undefined)) unsupported();
+}
+function fullIntent(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && "queueItemId" in value;
 }
 
 /** 环境及能力枚举在目标重新生成；其他 synthetic 上下文不能猜测丢弃。 */
@@ -92,8 +95,7 @@ export function projectTextCheckpoint(
           metadata,
           ...rest
         } = original;
-        if (!empty(metadata)) unsupported();
-        portableInfo = { ...rest, anchor: commonAnchor };
+        portableInfo = { ...rest, anchor: commonAnchor, ...(empty(metadata) ? {} : { metadata }) };
       } else {
         const { path: _sourcePath, metadata, ...rest } = original;
         if (!empty(metadata)) unsupported();
@@ -111,28 +113,33 @@ export function projectTextCheckpoint(
   const portableInputs = inputs.map((input) => {
     const { sessionID: _sessionID, payload, ...rest } = input;
     if (input.sessionID !== session.id) unsupported();
+    const canonical = payload.conversationInputIntent;
+    if (fullIntent(canonical)) {
+      return { ...rest, payload };
+    }
     const { text, conversationInputIntent, intent, ...extra } = payload;
     noExtra(extra);
     if (conversationInputIntent !== undefined && intent !== undefined) unsupported();
     const source = conversationInputIntent ?? intent;
-    // 输入语义并非任意 metadata 白名单；S0 只接受最小命令身份。
+    // 输入原样经唯一 codec 校验；不能只取 sourceCommandId 丢掉 V4 顺序与去重事实。
     if (source && (typeof source !== "object" || Array.isArray(source))) unsupported();
     const fact = source as Record<string, unknown> | undefined;
-    if (fact) {
-      const { sourceCommandId: _commandId, ...other } = fact;
-      noExtra(other);
-    }
     return {
       ...rest,
       payload: {
         text,
-        ...(fact ? { conversationInputIntent: { sourceCommandId: fact.sourceCommandId } } : {}),
+        ...(fact ? { conversationInputIntent: fact } : {}),
       },
     };
   });
   const parsed = textCheckpointSchema.safeParse({
     format: "zcode.text-checkpoint",
-    version: 1,
+    version:
+      portableMessages.some(
+        (message) => (message.info as { metadata?: unknown }).metadata !== undefined,
+      ) || portableInputs.some((input) => fullIntent(input.payload.conversationInputIntent))
+        ? 2
+        : 1,
     session: {
       id: session.id,
       traceID: session.traceID,

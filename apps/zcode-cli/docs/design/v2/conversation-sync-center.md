@@ -94,3 +94,97 @@ process-independent reopen and immutable payload checks; real SQLite outbox
 reopen and lost-ACK retry; source SQLite import/export via its public facade and
 cold resume regression; old source/plugin/config migration regressions unchanged.
 Device/OS/host gates stay separate from local implementation progress.
+
+## Application identity and history assembly
+
+The application ingress revalidates a browser session for every history request,
+then resolves the stable person UUID through Identity. A versioned UUIDv5 mapping
+of the stable tenant ID supplies the center tenant key; display names and login
+names are never storage keys. Logout, disabled people, suspended tenants and
+restricted first-login sessions cannot read history. History does not discover
+locations or provision a Core. A private center gateway authenticates a distinct
+deployment proof and accepts scope headers only on that authenticated channel.
+The public ingress constructs those headers; caller headers are never forwarded.
+Native instance workload authentication is required for uploads; browser cookies
+cannot upload versions or assert qualification/barrier facts.
+
+Desktop's local index is not an account partition. Before native input admission,
+the application Host journals the stable original command ID under a freshly
+verified, purpose-bound session delegation. Automatic upload requires the first
+persisted real-user command to match that immutable producer, then records the
+session owner durably. A later account/input cannot adopt an old session. Unknown
+legacy ownership blocks upload pending explicit migration attribution. A private
+single-person server volume may use its deployment-verified workload binding as
+the legacy attribution; this is not a Desktop fallback. The source delegation is
+short lived, instance-bound, signed with the existing Identity root and rechecks
+the original login/current person on every use. It cannot be used for Results,
+model calls or native ingress. No browser cookie is persisted by the Host.
+
+The Host index owns rename, pin, archive and ordinary deletion facts. A portable index
+capsule uses its public schema, contains no workspace paths, and participates in
+the immutable version fingerprint. Legacy versions without a capsule mean
+unknown index state, not unarchived/undeleted. They remain readable but cannot
+claim complete index restoration. The center history projection is native-owned
+and includes saved candidates separately from selected/active facts.
+
+Packaged V4 input persists a canonical input intent and its legacy projection in
+message metadata. Text format v2 preserves these verified, terminal plain-text
+facts using the existing shared intent validator; it cannot drop them as arbitrary
+metadata. The legacy projection/client ID must agree with the canonical intent.
+Attachments, quotes, bot/group/plugin sources, goals, shared contexts, steering,
+unknown metadata and execution state stay unsupported. Existing v1 packages stay
+readable and immutable; v1 cannot silently carry the new v2 facts.
+
+The runnable center uses a native-owned PostgreSQL policy row, initially disabled
+with no admitted subjects. Runtime reads its current revision per transaction;
+missing/malformed configuration never falls back to an injected test profile.
+A distinct configurator role may update the policy with CAS but cannot read
+conversation tables. Data and configuration ingress use different startup
+proofs; application platform authorization precedes configuration forwarding.
+Startup supplies only DB locations/credentials, private listener and channel
+trust. Subject admission and limits are managed policy, not env overrides.
+
+The HTTP client normally requires HTTPS. A trusted launcher may supply one exact
+private HTTP origin; it is never accepted from browser/RPC input. The application
+assembler binds it to the same preconfigured model/configuration/endpoint origin
+and workload trust. Redirects, credentials in URLs and origin changes still reject.
+
+`session/textCheckpoint` is a read-only opaque checkpoint export, not a resume
+or input command. The resident pool checks native work, interactions, queued
+commands, maintenance, deactivation and outstanding protocol operations, then
+closes admission synchronously for the short export. Read-only subscribers do
+not block this operation; no subscriber is detached and no app is retired. A
+cold session can be read from its public store without creating an app. The Host
+serializes its unique index actions around that RPC, and only the Host's known
+internal conversation workspace (no remote identity, automation, fork, migration
+or unresolved target metadata) qualifies. Unknown state rejects, not stripped.
+
+Host startup/reconnect capture may use the existing native read-only Core startup
+path after current storage admission succeeds. It does not resume a session,
+enable model execution or request an execution container. The resident pool still
+owns the short read barrier. Center history is independent of this capture path.
+The Host checks SQLite `data_version` and connection `total_changes` around the
+export as well as its local write chain, rejecting cross-window/ABA changes
+without holding a database write lock across an RPC. Cached verified original
+identity may partition new offline input locally; it never authorizes a network
+operation. Reconnection must revalidate that original account before uploading.
+
+Qualification requires an explicit persisted `workspacePurpose=conversation`,
+not path inference. Native application bootstrap explicitly declares the internal
+workspace purpose; the existing ensure operation uses the same registration. Only subsequently created index rows inherit
+that fact. Snapshot refresh preserves it. Old rows without a purpose remain
+unknown and need explicit migration evidence; registration never relabels them.
+The tasks database adds a separate additive migration; session/plugin stores and
+historical migration checksums stay untouched.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser history
+  participant I as Application Identity / ingress
+  participant N as Native center gateway
+  B->>I: session cookie, history query
+  I->>I: current session, tenant, stable person check
+  I->>N: private proof + reconstructed exact scope
+  N->>N: runtime-role RLS and native history projection
+  N-->>B: saved history, no admission grant
+```

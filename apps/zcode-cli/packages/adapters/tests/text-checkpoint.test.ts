@@ -145,7 +145,7 @@ describe("native text checkpoint contract", () => {
     async (fault) => {
       const { store, target } = await setup();
       const checkpoint: any = example();
-      if (fault === "version") checkpoint.version = 2;
+      if (fault === "version") checkpoint.version = 99;
       if (fault === "secret") checkpoint.session.permission = { token: "synthetic-secret" };
       if (fault === "missing-reference") checkpoint.messages[1].info.parentID = "absent";
       if (fault === "duplicate-part") checkpoint.messages[1].parts[0].id = "part-user";
@@ -208,7 +208,7 @@ describe("native text checkpoint contract", () => {
       store.close();
     }
   });
-  it.each(["entry", "input", "part"])(
+  it.each(["entry", "input", "part", "metadata-array"])(
     "export blocks unsupported durable %s state",
     async (fault) => {
       const { store, target } = await setup();
@@ -240,6 +240,10 @@ describe("native text checkpoint contract", () => {
             text: "synthetic-private",
             time: { start: 1 },
           });
+        if (fault === "metadata-array") {
+          const messages = await store.messages({ sessionID });
+          await store.saveMessage({ ...messages[0]!.info, metadata: [] as never });
+        }
         await expect(store.exportTextCheckpoint({ sessionID })).rejects.toMatchObject({
           code: "unsupported_state",
         });

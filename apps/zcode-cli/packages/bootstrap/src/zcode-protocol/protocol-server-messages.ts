@@ -1,5 +1,7 @@
 import { networkCaptureControlSchema } from "@zcode/shared";
 import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
+import { conversationCheckpointParamsSchema } from "@zcode/shared";
+import type { SessionId } from "@zcode/contracts";
 
 import { zcodeProtocolMethods } from "@zcode/shared";
 
@@ -68,9 +70,30 @@ export async function handleRequest(
     // 生命周期命令自身不能取得普通 operation lease，否则永远将自己判为忙。
     if (request.method === zcodeProtocolMethods.processIdleMaintenance) {
       if (!this.context.sessionResidentPool) throw new Error("Runtime lifecycle unavailable");
-      return this.ok(request.id, await this.context.sessionResidentPool.maintenance(
-        runtimeMaintenanceParamsSchema.parse(request.params),
-      ));
+      return this.ok(
+        request.id,
+        await this.context.sessionResidentPool.maintenance(
+          runtimeMaintenanceParamsSchema.parse(request.params),
+        ),
+      );
+    }
+    if (request.method === zcodeProtocolMethods.sessionTextCheckpoint) {
+      const { sessionId } = conversationCheckpointParamsSchema.parse(request.params);
+      const pool = this.context.sessionResidentPool;
+      const store = this.context.deps.sessionStore;
+      if (!pool || !store?.exportTextCheckpoint)
+        throw new ProtocolRequestError(-32000, "Checkpoint unavailable");
+      const checkpoint = await pool.withCheckpoint(sessionId, () =>
+        store.exportTextCheckpoint!({ sessionID: sessionId as SessionId }),
+      );
+      this.logger?.info("Native checkpoint captured", {
+        event: "conversation.sync.capture",
+        sessionId,
+        outcome: "saved",
+      });
+      return this.ok(request.id, {
+        dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
+      });
     }
     // subscribe hydration、workspace 配置与 resume 都可能跨 await。若只看
     // session 当前状态，sampler 会在 handler 持有旧 record 时把它关闭。进程级 lease

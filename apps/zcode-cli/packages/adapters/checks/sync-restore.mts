@@ -79,7 +79,7 @@ try {
   process.stdout.write(
     JSON.stringify({
       restored: true,
-      schema: 1,
+      schema: 3,
       versionsAndReceipts: true,
       rls: true,
       noExecutionStarted: true,

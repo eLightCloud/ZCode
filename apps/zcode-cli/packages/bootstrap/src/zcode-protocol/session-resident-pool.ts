@@ -67,6 +67,7 @@ export class SessionResidentPool {
   private activeOperationCount = 0;
   private rebalancing = false;
   private maintenanceOperation: string | null = null;
+  private checkpointInProgress = false;
   private maintenanceSettlement: Promise<boolean> | undefined;
   private maintenanceTail: Promise<unknown> = Promise.resolve();
 
@@ -98,23 +99,19 @@ export class SessionResidentPool {
    * 获取协议请求租约。全进程计数防跨 session 的 async workspace 操作与 sampler
    * 回收并发；按 session 计数表达精确所有权并参与该 session 的 eligibility。
    */
-  async acquireOperation(
-    sessionIdsInput?: string | readonly string[],
-  ): Promise<() => void> {
+  async acquireOperation(sessionIdsInput?: string | readonly string[]): Promise<() => void> {
     if (this.maintenanceOperation !== null) throw new Error("Runtime maintenance admission closed");
+    if (this.checkpointInProgress) throw new Error("Runtime checkpoint admission closed");
     const sessionIds = [
       ...new Set(
-        (typeof sessionIdsInput === "string" ? [sessionIdsInput] : sessionIdsInput ?? []).filter(
+        (typeof sessionIdsInput === "string" ? [sessionIdsInput] : (sessionIdsInput ?? [])).filter(
           (sessionId) => sessionId.length > 0,
         ),
       ),
     ];
     this.activeOperationCount += 1;
     for (const sessionId of sessionIds) {
-      this.operationLeaseCounts.set(
-        sessionId,
-        (this.operationLeaseCounts.get(sessionId) ?? 0) + 1,
-      );
+      this.operationLeaseCounts.set(sessionId, (this.operationLeaseCounts.get(sessionId) ?? 0) + 1);
     }
 
     let released = false;
@@ -156,7 +153,13 @@ export class SessionResidentPool {
 
   /** sampler 与 request-release 共用的 TTL / 高低水位收敛入口。 */
   rebalance(): void {
-    if (this.activeOperationCount > 0 || this.rebalancing || this.maintenanceOperation) return;
+    if (
+      this.activeOperationCount > 0 ||
+      this.rebalancing ||
+      this.maintenanceOperation ||
+      this.checkpointInProgress
+    )
+      return;
     this.rebalancing = true;
     try {
       const observedAt = this.now();
@@ -235,32 +238,88 @@ export class SessionResidentPool {
 
   maintenance(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
     const result = this.maintenanceTail.then(() => this.performMaintenance(input));
-    this.maintenanceTail = result.then(() => undefined, () => undefined);
+    this.maintenanceTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   }
 
-  private async performMaintenance(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
+  /** Short read barrier; unlike retirement it preserves read-only subscriptions. */
+  async withCheckpoint<T>(sessionId: string, read: () => Promise<T>): Promise<T> {
+    const resident = this.host.listSessionIds().includes(sessionId);
+    const facts = this.host.readResidencyFacts(sessionId);
+    if (
+      this.maintenanceOperation ||
+      this.checkpointInProgress ||
+      this.activeOperationCount ||
+      this.rebalancing ||
+      this.inFlightDeactivations.size ||
+      (resident &&
+        (!facts ||
+          !facts.persisted ||
+          facts.hasResidencyBlockingWork ||
+          facts.hasPendingInteractions ||
+          facts.hasQueuedCommands))
+    )
+      throw new Error("Runtime checkpoint busy");
+    // 原生安全检查与关接纳发生在同一同步片，不能先 await 导出再阻止输入。
+    this.checkpointInProgress = true;
+    try {
+      return await read();
+    } finally {
+      this.checkpointInProgress = false;
+    }
+  }
+
+  private async performMaintenance(
+    input: RuntimeMaintenanceParams,
+  ): Promise<RuntimeMaintenanceResult> {
+    if (this.checkpointInProgress)
+      return {
+        operationId: this.maintenanceOperation,
+        state: "blocked",
+        reasonCode: "native_activity",
+      };
     if (this.maintenanceOperation && this.maintenanceOperation !== input.operationId) {
-      return { operationId: this.maintenanceOperation, state: "blocked", reasonCode: "operation_conflict" };
+      return {
+        operationId: this.maintenanceOperation,
+        state: "blocked",
+        reasonCode: "operation_conflict",
+      };
     }
     if (input.action === "begin" && !this.maintenanceOperation) {
       const ids = this.host.listSessionIds();
-      if (this.activeOperationCount || this.rebalancing || this.inFlightDeactivations.size
-        || ids.some(id => {
+      if (
+        this.activeOperationCount ||
+        this.rebalancing ||
+        this.inFlightDeactivations.size ||
+        ids.some((id) => {
           const facts = this.host.readResidencyFacts(id);
           return !facts || !this.isEligible(id, facts);
-        })) return { operationId: null, state: "blocked", reasonCode: "native_activity" };
+        })
+      )
+        return { operationId: null, state: "blocked", reasonCode: "native_activity" };
       // 与 acquireOperation 同一事件循环关闸；先持有再 await，不能让新请求穿过空闲检查。
       this.maintenanceOperation = input.operationId;
-      const closing = ids.map(id => {
-        try { return this.host.deactivate(id); } catch (error) { return Promise.reject(error); }
+      const closing = ids.map((id) => {
+        try {
+          return this.host.deactivate(id);
+        } catch (error) {
+          return Promise.reject(error);
+        }
       });
-      this.maintenanceSettlement = Promise.allSettled(closing)
-        .then(results => results.every(result => result.status === "fulfilled"));
+      this.maintenanceSettlement = Promise.allSettled(closing).then((results) =>
+        results.every((result) => result.status === "fulfilled"),
+      );
     }
     if (!this.maintenanceOperation) return { operationId: null, state: "released" };
     if (!(await this.maintenanceSettlement)) {
-      return { operationId: this.maintenanceOperation, state: "blocked", reasonCode: "unconfirmed" };
+      return {
+        operationId: this.maintenanceOperation,
+        state: "blocked",
+        reasonCode: "unconfirmed",
+      };
     }
     if (input.action === "cancel") {
       this.maintenanceOperation = null;

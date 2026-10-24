@@ -7,6 +7,8 @@ import { mkdir } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { getConversationWorkspaceDir } from "#src/paths.js";
+import type { ConversationIndexFacts } from "@zcode/shared";
 import {
   isRemoteWorkspaceIdentity,
   normalizeAgentProviderToZCodeAgent,
@@ -38,6 +40,8 @@ import type {
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
+import { preserveConversationPurpose } from "./tasksDatabase/conversation-classification-v4.js";
+import { captureConversationIndexFacts } from "./conversationSyncIndex.js";
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
@@ -54,7 +58,7 @@ function appendZCodeAgentIndexedProviderFilter(
 type DatabaseSyncInstance = InstanceType<typeof DatabaseSync>;
 type SQLInputValue = import("node:sqlite").SQLInputValue;
 
-interface TaskIndexRow {
+export interface TaskIndexRow {
   workspace_key: string;
   workspace_path: string;
   workspace_identity: string | null;
@@ -535,6 +539,7 @@ export class TaskIndexRepo {
   constructor(
     private readonly startupDbPath?: string,
     private readonly startupBusyTimeoutMs = 5000,
+    private readonly applicationWorkspacePurpose?: "conversation",
   ) {}
   private db: DatabaseSyncInstance | null = null;
   private dbPath: string | null = null;
@@ -583,7 +588,10 @@ export class TaskIndexRepo {
       this.db.exec("PRAGMA synchronous = NORMAL");
     }
     // Worker 已完成该路径的原始准备，业务连接不再重复全表修复。
-    if (isTasksStoragePrepared(path, this.db)) return;
+    if (isTasksStoragePrepared(path, this.db)) {
+      if (this.applicationWorkspacePurpose) this.recordConversationWorkspacePurpose();
+      return;
+    }
     if (!isTasksStorageMigrated(path, this.db)) runTasksDatabaseMigrations(this.db);
     this.backfillOffPeakTaskMarkers();
     this.backfillOffPeakGroupMemberships();
@@ -592,6 +600,7 @@ export class TaskIndexRepo {
     // 初始化时把索引行迁到真实 session id，后续统一走新协议正常路径。
     this.migrateLegacyAcpTaskIds();
     this.cleanupDeletedTaskGroupingReferences();
+    if (this.applicationWorkspacePurpose) this.recordConversationWorkspacePurpose();
   }
 
   private hasColumn(table: string, column: string): boolean {
@@ -1032,6 +1041,40 @@ export class TaskIndexRepo {
       }
     });
     return result;
+  }
+
+  /** Explicit native application purpose; no existing row is relabelled. */
+  async registerConversationWorkspace(): Promise<void> {
+    await this.ensureReady();
+    this.recordConversationWorkspacePurpose();
+  }
+
+  private recordConversationWorkspacePurpose(): void {
+    this.getDatabase()
+      .prepare(
+        "insert into conversation_workspace_purpose values(?,'conversation') on conflict do nothing",
+      )
+      .run(resolveWorkspaceKey({ workspacePath: getConversationWorkspaceDir() }));
+    logger.info(undefined, "Conversation workspace purpose registered", {
+      event: "conversation.sync.qualification",
+      outcome: "registered",
+    });
+  }
+
+  async withConversationSyncFacts<T>(
+    target: { workspacePath: string; taskId: string; workspaceIdentity?: string },
+    capture: (facts: ConversationIndexFacts) => Promise<T>,
+  ): Promise<T> {
+    await this.ensureReady();
+    return this.enqueueWrite(target, () =>
+      captureConversationIndexFacts({
+        database: this.getDatabase(),
+        read: () => this.getTaskRow(target),
+        isCurrent: (database) => database === this.db,
+        target,
+        capture,
+      }),
+    );
   }
 
   private getTaskRow(params: {
@@ -1495,6 +1538,12 @@ export class TaskIndexRepo {
   }
 
   private writeRecord(record: TaskIndexWriteRecord): ZCodeTaskMeta {
+    const previous = this.getTaskRow(record.meta);
+    record.meta = preserveConversationPurpose(
+      this.getDatabase(),
+      record.meta,
+      previous?.meta_json ?? null,
+    );
     // searchable_text 传 undefined 表示"不动现有值"。读一次 row 拿到当前值，
     // 否则 ON CONFLICT 时 excluded.searchable_text 会被赋成空字符串，把已索引正文清空。
     const existing =
@@ -1588,7 +1637,11 @@ export class TaskIndexRepo {
           deleted = excluded.deleted,
           title_overridden = excluded.title_overridden,
           searchable_text = excluded.searchable_text,
-          meta_json = excluded.meta_json`,
+          meta_json = CASE
+            WHEN json_extract(excluded.meta_json,'$.workspacePurpose') IS NULL
+              AND json_extract(tasks.meta_json,'$.workspacePurpose') IN ('project','conversation')
+            THEN json_set(excluded.meta_json,'$.workspacePurpose',json_extract(tasks.meta_json,'$.workspacePurpose'))
+            ELSE excluded.meta_json END`,
       )
       .run({
         workspace_key: workspaceKey(record.meta),

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
+import { checkConcurrentOutboxUpgrade } from "./sync-outbox-concurrent.mjs";
 import {
   ConversationSyncError,
   type SyncCommand,
@@ -19,6 +20,7 @@ import { verifyOutbox } from "./sync-outbox.mjs";
 import { verifyHttp } from "./sync-http.mjs";
 import { verifyCapacity } from "./sync-capacity.mjs";
 import { verifyTransitions } from "./sync-transitions.mjs";
+import { verifyManaged } from "./sync-managed.mjs";
 
 const lines: Buffer[] = [];
 for await (const chunk of process.stdin) lines.push(Buffer.from(chunk));
@@ -47,6 +49,8 @@ const report: Record<string, unknown> = {
 const checks: string[] = report.checks as string[];
 let runtime: pg.Pool | undefined;
 try {
+  await checkConcurrentOutboxUpgrade();
+  checks.push("eight_real_Host_processes_upgrade_one_previous_outbox_without_duplicate_migration");
   await migrateConversationSync(owner);
   await migrateConversationSync(owner);
   // Secret is passed as a parameter through the server function, never command-line or report.
@@ -90,6 +94,15 @@ try {
   );
   assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
   checks.push("concurrent_exact_operation_and_lost_ack_no_extra_version");
+  // Reproduce the previously shipped native v1 shape with real persisted data.
+  await owner.query("alter table zcode_sync.versions drop column management");
+  await owner.query("drop table zcode_sync.configuration");
+  await owner.query("update zcode_sync.schema_version set version=1");
+  await assert.rejects(store.state(scope, "session-sync"), { code: "schema" });
+  await migrateConversationSync(owner);
+  assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
+  assert.equal((await store.history(scope, null, 10))[0].management, null);
+  checks.push("native_v1_to_v3_preserves_existing_versions_receipts_and_unknown_index");
   assert.deepEqual(
     await store.execute(
       { tenant: scope.tenant.toUpperCase(), subject: scope.subject.toUpperCase() },
@@ -148,6 +161,7 @@ try {
   checks.push("restricted_role_rls_account_tenant_and_default_disabled");
   // Remaining checks use the reopened facade; the original pool is intentionally closed.
   await verifyTransitions(reopened, scope, checks);
+  await verifyManaged(owner, runtime, scope, connection, checks);
   await verifyOutbox(reopened, scope, other, root, checks);
   await verifyHttp(reopened, scope, other, checks);
   const limited = createConversationSyncStore({ ...options, pool: runtime, maxCheckpointBytes: 1 });
@@ -180,7 +194,7 @@ try {
     (await owner.query("select version from zcode_sync.schema_version")).rows[0].version,
     99,
   );
-  await owner.query("update zcode_sync.schema_version set version=1");
+  await owner.query("update zcode_sync.schema_version set version=3");
   await owner.query("alter role zcode_sync_runtime bypassrls");
   await assert.rejects(migrateConversationSync(owner), { code: "scope" });
   await owner.query("alter role zcode_sync_runtime nobypassrls");
@@ -260,7 +274,9 @@ try {
 
   report.fixtureScope = scope;
   report.eventCount = events.length;
-  report.nativeSchemaVersion = 1;
+  report.nativeSchemaVersion = (
+    await owner.query("select version from zcode_sync.schema_version")
+  ).rows[0].version;
   await writeFile(connection.report, JSON.stringify(report, null, 2));
   process.stdout.write(JSON.stringify(report) + "\n");
 } finally {

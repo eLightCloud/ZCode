@@ -1,6 +1,7 @@
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-selection";
 import { z } from "zod";
 import type { ProjectId, SessionId, WorkspaceId } from "./shared.js";
+import { portableTextPayload, portableTextMetadata } from "./text-input-facts.js";
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();
@@ -49,6 +50,7 @@ const messageInfo = z.discriminatedUnion("role", [
       role: z.literal("user"),
       time: z.object({ created: timestamp }).strict(),
       modelSelection: selection.optional(),
+      metadata: portableTextMetadata.optional(),
     })
     .strict(),
   z
@@ -92,17 +94,7 @@ const input = z
     id,
     kind: id,
     delivery: z.enum(["startNow", "guide", "queue"]),
-    payload: z
-      .object({
-        text: z.string(),
-        conversationInputIntent: z
-          .object({
-            sourceCommandId: id,
-          })
-          .strict()
-          .optional(),
-      })
-      .strict(),
+    payload: portableTextPayload,
     admittedSequence: timestamp,
     promotedSequence: timestamp.optional(),
     promotedMessageID: id.optional(),
@@ -119,7 +111,7 @@ const input = z
 export const textCheckpointSchema = z
   .object({
     format: z.literal("zcode.text-checkpoint"),
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     session: z
       .object({
         id,
@@ -137,6 +129,18 @@ export const textCheckpointSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    if (
+      value.version === 1 &&
+      (value.messages.some(
+        (message) => message.info.role === "user" && message.info.metadata !== undefined,
+      ) ||
+        value.inputs.some(
+          (input) =>
+            input.payload.conversationInputIntent &&
+            "queueItemId" in input.payload.conversationInputIntent,
+        ))
+    )
+      context.addIssue({ code: "custom", message: "V4 input facts require format v2" });
     const seen = new Set<string>();
     const allMessages = new Map(value.messages.map((message) => [message.info.id, message.info]));
     const issue = () =>
@@ -149,6 +153,18 @@ export const textCheckpointSchema = z
       if (key && !allMessages.has(key)) issue();
     };
     for (const [index, { info, parts }] of value.messages.entries()) {
+      if (info.role === "user" && info.metadata) {
+        const intent = info.metadata.conversationInputIntent;
+        if (
+          parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("") !== intent.text ||
+          (info.anchor?.sourceCommandId !== undefined &&
+            info.anchor.sourceCommandId !== intent.sourceCommandId)
+        )
+          issue();
+      }
       unique(`message:${info.id}`);
       if (info.role !== (index % 2 === 0 ? "user" : "assistant")) issue();
       if (info.role === "assistant" && info.parentID !== value.messages[index - 1]?.info.id)
@@ -159,6 +175,15 @@ export const textCheckpointSchema = z
       for (const item of parts) unique(`part:${item.id}`);
     }
     for (const item of value.inputs) {
+      const intent = item.payload.conversationInputIntent;
+      // Ledger admittedSequence and V4 admissionSeq are different native sequences.
+      // Preserve both; terminal status, not the old intent dispatch hint, prevents replay.
+      if (
+        intent &&
+        "queueItemId" in intent &&
+        (intent.text !== item.payload.text || intent.queueItemId !== item.id)
+      )
+        issue();
       unique(`input:${item.id}`);
       ref(item.promotedMessageID);
       unique(`admission:${item.admittedSequence}`);

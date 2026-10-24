@@ -368,3 +368,4 @@ export {
   builtinPluginStateIds,
 } from "./builtinPluginIdentity.js";
 export * from "./deliverables.js";
+export * from "./conversation-sync.js";

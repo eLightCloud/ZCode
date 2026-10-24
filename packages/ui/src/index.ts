@@ -70,6 +70,7 @@ export {
 export {
   ServiceProvider,
   useServices,
+  useOptionalServices,
   useWorkspaceServices,
   PlatformProvider,
   usePlatform,
@@ -143,3 +144,7 @@ export type {
   ApplicationShareCandidate,
 } from "./root/ApplicationPeripherals.js";
 export { ApplicationDialog } from "./root/ApplicationDialog.js";
+export {
+  ConversationHistory,
+  type ConversationHistoryLabels,
+} from "./components/ConversationHistory.js";

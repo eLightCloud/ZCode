@@ -1,5 +1,6 @@
 import { IApplicationHostService } from "./application-host/contract.js";
 import { createApplicationHostService } from "./application-host/applicationHostService.js";
+import { createConversationSyncHost } from "./session/conversationSyncHost.js";
 import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 import { channelReplyHostRequestSchema, channelReplyResultSchema } from "@zcode/shared";
@@ -1306,7 +1307,9 @@ export function createLocalServices(options: {
   const systemService = createSystemService();
   // onboarding 资格与任务列表共用同一份全局 tasks-index；repo 懒加载数据库，提前构造不会
   // 增加启动 I/O，后续 session syncer 也继续复用这一实例。
-  const taskIndexRepo = new TaskIndexRepo();
+  // App bootstrap explicitly owns the internal workspace purpose before any new index row.
+  // Existing rows remain unknown; this does not classify history by its default path.
+  const taskIndexRepo = new TaskIndexRepo(undefined, undefined, "conversation");
   // onboarding 完成记录：userId 由登录态补全（apikey/未登录为 null），见 docs/onboarding-record-spec.md。
   const onboardingRecordService = createOnboardingRecordService({
     loadUserId: async () => (await oauthCredentialRepo.loadActiveUserProfile())?.id ?? null,
@@ -2348,6 +2351,7 @@ export function createLocalServices(options: {
     });
   const fileService = createFileService({
     workspaceFileSearchFilter: options?.workspaceFileSearchFilter,
+    onConversationWorkspaceEnsured: () => taskIndexRepo.registerConversationWorkspace(),
   });
   const mediaPreviewService = createMediaPreviewService({
     fileService,
@@ -2722,6 +2726,7 @@ export function createLocalServices(options: {
   sharedSqliteRepos.set(services, sqliteReposToClose);
   const applicationHost = createApplicationHostService({
     native: zcodeAgentService,
+    conversations: createConversationSyncHost({ index: taskIndexRepo, agent: zcodeAgentService }),
     credentials: credentialService,
     storageRoot: resolveAppConfigDir(),
     surface: options.agentTelemetry?.runtimeSurface,

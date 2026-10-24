@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import type { IApplicationHostService } from "./contract.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import type { ICredentialService } from "../credential/credential.js";
+import type { ConversationSyncHost } from "@zcode/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 interface ApplicationHostExtension {
@@ -14,6 +15,7 @@ const log = createServiceLogger("application-host");
 /** Configured only by the trusted process launcher; never loaded from RPC input. */
 export function createApplicationHostService(options: {
   native: IZCodeAgentService;
+  conversations?: ConversationSyncHost;
   credentials: ICredentialService;
   storageRoot: string;
   modulePath?: string;
@@ -30,10 +32,14 @@ export function createApplicationHostService(options: {
         throw new Error("application_host_invalid_module");
       const value: unknown = await module.createApplicationHost({
         native: options.native,
+        conversations: options.conversations,
         credentials: options.credentials,
         storageRoot: join(options.storageRoot, "application"),
         surface: options.surface,
-        logger: log,
+        logger: {
+          info: (...args: unknown[]) => log.info(undefined, ...args),
+          warn: (...args: unknown[]) => log.warn(undefined, ...args),
+        },
       });
       if (
         !value ||
@@ -44,7 +50,7 @@ export function createApplicationHostService(options: {
         typeof value.dispose !== "function"
       )
         throw new Error("application_host_invalid_module");
-      log.info("Application Host initialized", { outcome: "initialized" });
+      log.info(undefined, "Application Host initialized", { outcome: "initialized" });
       return value as ApplicationHostExtension;
     });
     return pending;
@@ -52,7 +58,7 @@ export function createApplicationHostService(options: {
   // 来源恢复随 Host 启动，不能依赖浏览器再次发起调用才能消费持久意图。
   if (options.modulePath && isAbsolute(options.modulePath)) {
     void extension().catch(() =>
-      log.warn("Application Host startup failed", { outcome: "failed" }),
+      log.warn(undefined, "Application Host startup failed", { outcome: "failed" }),
     );
   }
   return {
@@ -65,7 +71,7 @@ export function createApplicationHostService(options: {
       try {
         return await (await extension()).call(method, input);
       } catch {
-        log.warn("Application Host call failed", { method, outcome: "failed" });
+        log.warn(undefined, "Application Host call failed", { method, outcome: "failed" });
         throw new Error("application_host_request_failed");
       }
     },
@@ -75,7 +81,7 @@ export function createApplicationHostService(options: {
         try {
           await (await pending).dispose();
         } catch {
-          log.warn("Application Host disposal failed", { outcome: "failed" });
+          log.warn(undefined, "Application Host disposal failed", { outcome: "failed" });
         }
       }
     },

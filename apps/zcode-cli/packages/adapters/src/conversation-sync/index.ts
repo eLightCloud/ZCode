@@ -16,3 +16,6 @@ export { createConversationSyncHttpHandler } from "./http.js";
 export { createConversationSyncHttpClient } from "./client.js";
 export { createNativeConversationSyncSource } from "./source.js";
 export type { NativeSyncSourceOwner } from "./source.js";
+export { createConversationSyncGateway } from "./gateway.js";
+export { createHostConversationSyncSource } from "./host-source.js";
+export { createConversationSyncPolicyStore } from "./policy.js";

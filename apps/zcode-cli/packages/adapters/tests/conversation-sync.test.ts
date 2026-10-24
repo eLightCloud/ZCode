@@ -19,6 +19,7 @@ import { canonical, digest } from "../src/conversation-sync/canonical.js";
 import { createConversationSyncOutbox } from "../src/conversation-sync/outbox.js";
 import { checkpoint } from "../checks/sync-fixture.mjs";
 import { textCheckpointSchema } from "@zcode/contracts";
+import { createConversationSyncHttpClient } from "../src/conversation-sync/client.js";
 
 function transition(state: SyncState, command: SyncCommand, versions: Map<string, SyncVersion>) {
   return applyTransition(
@@ -40,6 +41,45 @@ function live(): { state: SyncState; versions: Map<string, SyncVersion> } {
   return { state, versions };
 }
 describe("native conversation sync transitions", () => {
+  it("permits only the exact trusted private HTTP origin or an explicit loopback client", () => {
+    const scope = { tenant: randomUUID(), subject: randomUUID() };
+    const options = {
+      scope,
+      currentScope: () => scope,
+      credential: async () => "synthetic",
+      httpClient: {
+        request: async () => {
+          throw new Error("no_network_expected");
+        },
+      },
+      timeoutMs: 1000,
+      maxResponseBytes: 1000,
+      trace: { traceId: "synthetic" as never },
+    };
+    const url = "http://synthetic-private:48223/api/native/conversations";
+    expect(() => createConversationSyncHttpClient({ ...options, url })).toThrow();
+    expect(() =>
+      createConversationSyncHttpClient({
+        ...options,
+        url,
+        trustedHttpOrigin: "http://other:48223",
+      }),
+    ).toThrow();
+    expect(() =>
+      createConversationSyncHttpClient({
+        ...options,
+        url,
+        trustedHttpOrigin: "http://synthetic-private:48223",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      createConversationSyncHttpClient({
+        ...options,
+        url: "http://localhost:48223/api/native/conversations",
+        allowLoopbackHttp: true,
+      }),
+    ).not.toThrow();
+  });
   it("canonical fingerprints ignore object order but preserve semantic arrays", () => {
     expect(digest({ b: 2, a: [1, 2] })).toBe(digest({ a: [1, 2], b: 2 }));
     expect(digest({ a: [2, 1], b: 2 })).not.toBe(digest({ a: [1, 2], b: 2 }));

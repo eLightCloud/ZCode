@@ -28,6 +28,7 @@ export function createConversationSyncWorker(options: {
   outbox: ConversationSyncOutbox;
   center: ConversationSyncStore;
   logger: Logger;
+  unconfirmed?(session: string, code: string): void;
   currentScope(): SyncScope | null;
 }) {
   let running: Promise<void> | null = null;
@@ -49,21 +50,31 @@ export function createConversationSyncWorker(options: {
       .filter((item) => item.workspacePurpose === "conversation" && !item.hasLocalDirectory)
       .map((item) => receiveOperation(item.session, item.version));
     options.outbox.capture(options.scope, changes.cursor, after, requests);
+    const limited = new Set<string>();
     for (const request of options.outbox.pending(options.scope)) {
       checkScope();
-      const receipt = await options.center
-        .execute(options.scope, request)
-        .catch((cause: unknown) => {
-          options.logger.warn("Conversation checkpoint not acknowledged", {
-            event: "conversation.sync.ack",
-            operationId: request.operation,
-            sessionId: request.session,
-            status: "failed",
-            outcome: "unconfirmed",
-            code: cause instanceof ConversationSyncError ? cause.code : "transport",
-          });
-          throw cause;
+      if (limited.has(request.session)) continue;
+      let receipt;
+      try {
+        receipt = await options.center.execute(options.scope, request);
+      } catch (cause: unknown) {
+        const code = cause instanceof ConversationSyncError ? cause.code : "transport";
+        options.unconfirmed?.(request.session, code);
+        options.logger.warn("Conversation checkpoint not acknowledged", {
+          event: "conversation.sync.ack",
+          operationId: request.operation,
+          sessionId: request.session,
+          status: "failed",
+          outcome: "unconfirmed",
+          code,
         });
+        // 限额拒绝不应阻塞其它会话；同一会话的后继仍须等待准确前序确认。
+        if (code === "limit") {
+          limited.add(request.session);
+          continue;
+        }
+        throw cause;
+      }
       // 登录变化期间收到旧回执，不把它投影到新账号；下次原账号再核对原操作。
       checkScope();
       options.outbox.acknowledge(options.scope, receipt);
@@ -76,6 +87,7 @@ export function createConversationSyncWorker(options: {
         outcome: "server_saved",
       });
     }
+    if (limited.size) throw new ConversationSyncError("limit");
   }
   return {
     reconcile(): Promise<void> {

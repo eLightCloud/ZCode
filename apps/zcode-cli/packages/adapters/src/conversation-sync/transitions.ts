@@ -12,6 +12,7 @@ export interface VersionFacts {
   location: string;
   generation: number;
   checkpointDigest: string | null;
+  managementDigest: string | null;
 }
 export function versionFacts(value: SyncVersion): VersionFacts {
   return {
@@ -20,6 +21,7 @@ export function versionFacts(value: SyncVersion): VersionFacts {
     location: value.location,
     generation: value.generation,
     checkpointDigest: value.checkpoint === null ? null : digest(value.checkpoint),
+    managementDigest: value.management === undefined ? null : digest(value.management),
   };
 }
 

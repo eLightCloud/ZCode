@@ -13,6 +13,7 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { canonical, digest } from "./canonical.js";
+import { conversationHistorySchema } from "@zcode/shared";
 
 /** Storage transport only. Privileged selection/barrier commands have no public HTTP mutation route. */
 export function createConversationSyncHttpClient(options: {
@@ -26,16 +27,21 @@ export function createConversationSyncHttpClient(options: {
   trace: TraceContext;
   /** Explicit isolated-test loopback only; normal transport requires HTTPS. */
   allowLoopbackHttp?: boolean;
+  /** Exact private origin supplied by the trusted launcher, never an RPC/browser field. */
+  trustedHttpOrigin?: string;
 }): ConversationSyncStore {
   const base = new URL(options.url);
-  const isLoopback = ["127.0.0.1", "[::1]"].includes(base.hostname);
+  const isLoopback = ["127.0.0.1", "localhost", "[::1]"].includes(base.hostname);
   if (
     base.username ||
     base.password ||
     base.search ||
     base.hash ||
     (base.protocol !== "https:" &&
-      !(options.allowLoopbackHttp && isLoopback && base.protocol === "http:")) ||
+      !(
+        base.protocol === "http:" &&
+        ((options.allowLoopbackHttp && isLoopback) || options.trustedHttpOrigin === base.origin)
+      )) ||
     ![options.timeoutMs, options.maxResponseBytes].every((n) => Number.isSafeInteger(n) && n > 0)
   ) {
     throw new ConversationSyncError("invalid");
@@ -90,6 +96,14 @@ export function createConversationSyncHttpClient(options: {
     return decoded;
   }
   return {
+    async history(scope, after, limit) {
+      return conversationHistorySchema.parse(
+        await request(scope, "/history", {
+          ...(after === null ? {} : { after }),
+          limit: String(limit),
+        }),
+      );
+    },
     async execute(scope, input) {
       const parsed = syncRequestSchema.safeParse(input);
       if (!parsed.success || parsed.data.command.kind !== "receive")

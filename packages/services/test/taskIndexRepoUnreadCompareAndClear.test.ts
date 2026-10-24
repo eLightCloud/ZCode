@@ -108,7 +108,9 @@ describe("TaskIndexRepo unread compare-and-clear", () => {
     repo.close();
     const legacyDatabase = new DatabaseSync(getTasksIndexDatabasePath());
     legacyDatabase.exec("ALTER TABLE tasks DROP COLUMN last_unread_at");
-    legacyDatabase.exec("DELETE FROM tasks_schema_migration");
+    legacyDatabase.exec(
+      "DELETE FROM tasks_schema_migration; DROP TABLE conversation_workspace_purpose",
+    );
     legacyDatabase.close();
     repo = new TaskIndexRepo();
     const migrationLock = await holdSqliteWriteLock(getTasksIndexDatabasePath());

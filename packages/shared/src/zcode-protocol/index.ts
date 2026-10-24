@@ -4117,6 +4117,7 @@ export const zcodeProtocolMethods = {
   sessionRequestRuntimePreferences: "session/requestRuntimePreferences",
   subagentsReadRuntimeConfig: "subagents/readRuntimeConfig",
   sessionRead: "session/read",
+  sessionTextCheckpoint: "session/textCheckpoint",
   sessionMessages: "session/messages",
   sessionEvents: "session/events",
   sessionDebug: "session/debug",

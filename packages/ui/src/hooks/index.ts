@@ -6,7 +6,7 @@
  */
 
 // 服务上下文
-export { ServiceProvider, useServices } from "./useServices.js";
+export { ServiceProvider, useServices, useOptionalServices } from "./useServices.js";
 export { useBaseWorkspaceServices, useWorkspaceServices } from "./useWorkspaceServices.js";
 
 // 平台操作上下文

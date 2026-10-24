@@ -27,12 +27,13 @@ export async function verifyHttp(
     [randomUUID(), other],
   ]);
   const [token, otherToken] = [...tokens.keys()];
+  let sourceQualified = true;
   const handler = createConversationSyncHttpHandler({
     store,
     maxRequestBytes: 4096,
     logger,
     authenticate: async (request) => tokens.get(request.headers.authorization ?? "") ?? null,
-    qualify: async (_scope, request) => request.session !== "directory-project",
+    qualify: async (_scope, request) => sourceQualified && request.session !== "directory-project",
   });
   const server = createServer((request, response) => {
     void handler(request, response);
@@ -61,6 +62,44 @@ export async function verifyHttp(
     const receipt = await posted.json();
     assert.equal(receipt.outcome, "saved");
     assert.equal(receipt.state.active, null);
+    sourceQualified = false;
+    const retry = await fetch(base + "/versions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+    assert.equal(retry.status, 200);
+    assert.deepEqual(await retry.json(), receipt);
+    assert.equal(
+      (
+        await fetch(base + "/versions", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ ...request, operation: randomUUID() }),
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await fetch(base + "/versions", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            ...request,
+            command: {
+              ...request.command,
+              version: { ...request.command.version, id: "different" },
+            },
+          }),
+        })
+      ).status,
+      409,
+    );
+    sourceQualified = true;
+    checks.push(
+      "exact_saved_receipt_remains_recoverable_after_source_qualification_changes_without_accepting_new_input",
+    );
     const queried = await fetch(
       base + "/receipt?session=http-session&operation=" + request.operation,
       { headers },

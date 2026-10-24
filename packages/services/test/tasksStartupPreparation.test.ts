@@ -94,8 +94,8 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
       expect.objectContaining({
         migration: {
           kind: "initialize",
-          executedCount: 3,
-          committedCount: 3,
+          executedCount: 4,
+          committedCount: 4,
           lastAppliedMigrationId: null,
         },
       }),
@@ -104,7 +104,7 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
     await prepareTasksIndexStorage(path, (phase, migration) => second.push({ phase, migration }));
     expect(second.some((s) => s.phase === "migrating")).toBe(false);
     expect(second.at(-1)).toMatchObject({
-      migration: { lastAppliedMigrationId: "0003_official_glm_selection" },
+      migration: { lastAppliedMigrationId: "0004_conversation_workspace_purpose" },
     });
     expect(second.some((s) => s.phase === "maintaining")).toBe(true);
     expect(second).toContainEqual(
@@ -135,8 +135,8 @@ it("retains committed facts if closing the migration connection fails", async ()
     expect(states.at(-1)).toMatchObject({
       migration: {
         kind: "initialize",
-        executedCount: 3,
-        committedCount: 3,
+        executedCount: 4,
+        committedCount: 4,
         lastAppliedMigrationId: null,
       },
     });
@@ -176,7 +176,9 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
     await prepareTasksIndexStorage(path, () => {});
     const db = new DatabaseSync(path);
     try {
-      db.exec("DELETE FROM tasks_schema_migration WHERE id='0003_official_glm_selection'");
+      db.exec(
+        "DELETE FROM tasks_schema_migration WHERE id='0004_conversation_workspace_purpose'; DROP TABLE conversation_workspace_purpose",
+      );
     } finally {
       db.close();
     }
@@ -188,7 +190,7 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
         kind: "upgrade",
         executedCount: 1,
         committedCount: 1,
-        lastAppliedMigrationId: "0002_provider_selection",
+        lastAppliedMigrationId: "0003_official_glm_selection",
       },
     });
   } finally {

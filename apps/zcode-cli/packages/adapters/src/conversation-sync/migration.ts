@@ -26,7 +26,7 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
     await client.query(`create table if not exists zcode_sync.schema_version
       (singleton boolean primary key default true check(singleton), version integer not null)`);
     const previous = await client.query("select version from zcode_sync.schema_version");
-    if (previous.rows.length && previous.rows[0].version !== 1)
+    if (previous.rows.length && ![1, 2, 3].includes(previous.rows[0].version))
       throw new ConversationSyncError("schema");
     if (!previous.rows.length) {
       await client.query(`do $$ begin
@@ -46,6 +46,37 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
       }
       await client.query("insert into zcode_sync.schema_version(version) values(1)");
     }
+    if (!previous.rows.length || previous.rows[0].version === 1) {
+      // Native v1 data stays intact; old versions explicitly retain unknown index facts.
+      await client.query("alter table zcode_sync.versions add column management jsonb");
+      await client.query("update zcode_sync.schema_version set version=2");
+    }
+    if (!previous.rows.length || previous.rows[0].version < 3) {
+      await client.query(`create table zcode_sync.configuration(singleton boolean primary key check(singleton),
+        revision bigint not null check(revision>=0), policy jsonb not null)`);
+      await client.query(`insert into zcode_sync.configuration values(true,0,
+        '{"enabled":false,"subjects":[],"maxCheckpointBytes":65536,"maxSubjectBytes":8388608,"maxVersionsPerSession":64}')`);
+      await client.query("update zcode_sync.schema_version set version=3");
+    }
+    await client.query(`do $$ begin
+      if not exists(select 1 from pg_roles where rolname='zcode_sync_configurator') then
+        create role zcode_sync_configurator nologin nosuperuser nobypassrls;
+      end if; end $$`);
+    const configurator = await client.query(
+      "select rolsuper,rolbypassrls,rolcanlogin from pg_roles where rolname='zcode_sync_configurator'",
+    );
+    if (
+      configurator.rows.length !== 1 ||
+      configurator.rows[0].rolsuper ||
+      configurator.rows[0].rolbypassrls ||
+      configurator.rows[0].rolcanlogin
+    )
+      throw new ConversationSyncError("scope");
+    await client.query("grant usage on schema zcode_sync to zcode_sync_configurator");
+    await client.query(
+      "grant select,update on zcode_sync.configuration to zcode_sync_configurator",
+    );
+    await client.query("grant select on zcode_sync.schema_version to zcode_sync_configurator");
     const role = await client.query(
       "select rolsuper, rolbypassrls, rolcanlogin from pg_roles where rolname='zcode_sync_runtime'",
     );

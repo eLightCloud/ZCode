@@ -14,18 +14,27 @@ import {
   type SyncReceipt,
 } from "@zcode/contracts";
 import type { Pool, PoolClient } from "pg";
+import { conversationHistorySchema } from "@zcode/shared";
+import type { ConversationCenterPolicy } from "@zcode/shared";
+import { readCenterPolicy } from "./policy.js";
 import { canonical, digest } from "./canonical.js";
 import { initialState, transition, versionFacts, type VersionFacts } from "./transitions.js";
 
-export interface SyncStoreOptions {
-  pool: Pool;
-  /** Trusted controlled-test configuration. Empty means no admission, never global enablement. */
+interface InjectedPolicy {
+  policy?: never;
   allowedScopes: readonly SyncScope[];
   maxCheckpointBytes: number;
   maxSubjectBytes: number;
   maxVersionsPerSession: number;
-  logger: Logger;
 }
+export type SyncStoreOptions = {
+  pool: Pool;
+  logger: Logger;
+} & (InjectedPolicy | { policy: "managed" });
+type Limits = Pick<
+  ConversationCenterPolicy,
+  "maxCheckpointBytes" | "maxSubjectBytes" | "maxVersionsPerSession"
+>;
 function safePositive(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
@@ -47,7 +56,7 @@ async function versionsFor(
   session: string,
 ): Promise<Map<string, VersionFacts>> {
   const result = await client.query(
-    "select id,parent,location,generation,digest from zcode_sync.versions where session=$1",
+    "select id,parent,location,generation,digest,management from zcode_sync.versions where session=$1",
     [session],
   );
   return new Map(
@@ -59,6 +68,7 @@ async function versionsFor(
         location: row.location,
         generation: Number(row.generation),
         checkpointDigest: row.digest,
+        managementDigest: row.management === null ? null : digest(row.management),
       },
     ]),
   );
@@ -69,7 +79,7 @@ async function readVersion(
   id: string,
 ): Promise<SyncVersion | null> {
   const result = await client.query(
-    `select v.id,v.parent,v.location,v.generation,v.digest,p.payload
+    `select v.id,v.parent,v.location,v.generation,v.digest,v.management,p.payload
     from zcode_sync.versions v left join zcode_sync.payloads p using(tenant,subject,digest)
     where v.session=$1 and v.id=$2`,
     [session, id],
@@ -84,26 +94,29 @@ async function readVersion(
     location: row.location,
     generation: Number(row.generation),
     checkpoint: row.payload ?? null,
+    ...(row.management === null ? {} : { management: row.management }),
   });
 }
 
 export function createConversationSyncStore(options: SyncStoreOptions): ConversationSyncStore {
-  for (const value of [
-    options.maxCheckpointBytes,
-    options.maxSubjectBytes,
-    options.maxVersionsPerSession,
-  ]) {
-    if (!safePositive(value)) throw new ConversationSyncError("invalid");
+  const injected = options.policy === "managed" ? null : options;
+  if (injected) {
+    for (const value of [
+      injected.maxCheckpointBytes,
+      injected.maxSubjectBytes,
+      injected.maxVersionsPerSession,
+    ])
+      if (!safePositive(value)) throw new ConversationSyncError("invalid");
   }
   const allowed = new Set(
-    options.allowedScopes.map((scope) => canonical(syncScopeSchema.parse(scope))),
+    injected?.allowedScopes.map((scope) => canonical(syncScopeSchema.parse(scope))),
   );
   async function transaction<T>(
     scope: SyncScope,
-    work: (client: PoolClient) => Promise<T>,
+    work: (client: PoolClient, limits: Limits) => Promise<T>,
   ): Promise<T> {
     const checked = syncScopeSchema.safeParse(scope);
-    if (!checked.success || !allowed.has(canonical(checked.data)))
+    if (!checked.success || (injected && !allowed.has(canonical(checked.data))))
       throw new ConversationSyncError("scope");
     const client = await options.pool.connect();
     try {
@@ -126,9 +139,20 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         throw new ConversationSyncError("scope");
       }
       const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 1)
+      if (schema.rows.length !== 1 || schema.rows[0].version !== 3)
         throw new ConversationSyncError("schema");
-      const result = await work(client);
+      let limits: Limits;
+      if (injected) limits = injected;
+      else {
+        const policy = (await readCenterPolicy(client)).policy;
+        if (
+          !policy.enabled ||
+          !policy.subjects.some((item) => canonical(item) === canonical(checked.data))
+        )
+          throw new ConversationSyncError("scope");
+        limits = policy;
+      }
+      const result = await work(client, limits);
       await client.query("commit");
       return result;
     } catch (cause) {
@@ -158,14 +182,15 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     session: string,
     value: SyncVersion,
     versions: Map<string, VersionFacts>,
+    limits: Limits,
   ) {
-    if (versions.size >= options.maxVersionsPerSession) throw new ConversationSyncError("limit");
+    if (versions.size >= limits.maxVersionsPerSession) throw new ConversationSyncError("limit");
     const payload = value.checkpoint;
     const hash = payload ? digest(payload) : null;
     if (payload) {
       if (payload.session.id !== session) throw new ConversationSyncError("invalid");
       const bytes = Buffer.byteLength(canonical(payload));
-      if (bytes > options.maxCheckpointBytes) throw new ConversationSyncError("limit");
+      if (bytes > limits.maxCheckpointBytes) throw new ConversationSyncError("limit");
       // 主体锁覆盖不同 session 的并发配额，不因去重而跨主体探测内容。
       const usage = await client.query(
         "select coalesce(sum(bytes),0)::text as bytes from zcode_sync.payloads",
@@ -173,7 +198,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
       const exists = await client.query("select 1 from zcode_sync.payloads where digest=$1", [
         hash,
       ]);
-      if (!exists.rows.length && Number(usage.rows[0].bytes) + bytes > options.maxSubjectBytes)
+      if (!exists.rows.length && Number(usage.rows[0].bytes) + bytes > limits.maxSubjectBytes)
         throw new ConversationSyncError("limit");
       await client.query(
         `insert into zcode_sync.payloads(tenant,subject,digest,payload,bytes)
@@ -182,8 +207,8 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
       );
     }
     await client.query(
-      `insert into zcode_sync.versions(tenant,subject,session,id,parent,location,generation,digest)
-      values($1,$2,$3,$4,$5,$6,$7,$8)`,
+      `insert into zcode_sync.versions(tenant,subject,session,id,parent,location,generation,digest,management)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         scope.tenant,
         scope.subject,
@@ -193,6 +218,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         value.location,
         value.generation,
         hash,
+        value.management ?? null,
       ],
     );
   }
@@ -207,7 +233,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         sessionId: request.session,
       });
       try {
-        const result = await transaction(scope, async (client) => {
+        const result = await transaction(scope, async (client, limits) => {
           // UUID scope also protects first-session creation and subject quota races.
           await client.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
             canonical(syncScopeSchema.parse(scope)),
@@ -246,7 +272,14 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
             next = current;
           } else {
             if (request.command.kind === "receive")
-              await saveVersion(client, scope, request.session, request.command.version, versions);
+              await saveVersion(
+                client,
+                scope,
+                request.session,
+                request.command.version,
+                versions,
+                limits,
+              );
             next = transition(current, request.command, versions);
           }
           syncStateSchema.parse(next);
@@ -284,6 +317,36 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
       }
     },
     state: (scope, session) => transaction(scope, (client) => state(client, session)),
+    history: (scope, after, limit) => {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+        throw new ConversationSyncError("invalid");
+      return transaction(scope, async (client) => {
+        // PostgreSQL projects only metadata; never materialize every full checkpoint
+        // just to render the workbench list. Paths are absent from this native codec.
+        const result = await client.query(
+          `select s.session,s.state,v.id,
+          coalesce(v.management->>'titleOverride',p.payload->'session'->>'title','') as title,
+          v.management as management
+          from zcode_sync.sessions s
+          left join zcode_sync.versions v on v.tenant=s.tenant and v.subject=s.subject
+            and v.session=s.session and v.id=coalesce(s.state->>'selected',s.state->'candidates'->>0)
+          left join zcode_sync.payloads p on p.tenant=v.tenant and p.subject=v.subject and p.digest=v.digest
+          where ($1::text is null or s.session>$1) order by s.session limit $2`,
+          [after, limit],
+        );
+        return conversationHistorySchema.parse(
+          result.rows.map((row) => ({
+            session: row.session,
+            version: row.id ?? null,
+            title: row.title,
+            management: row.management ?? null,
+            candidates: row.state.candidates,
+            selected: row.state.selected,
+            revision: row.state.revision,
+          })),
+        );
+      });
+    },
     version: (scope, session, id) =>
       transaction(scope, async (client) => readVersion(client, session, id)),
     receipt: (scope, session, operation) =>

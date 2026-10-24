@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPersistentCommandFacts } from "../../src/zcode-protocol-v4/persistent-command-facts.js";
+import { lookupGlobalCreateSessionCommand } from "../../src/zcode-protocol-v4/create-session-command-fact.js";
 import {
   createRegistryBackedTestApp,
   createTestProviderRegistry,
@@ -88,9 +89,70 @@ try {
     const facts = await loadPersistentCommandFacts(store, app.sessionId);
     assert(facts.transcript?.some((fact) => fact.commandId === "s0-source-command"));
     assert(facts.discarded?.some((fact) => fact.commandId === "s0-cancelled-command"));
+    const original = await lookupGlobalCreateSessionCommand(store, "s0-source-command");
+    assert.equal(original?.status, "accepted");
+    assert.deepEqual(original?.result, { type: "createSession", sessionId: app.sessionId });
+  }
+  if (action === "source") {
+    await app.runtime.ensureSessionPersistedForExternalActivity("S0_SOURCE_PROMPT");
+    const intent = {
+      sourceCommandId: "s0-source-command",
+      queueItemId: "queue_s0-source-command",
+      clientId: "s0-client",
+      kind: "sendText",
+      admissionSeq: 1,
+      admittedAt: 1,
+      requestedDelivery: "startNow",
+      admittedDelivery: "startNow",
+      attachmentRefs: [],
+    };
+    await store.saveSessionInput({
+      id: "queue_s0-source-command",
+      sessionID: app.sessionId,
+      kind: "sendText",
+      delivery: "startNow",
+      payload: {
+        text: "S0_SOURCE_PROMPT",
+        intent,
+        attachments: [],
+        sourceCommandType: "createSession",
+        conversationInputIntent: {
+          sourceCommandId: intent.sourceCommandId,
+          queueItemId: intent.queueItemId,
+          clientId: intent.clientId,
+          kind: "sendText",
+          text: "S0_SOURCE_PROMPT",
+          attachments: [],
+          delivery: { requested: "startNow", admitted: "startNow" },
+          order: { admissionSeq: 1 },
+          steer: { state: "notRequested" },
+          dispatch: { state: "admitted" },
+          admittedAt: 1,
+        },
+      },
+    });
   }
   await app.runtime.executeTurn(action === "source" ? "S0_SOURCE_PROMPT" : "S0_TARGET_PROMPT", [], {
     inputId: action === "source" ? "s0-source-command" : "s0-target-command",
+    ...(action === "source"
+      ? {
+          intent: {
+            sourceCommandId: "s0-source-command",
+            queueItemId: "queue_s0-source-command",
+            clientId: "s0-client",
+            kind: "sendText" as const,
+            text: "S0_SOURCE_PROMPT",
+            modelSelection: selection,
+            mode: "build" as const,
+            planEnabled: false,
+            admissionSeq: 1,
+            admittedAt: 1,
+            requestedDelivery: "startNow" as const,
+            admittedDelivery: "startNow" as const,
+          },
+          sessionInputId: "queue_s0-source-command",
+        }
+      : {}),
   });
   assert.equal(calls, 1);
   if (checkpoint) assert(hasOriginalContext, "fresh target request must contain original context");

@@ -22,6 +22,7 @@ import {
 /* oxlint-disable eslint(max-lines) -- ZCode Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
 import { createLocalRuntimeMaintenance } from "./localRuntimeMaintenance.js";
+import { conversationCheckpointResultSchema } from "@zcode/shared";
 import type { LocalRuntimeMaintenance } from "@zcode/shared";
 import { randomUUID } from "node:crypto";
 import { createTopicResourceBridge } from "./topicResourceBridge.js";
@@ -3695,10 +3696,12 @@ export function createZCodeAgentService(
     return envelope;
   }
 
-  options?.onLocalMaintenanceReady?.(createLocalRuntimeMaintenance(
-    [processManager, pluginProcessManager, mcpStatusProcessManager],
-    () => waitingWorkspaceStartups.size > 0,
-  ));
+  options?.onLocalMaintenanceReady?.(
+    createLocalRuntimeMaintenance(
+      [processManager, pluginProcessManager, mcpStatusProcessManager],
+      () => waitingWorkspaceStartups.size > 0,
+    ),
+  );
   return {
     async prepareStorage(params) {
       const client = await processManager.getClient(params);
@@ -4099,6 +4102,18 @@ export function createZCodeAgentService(
         V4_METHODS.conversationUsage,
         { sessionId: params.sessionId },
         v4ConversationUsageResultSchema,
+      );
+    },
+
+    async captureTextCheckpoint(params) {
+      // 来源恢复需要扫描已落盘、但 Core 已回收的会话；使用原生只读启动路径，
+      // 不调用 resume/模型同步/输入接纳，也不申请云端执行实例。
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.sessionTextCheckpoint,
+        { sessionId: params.sessionId },
+        conversationCheckpointResultSchema,
+        { lifecycle: "observation", timeoutMs: 15000 },
       );
     },
 

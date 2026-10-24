@@ -9,7 +9,7 @@ import {
 } from "@zcode/contracts";
 import { EXPLORE_AGENT_ALLOWED_TOOLS } from "../../subagent/explore-tools.js";
 import type { AgentRuntimeConfig } from "../types.js";
-import { normalizeToolNameAlias } from "../../tool/tool-visibility.js";
+import { normalizeToolNameAlias } from "../../tool/model-surface-api.js";
 
 const EXPLORE_AGENT_ALLOWED_TOOL_SET = new Set<string>(EXPLORE_AGENT_ALLOWED_TOOLS);
 

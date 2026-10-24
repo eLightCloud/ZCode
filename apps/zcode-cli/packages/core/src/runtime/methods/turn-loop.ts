@@ -37,7 +37,7 @@ import { appendTurnRequestEntries } from "./turn-output-token-continuation.js";
 import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
 import { filterOutputTokenContinuationEntries } from "./turn-output-token-continuation.js";
 import { refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
-import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
+import { buildToolSearchAnnouncement } from "../../tool/model-surface-api.js";
 
 export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,

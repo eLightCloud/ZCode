@@ -4,7 +4,16 @@
  */
 export const cliRuntimeModule = {
   id: "cli-runtime",
-  requires: ["gen-ui-service", "mcp-apps-protocol", "shared", "zcode-cli"],
+  requires: [
+    "cli-agent-history",
+    "cli-hooks",
+    "cli-permission",
+    "cli-tool-runtime",
+    "gen-ui-service",
+    "mcp-apps-protocol",
+    "shared",
+    "zcode-cli",
+  ],
   provides: ["cli-runtime"],
   publicEntrypoints: ["../runtime.ts", "contract.ts"],
 } as const;

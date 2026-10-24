@@ -11,7 +11,7 @@ import { createTurnAgentDefinitions } from "../subagent/definitions.js";
 import type { GetAgentDefinitions } from "../subagent/definitions.js";
 import { projectPersistentAgentMemoryTools } from "../subagent/persistent-memory.js";
 import { RuntimeTelemetryFacade } from "../telemetry/runtime-telemetry.js";
-import { disposeNodeReplSession } from "../tool/handlers/node-repl.js";
+import { disposeNodeReplSession } from "../tool/session-tools-api.js";
 import type { AgentRuntimeExecutionApi } from "./agent-runtime-execution-api.js";
 import type { AgentRuntimeInputApi } from "./agent-runtime-input-api.js";
 import type { AgentRuntimeSessionApi } from "./agent-runtime-session-api.js";

@@ -8,7 +8,7 @@ import type { PermissionDecisionResult } from "../../permission/service.js";
 import type { ExecutableToolCall, ToolEntry, ToolExecutionResult } from "../types.js";
 import { createErrorResult, createPermissionErrorResult } from "./errors.js";
 import { preparePermissionInput, snapshotPermissionInput } from "./permission-input.js";
-import type { PermissionResponderRaceOutcome } from "./permission-responder-race.js";
+import type { PermissionResponderRaceOutcome } from "./permission-race-outcome.js";
 import type { ToolExecutorDeps } from "./types.js";
 
 export type PermissionFlowResult =

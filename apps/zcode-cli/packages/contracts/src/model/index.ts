@@ -103,3 +103,5 @@ export * from "./invocation-context.js";
 export type { ModelToolCall as ToolCall };
 
 export * from "./content-protection.js";
+
+export { withModelInvocationContext } from "./invocation-wrapper.js";

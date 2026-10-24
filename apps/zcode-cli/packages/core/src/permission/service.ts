@@ -1,3 +1,4 @@
+import type { PermissionServiceContext } from "./permission-context.js";
 import type { PermissionServiceApi } from "./permission-api.js";
 import * as implementation3 from "./permission-capabilities.js";
 import * as implementation0 from "./permission-decision.js";
@@ -7,9 +8,9 @@ import * as implementation1 from "./permission-rules.js";
 // Permission Service - Permission checking and decision making
 // ============================================================
 
-import { type PermissionRuleset, type PermissionUpdate } from "@zcode/contracts";
+import { type PermissionUpdate } from "@zcode/contracts";
 
-import { applyPermissionUpdates } from "../tool/executor/permission-rules.js";
+import { applyPermissionUpdates } from "./rule-updates.js";
 
 import { defaultPermissionConfig } from "./permission-service-contract.js";
 
@@ -35,7 +36,7 @@ export class PermissionService {
    * 一个实例 = 一个 app = 一个会话，所以"随会话消亡"不需要任何额外机制：重启 / 冷恢复 / `/new`
    * 都会造一个空的新实例。只服务 alwaysAsk gate（见 checkAlwaysAsk），普通工具的模式语义不认它。
    */
-  private sessionRules: PermissionRuleset = { version: 1 };
+  private sessionRules: PermissionServiceContext["sessionRules"] = { version: 1 };
 
   constructor(private config: PermissionConfig = defaultPermissionConfig) {}
 

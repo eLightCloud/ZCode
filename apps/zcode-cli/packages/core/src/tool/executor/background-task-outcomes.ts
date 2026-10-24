@@ -1,3 +1,5 @@
+import { type BashTaskNotificationStatus } from "./background-notification-status.js";
+export type { BashTaskNotificationStatus } from "./background-notification-status.js";
 import { type ExecutionPort } from "@zcode/contracts";
 
 import { isSubagentDispatchToolName } from "../compat.js";
@@ -45,8 +47,6 @@ export function isBackgroundTaskLaunch(
   if (output.status === "backgrounded") return true;
   return isSubagentDispatchToolName(toolCall.name) && output.status === "async_launched";
 }
-
-export type BashTaskNotificationStatus = "completed" | "failed" | "killed";
 
 export function normalizeBashTaskNotificationStatus(status: string): BashTaskNotificationStatus {
   return normalizeBackgroundTaskNotificationStatus(status);

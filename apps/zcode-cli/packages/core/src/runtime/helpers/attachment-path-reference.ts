@@ -2,7 +2,7 @@ import { basename } from "../deps.js";
 import type { FilePartSource, TurnAttachment } from "../deps.js";
 import type { ResolvedTurnAttachment } from "../types.js";
 import { safeAttachmentOriginalRef } from "./attachment-artifacts.js";
-import { inferVideoMimeFromPath } from "./attachment-video.js";
+import { inferVideoMimeFromPath } from "../../agent/video-input.js";
 
 type PathReferenceReason =
   | "binary_file"

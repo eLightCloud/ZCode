@@ -67,6 +67,13 @@ modules:
   - id: zcode-cli
     roots: [ apps/zcode-cli ]
     managed: false
+    requires:
+      - cli-agent-history
+      - cli-hooks
+      - cli-permission
+      - cli-runtime
+      - cli-tool-runtime
+      - cli-workflow
   # sqlite-migrations：由 architecture:adopt 登记
   - id: sqlite-migrations
     roots:
@@ -581,7 +588,9 @@ modules:
       - apps/zcode-cli/packages/core/src/tool/handlers/fill-workflow-hole.ts
       - apps/zcode-cli/packages/core/tests/workflow-entrypoints
     managed: true
-    requires: [ zcode-cli ]
+    requires:
+      - cli-tool-runtime
+      - zcode-cli
     publicEntrypoints:
       - apps/zcode-cli/packages/core/src/tool/handlers/amend-workflow.ts
       - apps/zcode-cli/packages/core/src/tool/handlers/list-models.ts
@@ -596,7 +605,10 @@ modules:
       - apps/zcode-cli/packages/core/src/tool/handlers/reply-to-channel.ts
       - apps/zcode-cli/packages/core/tests/channel-reply
     managed: true
-    requires: [ shared, zcode-cli ]
+    requires:
+      - cli-tool-runtime
+      - shared
+      - zcode-cli
     publicEntrypoints:
       - apps/zcode-cli/packages/core/src/tool/handlers/reply-to-channel.ts
       - apps/zcode-cli/packages/core/src/tool/channel-reply/contract.ts
@@ -842,7 +854,15 @@ modules:
       - apps/zcode-cli/packages/contracts/src/model/contract.ts
     layers:
       domain: .
-      adapters: [ invocation-context.ts, index.ts, contract.ts, contract.example.ts, contract.test.ts ]
+      adapters:
+        [
+          invocation-context.ts,
+          index.ts,
+          contract.ts,
+          contract.example.ts,
+          contract.test.ts,
+          invocation-wrapper.ts
+        ]
     owner: model-protocol
   # cli-runtime：由 architecture:adopt 登记
   - id: cli-runtime
@@ -853,6 +873,10 @@ modules:
       - apps/zcode-cli/packages/core/tests/runtime-contract
     managed: true
     requires:
+      - cli-agent-history
+      - cli-hooks
+      - cli-permission
+      - cli-tool-runtime
       - gen-ui-service
       - mcp-apps-protocol
       - shared
@@ -1044,6 +1068,243 @@ modules:
       - domain
       - app
       - adapters
+  # cli-agent-history：由 architecture:adopt 登记
+  - id: cli-agent-history
+    roots:
+      - apps/zcode-cli/packages/core/src/agent
+      - apps/zcode-cli/packages/core/tests/cli-agent-history
+    managed: true
+    requires:
+      - cli-tool-runtime
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/agent/agent-listing-metadata.ts
+      - apps/zcode-cli/packages/core/src/agent/attachment-data-url.ts
+      - apps/zcode-cli/packages/core/src/agent/compact-session.ts
+      - apps/zcode-cli/packages/core/src/agent/contract.ts
+      - apps/zcode-cli/packages/core/src/agent/index.ts
+      - apps/zcode-cli/packages/core/src/agent/loaded-skills.ts
+      - apps/zcode-cli/packages/core/src/agent/message-history-contract.ts
+      - apps/zcode-cli/packages/core/src/agent/message-history-usage.ts
+      - apps/zcode-cli/packages/core/src/agent/message-history.ts
+      - apps/zcode-cli/packages/core/src/agent/plan-file-continuity.ts
+      - apps/zcode-cli/packages/core/src/agent/read-file-state-hydrator.ts
+      - apps/zcode-cli/packages/core/src/agent/runtime-input-presentation.ts
+      - apps/zcode-cli/packages/core/src/agent/session-history-hydrator.ts
+      - apps/zcode-cli/packages/core/src/agent/turn-machine.ts
+      - apps/zcode-cli/packages/core/src/agent/turn-state.ts
+      - apps/zcode-cli/packages/core/src/agent/video-input.ts
+    layers:
+      app: .
+    owner: native-conversation
+    layerOrder:
+      - app
+      - adapters
+  # cli-permission：由 architecture:adopt 登记
+  - id: cli-permission
+    roots:
+      - apps/zcode-cli/packages/core/src/permission
+      - apps/zcode-cli/packages/core/tests/cli-permission
+    managed: true
+    requires:
+      - cli-tool-runtime
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/permission/broker.ts
+      - apps/zcode-cli/packages/core/src/permission/contract.ts
+      - apps/zcode-cli/packages/core/src/permission/index.ts
+      - apps/zcode-cli/packages/core/src/permission/rule-matching.ts
+      - apps/zcode-cli/packages/core/src/permission/service.ts
+      - apps/zcode-cli/packages/core/src/permission/rule-updates.ts
+    layers:
+      app: .
+      adapters:
+        - broker.ts
+        - index.ts
+    owner: native-permission
+    layerOrder:
+      - app
+      - adapters
+  # cli-hooks：由 architecture:adopt 登记
+  - id: cli-hooks
+    roots:
+      - apps/zcode-cli/packages/core/src/hooks
+      - apps/zcode-cli/packages/core/tests/cli-hooks
+    managed: true
+    requires:
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/hooks/contract.ts
+      - apps/zcode-cli/packages/core/src/hooks/index.ts
+      - apps/zcode-cli/packages/core/src/hooks/types.ts
+      - apps/zcode-cli/packages/core/src/hooks/workspace-hook-runtime-admission.ts
+    layers:
+      app: .
+      adapters:
+        - configured-runner-callback.ts
+        - configured-runner-input.ts
+        - configured-runner.ts
+        - contract.example.ts
+        - contract.test.ts
+        - contract.ts
+        - index.ts
+        - runner.ts
+        - workspace-hook-review-flow.ts
+    owner: native-hooks
+    layerOrder:
+      - app
+      - adapters
+  # cli-workflow：由 architecture:adopt 登记
+  - id: cli-workflow
+    roots:
+      - apps/zcode-cli/packages/core/src/workflow
+      - apps/zcode-cli/packages/core/tests/cli-workflow
+    managed: true
+    requires:
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/workflow/contract.ts
+      - apps/zcode-cli/packages/core/src/workflow/definition.ts
+      - apps/zcode-cli/packages/core/src/workflow/expert.ts
+      - apps/zcode-cli/packages/core/src/workflow/lifecycle.ts
+      - apps/zcode-cli/packages/core/src/workflow/scheduler.ts
+    layers:
+      app: .
+    owner: native-workflow
+    layerOrder:
+      - app
+      - adapters
+  # cli-tool-runtime：由 architecture:adopt 登记
+  - id: cli-tool-runtime
+    roots:
+      - apps/zcode-cli/packages/core/src/tool
+      - apps/zcode-cli/packages/core/tests/cli-tool-runtime
+      - apps/zcode-cli/packages/core/src/mcp
+    managed: true
+    requires:
+      - channel-reply-tool
+      - cli-agent-history
+      - cli-hooks
+      - cli-permission
+      - cli-runtime
+      - mcp-apps-protocol
+      - shared
+      - workflow-tool-entrypoints
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/core/src/tool/bash-timeout-policy.ts
+      - apps/zcode-cli/packages/core/src/tool/compat.ts
+      - apps/zcode-cli/packages/core/src/tool/contract.ts
+      - apps/zcode-cli/packages/core/src/tool/deferred-call.ts
+      - apps/zcode-cli/packages/core/src/tool/execution-host-api.ts
+      - apps/zcode-cli/packages/core/src/tool/executor.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/fill-workflow-hole-resolve.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/index.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/saved-workflows/index.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/submit-result.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/workflow-drafts.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/workflow-script-analysis.ts
+      - apps/zcode-cli/packages/core/src/tool/index.ts
+      - apps/zcode-cli/packages/core/src/tool/model-surface-api.ts
+      - apps/zcode-cli/packages/core/src/tool/path-policy.ts
+      - apps/zcode-cli/packages/core/src/tool/persisted-read-file-state.ts
+      - apps/zcode-cli/packages/core/src/tool/read-file-state-metadata.ts
+      - apps/zcode-cli/packages/core/src/tool/read-file-state.ts
+      - apps/zcode-cli/packages/core/src/tool/registry.ts
+      - apps/zcode-cli/packages/core/src/tool/scheduler.ts
+      - apps/zcode-cli/packages/core/src/tool/types.ts
+      - apps/zcode-cli/packages/core/src/tool/webfetch-preapproved.ts
+      - apps/zcode-cli/packages/core/src/tool/workflow-host-api.ts
+      - apps/zcode-cli/packages/core/src/mcp/index.ts
+      - apps/zcode-cli/packages/core/src/mcp/image-normalization.ts
+      - apps/zcode-cli/packages/core/src/tool/session-tools-api.ts
+    layers:
+      app: .
+      adapters:
+        - contract.example.ts
+        - contract.test.ts
+        - contract.ts
+        - executor.ts
+        - executor/appAuthorization.test.ts
+        - executor/background-tasks.ts
+        - executor/background-tracker-polling.ts
+        - executor/call-runner.ts
+        - executor/impl.ts
+        - executor/permission-flow.ts
+        - executor/permission-request.ts
+        - executor/permission-responder-race.ts
+        - executor/timeout.ts
+        - handlers/amend-workflow-resolve.ts
+        - handlers/amend-workflow-retune.ts
+        - handlers/amend-workflow-source.ts
+        - handlers/amend-workflow.ts
+        - handlers/bash-command-permission-policy.ts
+        - handlers/bash-cwd-policy.ts
+        - handlers/bash-execution.ts
+        - handlers/bash-git-runtime-safety.ts
+        - handlers/bash-image-output.ts
+        - handlers/bash-metadata.ts
+        - handlers/bash-model-content.ts
+        - handlers/bash-output.ts
+        - handlers/bash-permissions.ts
+        - handlers/bash-read-file-state.ts
+        - handlers/bash-readonly-policy-argv.ts
+        - handlers/bash-readonly-policy.ts
+        - handlers/bash-semantics.ts
+        - handlers/bash.ts
+        - handlers/create-workflow-source.ts
+        - handlers/create-workflow.ts
+        - handlers/edit.ts
+        - handlers/eval-workflow-snippet.ts
+        - handlers/fill-workflow-hole-resolve.ts
+        - handlers/fill-workflow-hole.ts
+        - handlers/index.ts
+        - handlers/list-models.ts
+        - handlers/list-saved-workflows.ts
+        - handlers/read-file-state.ts
+        - handlers/read.ts
+        - handlers/save-workflow.ts
+        - handlers/saved-workflows/index.ts
+        - handlers/saved-workflows/store.ts
+        - handlers/task-output-bash.ts
+        - handlers/task-output-projection.ts
+        - handlers/task-output.ts
+        - handlers/workflow-draft-read-state.ts
+        - handlers/workflow-drafts.ts
+        - handlers/workflow-path-source.ts
+        - handlers/workflow-settings-adjustment.ts
+        - handlers/write.ts
+        - index.ts
+        - path-normalization.ts
+        - read-file-state-metadata.ts
+        - read-file-state.ts
+        - session-tools-api.ts
+        - workflow-host-api.ts
+    owner: native-tools
+    layerOrder:
+      - app
+      - adapters
+  # cli-process-entry：由 architecture:adopt 登记
+  - id: cli-process-entry
+    roots:
+      - apps/zcode-cli/packages/cli/src
+      - apps/zcode-cli/packages/cli/tests/entry-contract
+    managed: true
+    requires:
+      - cli-adapters
+      - cli-arguments
+      - provider-node
+      - shared
+      - sqlite-migrations
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/cli/src/run.ts
+      - apps/zcode-cli/packages/cli/src/contract.ts
+    layers:
+      adapters: .
+    owner: native-cli-entry
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

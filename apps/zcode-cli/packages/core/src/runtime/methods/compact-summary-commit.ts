@@ -32,9 +32,9 @@ import { persistCompactTimelineEvent } from "./compact-active-helpers.js";
 import { resetProjectMemoryRecall } from "../helpers/project-memory-recall.js";
 import { filterOutputTokenContinuationEntries } from "./turn-output-token-continuation.js";
 import { preserveCanonicalContextPrefix } from "./turn-output-token-continuation.js";
-import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
-import { collectDiscoveredTools } from "../../tool/search/history.js";
-import { compactDiscoveryMetadata } from "../../tool/search/history.js";
+import { buildToolSearchAnnouncement } from "../../tool/model-surface-api.js";
+import { collectDiscoveredTools } from "../../tool/model-surface-api.js";
+import { compactDiscoveryMetadata } from "../../tool/model-surface-api.js";
 import { throwIfTurnAborted } from "../helpers/index.js";
 
 export async function commitCompactSummary(

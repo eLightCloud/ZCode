@@ -28,51 +28,51 @@ import type {
   ToolHandler,
   ToolHandlerFailure,
 } from "../types.js";
-import { AMEND_WORKFLOW_TOOL_DESCRIPTION } from "./amend-workflow-description.js";
+import { AMEND_WORKFLOW_TOOL_DESCRIPTION } from "../workflow-host-api.js";
 import {
   AMEND_WORKFLOW_ERROR_CODE,
   predecessorNotFoundFailure,
   resolveAmendWorkflowInput,
   scriptUnavailableFailure,
   validateAmendWorkflowSource,
-} from "./amend-workflow-resolve.js";
+} from "../workflow-host-api.js";
 import {
   isConcurrencyOnlyAmend,
   resolveRetuneFallbackAmend,
   runConcurrencyRetune,
-} from "./amend-workflow-retune.js";
+} from "../workflow-host-api.js";
 import {
   DIAGNOSTICS_NOT_EXECUTED_NOTE,
   EXECUTION_UNAVAILABLE_NOTE,
   describeWorkflowConcurrencyLimit,
   resolveTraceContext,
-} from "./create-workflow.js";
-import { describeWorkflowSubagentModel, parseWorkflowSubagentModel } from "./model-reference.js";
-import { boundGraphOfAnalysis, displayOfAnalysis } from "./workflow-analysis-display.js";
-import { recordAuthoredWorkflowDraft } from "./workflow-draft-read-state.js";
-import { resolveWorkflowDraftName, writeWorkflowDraft } from "./workflow-drafts.js";
+} from "../workflow-host-api.js";
+import { describeWorkflowSubagentModel, parseWorkflowSubagentModel } from "../workflow-host-api.js";
+import { boundGraphOfAnalysis, displayOfAnalysis } from "../workflow-host-api.js";
+import { recordAuthoredWorkflowDraft } from "../workflow-host-api.js";
+import { resolveWorkflowDraftName, writeWorkflowDraft } from "../workflow-host-api.js";
 import {
   formatWorkflowDiagnosticLines,
   workflowAmendedScriptSentence,
   workflowScriptFileNote,
   type WorkflowScriptLocation,
-} from "./workflow-script-notes.js";
-import { analyzeScript } from "./workflow-script-analysis.js";
+} from "../workflow-host-api.js";
+import { analyzeScript } from "../workflow-host-api.js";
 import {
   allScriptModelsBound,
   describeScriptModelBindings,
   readScriptModelBindings,
   scriptModelSelections,
   unresolvedScriptModelDiagnostics,
-} from "./workflow-script-models.js";
-import { describeWorkflowScriptPath } from "./workflow-script-path.js";
-import { amendWorkflowNeedsSkill, requireDynamicWorkflowSkill } from "./workflow-skill-gate.js";
+} from "../workflow-host-api.js";
+import { describeWorkflowScriptPath } from "../workflow-host-api.js";
+import { amendWorkflowNeedsSkill, requireDynamicWorkflowSkill } from "../workflow-host-api.js";
 import {
   applyWorkflowSettingsAdjustments,
   describeWorkflowRunSettings,
   readAppliedWorkflowSettings,
   withWorkflowAdjustableSettings,
-} from "./workflow-settings-adjustment.js";
+} from "../workflow-host-api.js";
 
 const AMEND_WORKFLOW_TIMEOUT_MS = 15_000;
 const AMEND_WORKFLOW_MODEL_BYTES = 24_000;

@@ -9,7 +9,7 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import type { ToolExecutionContext } from "../types.js";
-import type { VideoInputMimeType } from "../../runtime/helpers/attachment-video.js";
+import type { VideoInputMimeType } from "../../agent/video-input.js";
 
 export async function readVideoFile(
   filePath: string,

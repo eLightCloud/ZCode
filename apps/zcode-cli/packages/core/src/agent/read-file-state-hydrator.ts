@@ -1,13 +1,6 @@
-import type {
-  MessageId,
-  MessagePart,
-  MessageWithParts,
-  ToolPart,
-} from "@zcode/contracts";
-import {
-  parseReadFileStateMetadata,
-  type PersistedReadFileStateTool,
-} from "../tool/read-file-state-metadata.js";
+import type { MessageId, MessagePart, MessageWithParts, ToolPart } from "@zcode/contracts";
+import { parseReadFileStateMetadata } from "../tool/read-file-state-metadata.js";
+import { type PersistedReadFileStateTool } from "../tool/persisted-read-file-state.js";
 import { createReadFileStateKey, normalizeReadFileStateMtimeMs } from "../tool/read-file-state.js";
 import type { ReadFileStateMap } from "../tool/types.js";
 import { activeSessionMessages } from "./session-history-hydrator.js";

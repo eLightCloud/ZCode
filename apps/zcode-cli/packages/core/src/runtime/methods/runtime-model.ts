@@ -1,12 +1,11 @@
+import { withModelInvocationContext } from "@zcode/contracts";
+export { withModelInvocationContext } from "@zcode/contracts";
 import type { ModelRequestSessionType, ModelRetryBudget } from "@zcode/contracts";
 import {
   CoreErrorType,
   createCoreError,
-  getCurrentModelInvocationContext,
-  runWithModelInvocationContext,
   type Model,
   type ModelInvocationContext,
-  type ModelRequest,
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RuntimeModelFactoryInput } from "../types.js";
@@ -77,35 +76,4 @@ function withRuntimeInvocationLayer(
       : { modelRequestAdmission: runtime.modelRequestAdmission }),
   };
   return withModelInvocationContext(model, () => layer);
-}
-
-export function withModelInvocationContext(
-  model: Model,
-  createContext: (request: ModelRequest) => ModelInvocationContext,
-): Model {
-  const wrapped: Model = {
-    providerId: model.providerId,
-    modelId: model.modelId,
-    displayName: model.displayName,
-    properties: model.properties,
-    requestCapabilities: model.requestCapabilities,
-    optionSpecs: model.optionSpecs,
-    options: model.options,
-    bind(options) {
-      return withModelInvocationContext(model.bind(options), createContext);
-    },
-    generateText(request) {
-      return runWithModelInvocationContext(
-        { ...getCurrentModelInvocationContext(), ...createContext(request) },
-        () => model.generateText(request),
-      );
-    },
-    streamText(request) {
-      return runWithModelInvocationContext(
-        { ...getCurrentModelInvocationContext(), ...createContext(request) },
-        () => model.streamText(request),
-      );
-    },
-  };
-  return Object.freeze(wrapped);
 }

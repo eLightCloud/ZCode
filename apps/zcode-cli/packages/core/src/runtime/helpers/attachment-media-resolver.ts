@@ -8,7 +8,7 @@ import { resolvedPlaceholderAttachment } from "./attachment-placeholder.js";
 
 import { inferImageMimeFromPath } from "./attachment-image.js";
 
-import { inferVideoMimeFromPath } from "./attachment-video.js";
+import { inferVideoMimeFromPath } from "../../agent/video-input.js";
 
 import {
   LocalMediaResolverOptions,

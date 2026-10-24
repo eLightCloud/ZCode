@@ -1,4 +1,4 @@
-import { buildToolExposure } from "../../tool/search/exposure.js";
+import { buildToolExposure } from "../../tool/model-surface-api.js";
 import type { ModelToolContract } from "@zcode/contracts";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import type { ToolRegistry } from "../../tool/registry.js";

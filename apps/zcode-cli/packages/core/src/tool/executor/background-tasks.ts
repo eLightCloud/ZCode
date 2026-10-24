@@ -1,3 +1,4 @@
+import type { BackgroundTaskTrackerContext } from "./background-tracker-context.js";
 import type { BackgroundTaskTrackerApi } from "./background-tracker-api.js";
 import * as implementation1 from "./background-tracker-events.js";
 import * as implementation2 from "./background-tracker-notifications.js";
@@ -11,7 +12,8 @@ import type { ToolExecutorDeps } from "./types.js";
 // 两者在同一条完成通知里并列出现，所以模块也分开。
 
 export class BackgroundTaskTracker {
-  private readonly backgroundPollers = new Set<string>();
+  private readonly backgroundPollers: BackgroundTaskTrackerContext["backgroundPollers"] =
+    new Set<string>();
 
   constructor(private readonly deps: ToolExecutorDeps) {}
 

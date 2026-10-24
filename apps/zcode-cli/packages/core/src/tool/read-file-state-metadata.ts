@@ -1,31 +1,16 @@
+import {
+  READ_FILE_STATE_METADATA_SCHEMA_VERSION,
+  type PersistedReadFileStateTool,
+  type PersistedReadFileStateMetadata,
+} from "./persisted-read-file-state.js";
+export type {
+  PersistedReadFileStateTool,
+  PersistedReadFileStateMetadata,
+} from "./persisted-read-file-state.js";
+export { READ_FILE_STATE_METADATA_SCHEMA_VERSION } from "./persisted-read-file-state.js";
 import { ReadOutputSchema } from "@zcode/contracts";
 import { createReadFileStateKey } from "./read-file-state.js";
 import type { ReadFileStateEntry, ReadFileStateMap } from "./types.js";
-
-export const READ_FILE_STATE_METADATA_SCHEMA_VERSION = 1;
-// `CreateWorkflow` / `AmendWorkflow` / `FillWorkflowHole`：内联草稿（或 fill 文件）的字节就是模型那次
-// 调用的 `script` 入参，与 Write 同理记作完整视图（handlers/workflow-draft-read-state.ts）。
-export type PersistedReadFileStateTool =
-  | "Read"
-  | "Write"
-  | "Edit"
-  | "CreateWorkflow"
-  | "AmendWorkflow"
-  | "FillWorkflowHole";
-
-export interface PersistedReadFileStateMetadata {
-  schemaVersion: typeof READ_FILE_STATE_METADATA_SCHEMA_VERSION;
-  tool: PersistedReadFileStateTool;
-  path: string;
-  content: string;
-  offset?: number;
-  limit?: number;
-  isPartialView: boolean;
-  readAtMs: number;
-  revisionId: string;
-  mtimeMs: number;
-  sizeBytes: number;
-}
 
 export function createReadFileStateMetadata(input: {
   completedAt: Date;

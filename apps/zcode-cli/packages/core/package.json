@@ -27,8 +27,8 @@
     "build": "tsc",
     "clean": "node ../../scripts/clean-dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest tests",
-    "coverage": "vitest run tests --coverage",
+    "test": "vitest run tests src",
+    "coverage": "vitest run tests src --coverage",
     "lint": "oxlint src --no-ignore",
     "lint:fix": "oxlint --fix src --no-ignore"
   },

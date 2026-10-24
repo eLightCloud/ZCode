@@ -8,17 +8,11 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import type { CompileDiagnostic } from "@zcode/dynamic-workflow";
-import {
-  resolveSavedWorkflow,
-  validateWorkflowArgs,
-} from "../../tool/handlers/saved-workflows/index.js";
-import {
-  boundGraphOfAnalysis,
-  displayOfAnalysis,
-} from "../../tool/handlers/workflow-analysis-display.js";
-import { writeWorkflowDraft } from "../../tool/handlers/workflow-drafts.js";
-import { analyzeScript } from "../../tool/handlers/workflow-script-analysis.js";
-import { bindScriptModels } from "../../tool/handlers/workflow-script-models.js";
+import { resolveSavedWorkflow, validateWorkflowArgs } from "../../tool/workflow-host-api.js";
+import { boundGraphOfAnalysis, displayOfAnalysis } from "../../tool/workflow-host-api.js";
+import { writeWorkflowDraft } from "../../tool/workflow-host-api.js";
+import { analyzeScript } from "../../tool/workflow-host-api.js";
+import { bindScriptModels } from "../../tool/workflow-host-api.js";
 import type { ExecutableToolCall } from "../../tool/types.js";
 import { uuidv7 } from "@zcode/shared";
 import { createMessageId, traceContextToLogContext } from "../deps.js";

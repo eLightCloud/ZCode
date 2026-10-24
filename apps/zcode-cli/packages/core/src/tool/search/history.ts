@@ -1,4 +1,4 @@
-import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history-contract.js";
 import type {
   CompactBoundaryPayload,
   ModelMessageContentBlock,

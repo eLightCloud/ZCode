@@ -62,7 +62,7 @@ import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type {
   PersistedReadFileStateMetadata,
   PersistedReadFileStateTool,
-} from "./read-file-state-metadata.js";
+} from "./persisted-read-file-state.js";
 
 // -----------------------------------------------
 // Tool Metadata

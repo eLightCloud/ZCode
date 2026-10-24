@@ -1,0 +1,47 @@
+/**
+ * cli-tool-runtime 模块清单（architecture-governance managed 模块）。
+ * 层：app。修改 requires 时同步更新 architecture-policy.yaml（检查器会校验两者一致）。
+ */
+export const cliToolRuntimeModule = {
+  id: "cli-tool-runtime",
+  requires: [
+    "channel-reply-tool",
+    "cli-agent-history",
+    "cli-hooks",
+    "cli-permission",
+    "cli-runtime",
+    "mcp-apps-protocol",
+    "shared",
+    "workflow-tool-entrypoints",
+    "zcode-cli",
+  ],
+  provides: ["cli-tool-runtime"],
+  publicEntrypoints: [
+    "apps/zcode-cli/packages/core/src/tool/bash-timeout-policy.ts",
+    "apps/zcode-cli/packages/core/src/tool/compat.ts",
+    "apps/zcode-cli/packages/core/src/tool/contract.ts",
+    "apps/zcode-cli/packages/core/src/tool/deferred-call.ts",
+    "apps/zcode-cli/packages/core/src/tool/execution-host-api.ts",
+    "apps/zcode-cli/packages/core/src/tool/executor.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/fill-workflow-hole-resolve.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/index.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/saved-workflows/index.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/submit-result.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/workflow-drafts.ts",
+    "apps/zcode-cli/packages/core/src/tool/handlers/workflow-script-analysis.ts",
+    "apps/zcode-cli/packages/core/src/tool/index.ts",
+    "apps/zcode-cli/packages/core/src/tool/model-surface-api.ts",
+    "apps/zcode-cli/packages/core/src/tool/path-policy.ts",
+    "apps/zcode-cli/packages/core/src/tool/persisted-read-file-state.ts",
+    "apps/zcode-cli/packages/core/src/tool/read-file-state-metadata.ts",
+    "apps/zcode-cli/packages/core/src/tool/read-file-state.ts",
+    "apps/zcode-cli/packages/core/src/tool/registry.ts",
+    "apps/zcode-cli/packages/core/src/tool/scheduler.ts",
+    "apps/zcode-cli/packages/core/src/tool/types.ts",
+    "apps/zcode-cli/packages/core/src/tool/webfetch-preapproved.ts",
+    "apps/zcode-cli/packages/core/src/tool/workflow-host-api.ts",
+    "apps/zcode-cli/packages/core/src/mcp/index.ts",
+    "apps/zcode-cli/packages/core/src/mcp/image-normalization.ts",
+    null,
+  ],
+} as const;

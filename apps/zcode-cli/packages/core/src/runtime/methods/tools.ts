@@ -33,7 +33,7 @@ import type {
   ExecuteToolsResult,
 } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import { createMcpToolDisplay } from "../../tool/executor/result-display.js";
+import { createMcpToolDisplay } from "../../tool/execution-host-api.js";
 
 export async function scheduleTools(
   this: AgentRuntimeInternal,

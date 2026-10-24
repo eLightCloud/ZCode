@@ -1,5 +1,5 @@
 import { getZCodeCopy } from "@zcode/i18n";
-import type { CommandCenterApp } from "./command-center.js";
+import type { CommandCenterApp } from "./command-center/types.js";
 
 export function loginRequiredResponse(locale?: string): string {
   const copy = getZCodeCopy(locale).tui.loginRequired;

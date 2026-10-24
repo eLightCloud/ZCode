@@ -17,7 +17,7 @@ import { resolvedPlaceholderAttachment } from "./attachment-placeholder.js";
 
 import { prepareImageDataUrl } from "./attachment-image.js";
 
-import { parseInlineVideoDataUrl } from "./attachment-video.js";
+import { parseInlineVideoDataUrl } from "../../agent/video-input.js";
 
 import { PDF_INPUT_MAX_BYTES, parseInlinePdfDataUrl } from "./attachment-pdf.js";
 

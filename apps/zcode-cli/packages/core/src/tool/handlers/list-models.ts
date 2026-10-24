@@ -21,7 +21,7 @@ import {
   type ModelMessageContent,
 } from "@zcode/contracts";
 import type { ToolEntry, ToolHandler, ToolHandlerFailure } from "../types.js";
-import { formatModelCatalogId } from "./model-reference.js";
+import { formatModelCatalogId } from "../workflow-host-api.js";
 
 const LIST_MODELS_TIMEOUT_MS = 10_000;
 /** 照 ListSavedWorkflows：目录刻意轻（一次内存读可答），24k 足够几十行还留着余量。 */
@@ -114,7 +114,9 @@ function formatListModelsModelContent(output: unknown): ModelMessageContent {
     if (model.reasoningLevels.length > 0) {
       const levels = model.reasoningLevels.join(",");
       const fallback =
-        model.defaultReasoningLevel === undefined ? "" : ` (default ${model.defaultReasoningLevel})`;
+        model.defaultReasoningLevel === undefined
+          ? ""
+          : ` (default ${model.defaultReasoningLevel})`;
       parts.push(`; levels: ${levels}${fallback}`);
     }
     // current 与 disabled 排在行尾且各用方括号：它们是模型据以**排除**一行的两个标记，

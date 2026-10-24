@@ -153,3 +153,7 @@ rebuilding the tool pool or invalidating tool-schema cache assumptions.
 - New-turn task notifications are not ContextBuilder sections: their complete provider-visible user messages count once in Messages, identified by the existing `task_notification` presentation in the request's `sourceEntries`. The reminder wrapper must not make these messages disappear from usage categories. Static context remains counted through sections without duplication; this changes neither provider token usage nor compact budgets.
 - Node context adapter caps large git status snapshots and appends a truncation
   marker instead of injecting every changed or untracked path.
+
+### Product identity assembly
+
+The CLI prefix and built-in agent identities consume the validated static `runtimeConfig.productName` supplied by trusted application assembly (`ZCODE_APPLICATION_NAME` for the bundled process); absent configuration preserves native ZCode identity. Packaged Desktop reads its application brand metadata before creating Host processes. Product names cannot contain control characters or prompt delimiters and do not change provider identity, permissions, custom prompts, protocol names or storage directories.

@@ -1,19 +1,14 @@
 import { traceContextToLogContext } from "../deps.js";
-
-import type { RuntimeCommand, TaskNotificationRuntimeCommand } from "../command-queue.js";
-
+import type { RuntimeCommand } from "../command-queue.js";
+import type { TaskNotificationRuntimeCommand } from "../command-queue.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
-import type {
-  AcquireForegroundPromotionLeaseResult,
-  ForegroundPromotionLeaseMode,
-} from "../types.js";
-
-import {
-  runRuntimeCommand,
-  runTaskNotificationBatch,
-  runtimeCommandInputId,
-} from "./runtime-command-dispatch.js";
+import type { AcquireForegroundPromotionLeaseResult } from "../types.js";
+import type { ForegroundPromotionLeaseMode } from "../types.js";
+import { runRuntimeCommand } from "./runtime-command-dispatch.js";
+import { runTaskNotificationBatch } from "./runtime-command-dispatch.js";
+import { runtimeCommandInputId } from "./runtime-command-dispatch.js";
+import { refreshOffPeakWork } from "../off-peak/runtime.js";
+import { noteWorkflowReminderCommandStarted } from "./dynamic-workflow-blocked-reminder.js";
 
 export {
   getActiveForegroundExecutionId,
@@ -21,6 +16,17 @@ export {
 } from "./runtime-command-dispatch.js";
 
 export function enqueueRuntimeCommand(this: AgentRuntimeInternal, command: RuntimeCommand): void {
+  const sourceTaskId =
+    command.mode === "task-notification"
+      ? command.taskId
+      : command.mode === "subagent-message"
+        ? command.agentId
+        : undefined;
+  // 任务卡取消封住该执行的迟到通知；聊天 Stop 不设置此标记，保持原有唤起行为。
+  if (sourceTaskId && this.runtimeTaskRegistry.get(sourceTaskId)?.offPeakCancelled) return;
+  const offPeakExecutionId =
+    sourceTaskId && this.runtimeTaskRegistry.get(sourceTaskId)?.offPeakExecutionId;
+  if (offPeakExecutionId) command = { ...command, offPeakExecutionId };
   this.runtimeCommandQueue.enqueue(command);
   if (command.mode === "task-notification") {
     this.logger?.info?.("Background task notification enqueued into runtime command queue", {
@@ -44,6 +50,7 @@ export async function drainRuntimeCommandQueue(this: AgentRuntimeInternal): Prom
     while ((commands = dequeueNextRunnableBatch.call(this)).length > 0) {
       const firstCommand = commands[0];
       if (!firstCommand) continue;
+      noteWorkflowReminderCommandStarted(this, firstCommand);
       if (firstCommand.mode === "task-notification") {
         const notificationCommands = commands.filter(
           (command): command is TaskNotificationRuntimeCommand =>
@@ -62,11 +69,16 @@ export async function drainRuntimeCommandQueue(this: AgentRuntimeInternal): Prom
     }
   } finally {
     this.runtimeCommandDrainActive = false;
+    refreshOffPeakWork(this);
   }
 
   if (this.runtimeCommandQueue.hasPending() && this.foregroundPromotionLease === undefined) {
     await this.drainRuntimeCommandQueue();
+    return;
   }
+  // 空闲沿：队列排空，且没有任何在跑 / 排着 / 预留的回合（持着晋升租约、或 prompt 已预留未入队时不算，
+  // 那一轮自己排空时会再走到这里）。「run 还欠着决定」的提醒钟从这里起算。
+  if (!hasActiveOrQueuedTurnWork.call(this)) this.workflowBlockedReminder?.sessionIdle();
 }
 
 function dequeueNextRunnableBatch(this: AgentRuntimeInternal): readonly RuntimeCommand[] {

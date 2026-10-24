@@ -11,7 +11,7 @@ it("revalidates native config after app startup and preserves the entry through 
   const configPath = join(root, "config.json");
   const dbPath = join(root, "sessions.db");
   const requests: string[] = [];
-  let store = createSqliteSessionStore({ dbPath });
+  let store = await createSqliteSessionStore({ dbPath });
   let app: Awaited<ReturnType<typeof createRegistryBackedTestApp>> | undefined;
   const configuration = (enabled = true) =>
     JSON.stringify({
@@ -66,7 +66,7 @@ it("revalidates native config after app startup and preserves the entry through 
     await app.close();
     app = undefined;
     store.close();
-    store = createSqliteSessionStore({ dbPath });
+    store = await createSqliteSessionStore({ dbPath });
     app = await createRegistryBackedTestApp({ ...options(), sessionId, resume: true });
     await app.resume();
     await expect(app.submitPrompt("Retry after restart")).rejects.toThrow("unavailable");

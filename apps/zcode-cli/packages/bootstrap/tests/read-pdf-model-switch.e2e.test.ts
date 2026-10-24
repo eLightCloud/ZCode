@@ -1,28 +1,30 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { mkdtemp } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe } from "vitest";
+import { expect } from "vitest";
+import { it } from "vitest";
 import { createNodeFileSystemAdapter } from "@zcode/adapters/fs";
 import { createPdfModelRuntime } from "./helpers/pdf-model-runtime.js";
-import {
-  createInMemorySessionEventStore,
-  createNodeToolArtifactStore,
-  createSqliteSessionStore,
-} from "@zcode/adapters/storage";
-import {
-  createModelId,
-  createModelProviderId,
-  createProjectId,
-  createRootTraceContext,
-  createSessionId,
-  DefaultRuntimeConfig,
-  type ModelRef,
-  type PdfDocumentPort,
-} from "@zcode/contracts";
+import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
+import { createNodeToolArtifactStore } from "@zcode/adapters/storage";
+import { createSqliteSessionStore } from "@zcode/adapters/storage";
+import { createModelId } from "@zcode/contracts";
+import { createModelProviderId } from "@zcode/contracts";
+import { createProjectId } from "@zcode/contracts";
+import { createRootTraceContext } from "@zcode/contracts";
+import { createSessionId } from "@zcode/contracts";
+import { DefaultRuntimeConfig } from "@zcode/contracts";
+import type { ModelSelection as ModelRef } from "@zcode/provider";
+import type { PdfDocumentPort } from "@zcode/contracts";
 import { AgentRuntime } from "@zcode/core";
-
 import { createSessionFacade } from "../src/app/session-facade.js";
+import { createPdfProviderFixture } from "./helpers/pdf-provider-fixture.js";
+import type { ProviderRegistry } from "@zcode/provider";
 
 const PROVIDER_ID = createModelProviderId("pdf-switch-capture");
 const PDF_CAPABLE_MODEL: ModelRef = {
@@ -42,8 +44,12 @@ describe("Read PDF model capability switching E2E", () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-read-pdf-model-switch-e2e-"));
     const pdfPath = join(root, "switchable.pdf");
     const sessionId = createSessionId("read-pdf-model-switch-e2e");
-    const sessionStore = createSqliteSessionStore({ dbPath: join(root, "session.sqlite") });
+    const sessionStore = await createSqliteSessionStore({ dbPath: join(root, "session.sqlite") });
     const capture = await startChatCaptureServer(pdfPath);
+    const fixture = createPdfProviderFixture(capture.baseURL, PROVIDER_ID, [
+      { modelId: PDF_CAPABLE_MODEL.modelId, supportsPdf: true },
+      { modelId: PDF_INCAPABLE_MODEL.modelId, supportsPdf: false },
+    ]);
     const modelRuntime = createPdfModelRuntime(capture.baseURL, PROVIDER_ID, {
       [PDF_CAPABLE_MODEL.modelId]: true,
       [PDF_INCAPABLE_MODEL.modelId]: false,
@@ -71,7 +77,7 @@ describe("Read PDF model capability switching E2E", () => {
       },
     );
     const modelSwitcher = createModelSwitcher({
-      baseURL: capture.baseURL,
+      providerRegistry: fixture.registry,
       registry: modelRuntime.registry,
       root,
       runtime,
@@ -123,11 +129,11 @@ const pdfDocumentPort: PdfDocumentPort = {
 
 function createModelSwitcher(input: {
   registry: ReturnType<typeof createPdfModelRuntime>["registry"];
-  baseURL: string;
+  providerRegistry: ProviderRegistry;
   root: string;
   runtime: AgentRuntime;
   sessionId: ReturnType<typeof createSessionId>;
-  sessionStore: ReturnType<typeof createSqliteSessionStore>;
+  sessionStore: Awaited<ReturnType<typeof createSqliteSessionStore>>;
 }) {
   return createSessionFacade({
     configResult: {

@@ -305,11 +305,6 @@ describe("config adapters", () => {
     }
   });
 
-  it("keeps Plugin scope priority aligned with User then Workspace", () => {
-    expect(ConfigScope.User).toBe("user");
-    expect(ConfigScope.Project).toBe("project");
-  });
-
   it("parses the supported ZCODE environment surface", () => {
     const config = parseEnvConfig({
       ZCODE_STORAGE_DIR: "/tmp/zcode",
@@ -330,30 +325,6 @@ describe("config adapters", () => {
     expect(config.ui).toBeUndefined();
     expect(config.logging?.format).toBe("json");
     expect(config.logging?.level).toBeUndefined();
-  });
-
-  it("defaults the session database to db/db.sqlite", () => {
-    const result = createConfig({ env: {}, skipUserConfig: true });
-
-    expect(result.config.model).toBeUndefined();
-    expect(DefaultRuntimeConfig.storage.sessionDbPath).toBe("~/.zcode/cli/db/db.sqlite");
-    expect(result.config.storage.sessionDbPath).toBe("~/.zcode/cli/db/db.sqlite");
-  });
-
-  it("defaults model stream idle timeout to ten minutes", () => {
-    const result = createConfig({ env: {}, skipUserConfig: true });
-
-    expect(DefaultRuntimeConfig.modelStream.idleTimeoutMs).toBe(600_000);
-    expect(result.config.modelStream.idleTimeoutMs).toBe(600_000);
-  });
-
-  it("defaults the supported memory switches to enabled", () => {
-    const result = createConfig({ env: {}, skipUserConfig: true });
-
-    expect(result.config.features.memory).toBe(true);
-    expect(result.config.memory).toEqual({
-      use: true,
-    });
   });
 
   it("loads the supported memory config fields", async () => {

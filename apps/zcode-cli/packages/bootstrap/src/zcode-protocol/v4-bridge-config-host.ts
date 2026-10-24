@@ -1,3 +1,13 @@
+import type { V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
+import { parseRemoteWorkspaceIdentity } from "@zcode/shared";
+import { isTaskListSessionType } from "../zcode-protocol-v4/task-list-session-membership.js";
+import { cloneModelSelection } from "./fork-model-selection.js";
+import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
+import { resolveSessionModelContextWindow } from "./workspace-model-runtime.js";
+import { readSessionContextUsage } from "./server-operations.js";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+import { sessionUsageSeedFromRuntimeContextUsage } from "./v4-bridge-session-facts.js";
+
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
@@ -8,43 +18,13 @@
 //
 // 不做桥接：依赖方向只允许 旧目录 → v4 目录。
 // 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
-import { parseRemoteWorkspaceIdentity } from "@zcode/shared";
-
-import { isTaskListSessionType } from "../zcode-protocol-v4/task-list-session-membership.js";
-
-import { type V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
-
-import { cloneModelSelection } from "./fork-model-selection.js";
-
-import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
-
-import { resolveSessionModelContextWindow } from "./workspace-model-runtime.js";
-
-import { readSessionContextUsage } from "./server-operations.js";
-
-import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
-
-import { sessionUsageSeedFromRuntimeContextUsage } from "./v4-bridge-session-facts.js";
 
 export function createV4GatewayConfigurationHost(
   context: ZCodeProtocolAgentServerContext,
   loadStoredSessionSummaries: (
     workspaceId: string,
     legacyTaskIds?: readonly string[],
-  ) => Promise<
-    {
-      title: string;
-      titleSource: NonNullable<"default" | "custom" | "generated" | undefined>;
-      phase: "completedSuccess";
-      sessionEnded: boolean;
-      hasBackgroundWork: boolean;
-      lastActivityAt: number;
-      createdAt: number;
-      parentSessionId?: string | undefined;
-      sessionId: string;
-      workspaceId: string;
-    }[]
-  >,
+  ) => ReturnType<NonNullable<V4GatewayHost["getStoredSessionSummaries"]>>,
 ) {
   return {
     getSessionMemoryEnabled: (sessionId) => context.sessions.get(sessionId)?.memoryEnabled,
@@ -99,6 +79,7 @@ export function createV4GatewayConfigurationHost(
       return {
         createdAt: record.createdAt,
         lastActivityAt: record.updatedAt,
+        ...(record.lastOutcome ? { lastOutcome: record.lastOutcome } : {}),
         ...(record.parentSessionId ? { parentSessionId: String(record.parentSessionId) } : {}),
       };
     },

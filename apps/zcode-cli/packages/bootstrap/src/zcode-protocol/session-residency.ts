@@ -11,7 +11,7 @@ export {
   acquireSessionResidencyFinalization,
   runWithSessionResidencyFinalization,
   type SessionResidencyFinalizationOwner,
-} from "../app/session-residency-finalization.js";
+} from "../session-execution/index.js";
 
 /**
  * 只释放 resident runtime，不删除任何持久 session/task 事实。

@@ -1,17 +1,15 @@
+import { CliDefaultSelection } from "./cli-default-selection.js";
 import { resolveEffectiveBashShellSelection } from "@zcode/adapters/exec";
-
-import { AgentRuntime, type ResumeSessionResult } from "@zcode/core";
-
-import {
-  Logger,
-  SessionId,
-  SessionStorePort,
-  type ExecutionShellSelection,
-  type TraceContext,
-} from "@zcode/contracts";
-
-import type { PrepareUserExecutionBoundary, ResumeOptions, ZCodeAppOptions } from "./types.js";
-
+import { AgentRuntime } from "@zcode/core";
+import type { ResumeSessionResult } from "@zcode/core";
+import { Logger } from "@zcode/contracts";
+import { SessionId } from "@zcode/contracts";
+import { SessionStorePort } from "@zcode/contracts";
+import type { ExecutionShellSelection } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
+import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { ResumeOptions } from "./types.js";
+import type { ZCodeAppOptions } from "./types.js";
 import { readSessionModelSelection } from "./session-store.js";
 
 export function createAppResumeBoundary(
@@ -21,6 +19,7 @@ export function createAppResumeBoundary(
   sessionId: SessionId,
   logger: Logger,
   traceContext: TraceContext,
+  cliDefaultSelection?: CliDefaultSelection,
 ) {
   let resumePrepared = false;
   const resolveDefaultShellSelection = (): ExecutionShellSelection =>
@@ -71,6 +70,7 @@ export function createAppResumeBoundary(
     // 只查模型是否存在会把缺档位/已删除的选择重新绑定进 Runtime，
     // 抵消了未绑定初始化。历史恢复不要求可执行模型，只有完整选择可以绑定。
     getRuntime().setSessionModelSelection(validation?.ok ? selection : undefined);
+    cliDefaultSelection?.set(validation?.ok ? selection : undefined);
     // 恢复结果是保存意图，不是执行绑定。过去在这里置空/删档位，Host 的
     // Selection View 就再也拿不到原意图，账号切换和配置恢复后也无法重新解析。
     return selection;

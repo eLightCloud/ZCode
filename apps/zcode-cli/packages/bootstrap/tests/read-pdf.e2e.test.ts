@@ -47,14 +47,14 @@ describe("Read PDF provider and cold-resume E2E", () => {
       rootDir: join(root, "artifacts"),
       videoCacheRootDir: join(root, "video-cache"),
     };
-    const liveStore = createSqliteSessionStore({ dbPath: databasePath });
+    const liveStore = await createSqliteSessionStore({ dbPath: databasePath });
     let liveStoreClosed = false;
-    let resumedStore: ReturnType<typeof createSqliteSessionStore> | undefined;
+    let resumedStore: Awaited<ReturnType<typeof createSqliteSessionStore>> | undefined;
     let liveRuntime: AgentRuntime | undefined;
     let resumedRuntime: AgentRuntime | undefined;
 
     const createRuntime = (
-      sessionStore: ReturnType<typeof createSqliteSessionStore>,
+      sessionStore: Awaited<ReturnType<typeof createSqliteSessionStore>>,
     ): AgentRuntime =>
       new AgentRuntime(
         sessionId,
@@ -90,7 +90,7 @@ describe("Read PDF provider and cold-resume E2E", () => {
       liveRuntime.beginShutdown();
       liveStore.close();
       liveStoreClosed = true;
-      resumedStore = createSqliteSessionStore({ dbPath: databasePath });
+      resumedStore = await createSqliteSessionStore({ dbPath: databasePath });
       resumedRuntime = createRuntime(resumedStore);
       await resumedRuntime.resumeFromStore();
       await resumedRuntime.executeTurn("Continue after cold resume.");

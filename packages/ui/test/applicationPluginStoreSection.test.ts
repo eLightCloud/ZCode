@@ -2,10 +2,7 @@
 import { createElement, type ComponentProps, type ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import {
-  PluginStoreListView,
-  type PluginStoreSegment,
-} from "@/settings/PluginStoreListView.js";
+import { PluginStoreListView, type PluginStoreSegment } from "@/settings/PluginStoreListView.js";
 import type { StorePluginItem } from "@/settings/pluginStoreListing.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
@@ -16,8 +13,7 @@ vi.mock("@/settings/PluginStoreAvatar.js", () => ({
   PluginStoreAvatar: () => null,
 }));
 vi.mock("@/settings/PluginStoreCard.js", () => ({
-  PluginStoreCard: ({ item }: { item: StorePluginItem }) =>
-    createElement("p", null, item.name),
+  PluginStoreCard: ({ item }: { item: StorePluginItem }) => createElement("p", null, item.name),
 }));
 afterEach(cleanup);
 const item = (name: string, marketplace: string, installed = false) =>
@@ -41,7 +37,12 @@ function element(
         items: [
           item("native-personal", "personal-source"),
           item("tenant-scene", "tenant-source", true),
-          ...(options ? [item("managed-private", "vantage-hosted-test"), item("public-extra", "public-extra-source")] : []),
+          ...(options
+            ? [
+                item("managed-private", "vantage-hosted-test"),
+                item("public-extra", "public-extra-source"),
+              ]
+            : []),
         ],
         marketplaces: [],
         actions: {
@@ -67,66 +68,52 @@ function element(
 }
 it("preserves the native two segments when there is no application catalog", () => {
   render(element("personal"));
-  expect(
-    screen.getByRole("button", { name: "公开", exact: true }),
-  ).toBeTruthy();
-  expect(
-    screen.getByRole("button", { name: "个人", exact: true }),
-  ).toBeTruthy();
-  expect(
-    screen.queryByRole("button", { name: "企业", exact: true }),
-  ).toBeNull();
+  expect(screen.getByRole("button", { name: "公开", exact: true })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "个人", exact: true })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "企业", exact: true })).toBeNull();
   expect(screen.getByText("tenant-scene")).toBeTruthy();
 });
-it("adds the third segment and excludes application sources from personal discovery while retaining installed inventory", () => {
-  render(
-    element("personal", "", createElement("p", null, "enterprise-content")),
-  );
-  expect(
-    screen.getByRole("button", { name: "企业", exact: true }),
-  ).toBeTruthy();
+it("adds the application segment and excludes managed sources from personal discovery, including installed entries", () => {
+  render(element("personal", "", createElement("p", null, "enterprise-content")));
+  expect(screen.getByRole("button", { name: "企业", exact: true })).toBeTruthy();
   expect(screen.getByText("native-personal")).toBeTruthy();
   expect(screen.queryByText("tenant-scene")).toBeNull();
-  expect(screen.getByRole("button", { name: "Tenant Scene" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Tenant Scene" })).toBeNull();
 });
 it("keeps application results visible when its search query matches no native plugin", () => {
-  render(
-    element(
-      "application",
-      "tenant query",
-      createElement("p", null, "authorized-result"),
-    ),
-  );
+  render(element("application", "tenant query", createElement("p", null, "authorized-result")));
   expect(screen.getByText("authorized-result")).toBeTruthy();
   expect(
-    screen
-      .getByRole("button", { name: "企业", exact: true })
-      .getAttribute("aria-pressed"),
+    screen.getByRole("button", { name: "企业", exact: true }).getAttribute("aria-pressed"),
   ).toBe("true");
   expect(screen.queryByText("没有找到匹配的插件")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "公开", exact: true }));
 });
 it("renders authorized public projection alongside build-owned public sources", () => {
-  render(element("public", "", createElement("p", null, "tenant-only"), {
-    publicMarketplaceIds: ["public-extra-source"],
-    publicContent: createElement("p", null, "public-authorized"),
-    personalContent: createElement("p", null, "personal-authorized"),
-    managedMarketplacePrefix: "vantage-hosted-",
-  }));
+  render(
+    element("public", "", createElement("p", null, "tenant-only"), {
+      publicMarketplaceIds: ["public-extra-source"],
+      publicContent: createElement("p", null, "public-authorized"),
+      personalContent: createElement("p", null, "personal-authorized"),
+      managedMarketplacePrefix: "vantage-hosted-",
+    }),
+  );
   expect(screen.getByText("public-authorized")).toBeTruthy();
   expect(screen.getByText("public-extra")).toBeTruthy();
   expect(screen.queryByText("personal-authorized")).toBeNull();
   expect(screen.queryByText("managed-private")).toBeNull();
 });
 it("excludes managed and public sources from personal discovery while rendering its authorized projection", () => {
-  render(element("personal", "", createElement("p", null, "tenant-only"), {
-    publicMarketplaceIds: ["public-extra-source"],
-    personalContent: createElement("p", null, "personal-authorized"),
-    managedMarketplacePrefix: "vantage-hosted-",
-  }));
+  render(
+    element("personal", "", createElement("p", null, "tenant-only"), {
+      publicMarketplaceIds: ["public-extra-source"],
+      personalContent: createElement("p", null, "personal-authorized"),
+      managedMarketplacePrefix: "vantage-hosted-",
+    }),
+  );
   expect(screen.getByText("personal-authorized")).toBeTruthy();
   expect(screen.getByText("native-personal")).toBeTruthy();
   expect(screen.queryByText("public-extra")).toBeNull();
   expect(screen.queryByText("managed-private")).toBeNull();
-  expect(screen.getByRole("button", { name: "Tenant Scene" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Tenant Scene" })).toBeNull();
 });

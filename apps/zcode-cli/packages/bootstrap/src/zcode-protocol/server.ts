@@ -4,63 +4,37 @@ import type * as implementation3 from "./protocol-server-dispatch.js";
 import type * as implementation2 from "./protocol-server-messages.js";
 import { installZCodeProtocolAgentServerMethods } from "./protocol-server-methods.js";
 import type * as implementation4 from "./protocol-server-operation-signals.js";
-
 import { createNodeNetworkCapture } from "@zcode/shared/node";
-
 import { zcodeProtocolNotifications } from "@zcode/shared";
-
 import type { BrowserControlPort } from "@zcode/contracts";
-
 import { InMemoryWorkspaceHookPolicyProvider } from "@zcode/core";
-
-import type {
-  ZCodeProtocolMethod,
-  ZCodeProtocolRequest,
-  ZCodeProtocolRequestId,
-} from "@zcode/shared";
-
+import type { ZCodeProtocolMethod } from "@zcode/shared";
+import type { ZCodeProtocolRequest } from "@zcode/shared";
+import type { ZCodeProtocolRequestId } from "@zcode/shared";
 import { ProtocolRuntimeResources } from "./runtime-resources.js";
-
-import {
-  V4InteractionRegistry,
-  resolveV4InteractionRegistryOptionsFromEnv,
-} from "../zcode-protocol-v4/interaction-registry.js";
-
+import { V4InteractionRegistry } from "../zcode-protocol-v4/interaction-registry.js";
+import { resolveV4InteractionRegistryOptionsFromEnv } from "../zcode-protocol-v4/interaction-registry.js";
 import { createConversationV4Gateway } from "./v4-bridge.js";
-
 import { createSessionResidentPoolHost } from "./session-residency.js";
-
-import {
-  DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT,
-  SessionResidentPool,
-} from "./session-resident-pool.js";
-
+import { DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT } from "./session-resident-pool.js";
+import { SessionResidentPool } from "./session-resident-pool.js";
 import { createProtocolBrowserControlBroker } from "./browser-control-broker.js";
-
-import {
-  PROTOCOL_CLIENT_REQUEST_ERROR_CODES,
-  ProtocolRequestError,
-  createProtocolLogger,
-  type ParamsSchema,
-  type ZCodeProtocolAgentDependencies,
-  type ZCodeProtocolAgentServerContext,
-  type ZCodeProtocolClientRequestOptions,
-  type ZCodeProtocolSessionRecord,
-} from "./server-types.js";
-
+import { PROTOCOL_CLIENT_REQUEST_ERROR_CODES } from "./server-types.js";
+import { ProtocolRequestError } from "./server-types.js";
+import { createProtocolLogger } from "./server-types.js";
+import type { ParamsSchema } from "./server-types.js";
+import type { ZCodeProtocolAgentDependencies } from "./server-types.js";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+import type { ZCodeProtocolClientRequestOptions } from "./server-types.js";
+import type { ZCodeProtocolSessionRecord } from "./server-types.js";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
-
-import {
-  MAX_CLIENT_REQUEST_REANNOUNCE_INTERVAL_MS,
-  getOperationId,
-  getPluginOperationId,
-} from "./protocol-server-support.js";
-
-import type {
-  PendingClientRequest,
-  ZCodeProtocolOutboundMessage,
-  ZCodeProtocolPostResponseBatch,
-} from "./protocol-server-support.js";
+import { MAX_CLIENT_REQUEST_REANNOUNCE_INTERVAL_MS } from "./protocol-server-support.js";
+import { getOperationId } from "./protocol-server-support.js";
+import { getPluginOperationId } from "./protocol-server-support.js";
+import type { PendingClientRequest } from "./protocol-server-support.js";
+import type { ZCodeProtocolOutboundMessage } from "./protocol-server-support.js";
+import type { ZCodeProtocolPostResponseBatch } from "./protocol-server-support.js";
+import { requestMcpElicitation } from "./interaction-broker.js";
 
 export { notifyWorkspaceHookTrustGrantSessions } from "./protocol-server-support.js";
 

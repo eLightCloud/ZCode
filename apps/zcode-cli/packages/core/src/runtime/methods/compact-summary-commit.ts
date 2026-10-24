@@ -1,75 +1,46 @@
-import type { CompactPhase, CompactReason, CompactTrigger } from "@zcode/contracts";
+import type { CompactActiveOptions } from "./compact-active.js";
+import type { CompactPhase } from "@zcode/contracts";
+import type { CompactReason } from "@zcode/contracts";
+import type { CompactTrigger } from "@zcode/contracts";
 import { requiredPluginCompactReminder } from "./required-plugin.js";
-
 import { collectRuntimeAgentListing } from "../helpers/agent-listing.js";
-
-import {
-  CompactTimelineStatus,
-  SessionEventType,
-  buildCompactSummaryMessage,
-  buildManualCompactBoundary,
-  createCompactBoundaryId,
-  createMessageId,
-  getUsageTotalTokens,
-} from "../deps.js";
-
-import type { MessageId, SessionEvent, TraceContext } from "../deps.js";
-
-import {
-  CompactEntrySelection,
-  buildPostCompactReadStateReminderEntries,
-  buildPostCompactRuntimeEntries,
-  countCompactPreservedRuntimeMessages,
-  estimateRuntimeEntryTokens,
-  readApprovedPlanFileReferenceEntry,
-} from "../helpers/index.js";
-
-import type { CompactTimelineContext, RuntimeModelTextResult } from "../types.js";
-
+import { CompactTimelineStatus } from "../deps.js";
+import { SessionEventType } from "../deps.js";
+import { buildCompactSummaryMessage } from "../deps.js";
+import { buildManualCompactBoundary } from "../deps.js";
+import { createCompactBoundaryId } from "../deps.js";
+import { createMessageId } from "../deps.js";
+import { getUsageTotalTokens } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { SessionEvent } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import { CompactEntrySelection } from "../helpers/index.js";
+import { buildPostCompactReadStateReminderEntries } from "../helpers/index.js";
+import { buildPostCompactRuntimeEntries } from "../helpers/index.js";
+import { countCompactPreservedRuntimeMessages } from "../helpers/index.js";
+import { estimateRuntimeEntryTokens } from "../helpers/index.js";
+import { readApprovedPlanFileReferenceEntry } from "../helpers/index.js";
+import type { CompactTimelineContext } from "../types.js";
+import type { RuntimeModelTextResult } from "../types.js";
 import type { Model } from "../deps.js";
-
 import type { AgentRuntimeInternal } from "../internal.js";
-
-import {
-  legacySyntheticRuntimeMetadata,
-  type RuntimeMessageEntry,
-} from "../../agent/message-history.js";
-
+import { legacySyntheticRuntimeMetadata } from "../../agent/message-history.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import { selectPersistedCompactTail } from "../helpers/compact-preservation.js";
-
-import {
-  formatCompactSummaryOrThrow,
-  persistCompactTimelineEvent,
-} from "./compact-active-helpers.js";
-
+import { formatCompactSummaryOrThrow } from "./compact-active-helpers.js";
+import { persistCompactTimelineEvent } from "./compact-active-helpers.js";
 import { resetProjectMemoryRecall } from "../helpers/project-memory-recall.js";
-
-import {
-  filterOutputTokenContinuationEntries,
-  preserveCanonicalContextPrefix,
-} from "./turn-output-token-continuation.js";
+import { filterOutputTokenContinuationEntries } from "./turn-output-token-continuation.js";
+import { preserveCanonicalContextPrefix } from "./turn-output-token-continuation.js";
+import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
+import { collectDiscoveredTools } from "../../tool/search/history.js";
+import { compactDiscoveryMetadata } from "../../tool/search/history.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
 
 export async function commitCompactSummary(
   this: AgentRuntimeInternal,
   result: RuntimeModelTextResult,
-  options: {
-    abortSignal?: AbortSignal;
-    compactContextTelemetry?: {
-      inputTokens: number;
-      policyContextWindowTokens: number;
-      thresholdTokens?: number;
-      tokenSource: "estimate" | "provider_usage";
-    };
-    autoCompactThreshold?: number;
-    compactReason?: CompactReason;
-    initialPromptTooLongCause?: unknown;
-    phase?: CompactPhase;
-    sourceCommandId?: string;
-    trigger?: CompactTrigger;
-    model?: Model;
-    agentListingTools?: readonly { name: string }[];
-    activeEntries?: readonly RuntimeMessageEntry[];
-  },
+  options: CompactActiveOptions,
   modelTraceContext: TraceContext,
   preservedEntries: RuntimeMessageEntry[],
   compactModel: Model,
@@ -100,6 +71,26 @@ export async function commitCompactSummary(
         workspaceRoot: this.workspaceRoot,
       })
     : undefined;
+  // Bug 根因：compact 丢弃旧公告后曾依赖下一次请求补齐，纯 Continue 无正常收集机会。
+  // 在取消检查后按保留历史重建，使用继续执行的作用域，不使用摘要候选工具。
+  throwIfTurnAborted(options.abortSignal);
+  const registry = this.getToolRegistry();
+  const preCompactDiscoveredTools = collectDiscoveredTools(activeEntries);
+  const discovery = compactDiscoveryMetadata({
+    boundaryId: createCompactBoundaryId(),
+    preCompactDiscoveredTools: [...preCompactDiscoveredTools],
+  });
+  // 新检查点尚未提交；公告使用同一候选分类，避免把即将提升的工具重新公告为待加载。
+  const toolAnnouncement = buildToolSearchAnnouncement(
+    {
+      model: compactModel,
+      mode: this.config.toolSearch?.mode,
+      tools: options.getContinuationTools?.() ?? this.getTools(compactModel),
+      registry,
+      entries: preservedEntries,
+    },
+    preCompactDiscoveredTools,
+  );
   const agentListingEntry = collectRuntimeAgentListing(
     this,
     preservedEntries,
@@ -113,6 +104,7 @@ export async function commitCompactSummary(
       preservedEntries,
       readFileState: this.readFileState,
     }),
+    ...(toolAnnouncement ? [toolAnnouncement] : []),
   ];
 
   const modelCompleteEvent = this.createEvent(
@@ -143,26 +135,20 @@ export async function commitCompactSummary(
         summaryMessageId,
       })
     : { keptMessageCount: countCompactPreservedRuntimeMessages(recordablePreservedEntries) };
-  const postCompactEntries = buildPostCompactRuntimeEntries(
-    activeEntries,
-    {
-      message: {
-        role: "user",
-        content: summaryMessageContent,
-      },
-      metadata: legacySyntheticRuntimeMetadata(),
-    },
-    {
-      postCompactReminderEntries,
-      preservedEntries,
-    },
-  );
+  const summaryEntry = {
+    message: { role: "user" as const, content: summaryMessageContent },
+    metadata: { ...legacySyntheticRuntimeMetadata(), compactBoundary: discovery },
+  };
+  const postCompactEntries = buildPostCompactRuntimeEntries(activeEntries, summaryEntry, {
+    postCompactReminderEntries,
+    preservedEntries,
+  });
   const truePostCompactTokenCount = estimateRuntimeEntryTokens(postCompactEntries, {
     useMidConversationSystem,
   });
   const providerPostCompactTokenCount = getUsageTotalTokens(result.usage);
   const compactBoundary = buildManualCompactBoundary({
-    boundaryId: createCompactBoundaryId(),
+    ...discovery,
     autoCompactThreshold: options.autoCompactThreshold,
     compactReason,
     customInstructions,
@@ -187,6 +173,7 @@ export async function commitCompactSummary(
         : undefined,
   });
 
+  // 发现检查点跟随 summary 原子保存；持久化成功后才替换 Runtime 历史。
   await this.persistCompactSummary(
     summaryMessageId,
     summaryMessageContent,

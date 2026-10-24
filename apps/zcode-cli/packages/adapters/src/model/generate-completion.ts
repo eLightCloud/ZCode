@@ -1,3 +1,4 @@
+import { createEmptyContextExceededError } from "./runner-diagnostics.js";
 import type {
   ModelReasoningContentBlock,
   ModelSource,
@@ -145,6 +146,18 @@ export function normalizeGeneratedResponse(
   const sources = normalizeSources(result);
   const text = input.request.responseJsonSchema ? serializeStructuredOutput(result) : result.text;
   const reasoning = normalizeReasoning(result.reasoning);
+  const contextError = createEmptyContextExceededError({
+    finishReason: result.finishReason,
+    rawFinishReason: result.rawFinishReason ?? result.providerMetadata?.rawFinishReason,
+    hasAssistantContent:
+      text.length > 0 ||
+      (reasoning ?? []).some(
+        (block) => block.text.length > 0 || Object.keys(block.providerOptions ?? {}).length > 0,
+      ),
+    toolCallCount: toolCalls?.length ?? 0,
+    usage,
+  });
+  if (contextError) throw contextError;
   const reasoningLength = (reasoning ?? []).reduce((total, block) => total + block.text.length, 0);
   return {
     reasoningLength,

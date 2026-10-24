@@ -29,6 +29,9 @@ export interface AppMcpApi {
 
   getMcpAppConnectionSnapshot(serverName: string): { identity: string; generation: number } | null;
 
+  waitForMcpAppConnection(
+    serverName: string,
+  ): Promise<{ identity: string; generation: number } | null>;
   callMcpToolForUi(
     serverName: string,
     toolName: string,

@@ -1,69 +1,40 @@
-import { CoreErrorType, TurnMachineImpl, createCoreError } from "../deps.js";
-
-import type { MessageId, Model, ModelToolCall, ModelToolContract, TraceContext } from "../deps.js";
-
-import { type RuntimeMessageEntry } from "../../agent/message-history.js";
-
+import { createStreamingToolCoordinator } from "./streaming-tool-coordinator.js";
+import type { ModelStepRequestOptions } from "./model-step-contract.js";
+import { CoreErrorType } from "../deps.js";
+import { TurnMachineImpl } from "../deps.js";
+import { createCoreError } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { Model } from "../deps.js";
+import type { ModelToolCall } from "../deps.js";
+import type { ModelToolContract } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import { projectExecutionErrorPayload } from "../helpers/index.js";
-
-import type {
-  DrainedPendingInputDiagnostics,
-  RunModelTextRequestOptions,
-  RuntimeModelTextResult,
-  StreamedToolExecutionResult,
-} from "../types.js";
-
+import type { DrainedPendingInputDiagnostics } from "../types.js";
+import type { RunModelTextRequestOptions } from "../types.js";
+import type { RuntimeModelTextResult } from "../types.js";
+import type { StreamedToolExecutionResult } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
 import { executeToolCallsForModelStep } from "./turn-tools.js";
-
-import {
-  AssistantPersistenceAnchor,
-  finishModelStepWithoutToolCalls,
-  persistCompletedAssistantStep,
-  persistOutputTokenLimitErrorCarrier,
-} from "./turn-stop.js";
-
+import { AssistantPersistenceAnchor } from "./turn-stop.js";
+import { finishModelStepWithoutToolCalls } from "./turn-stop.js";
+import { persistCompletedAssistantStep } from "./turn-stop.js";
+import { persistOutputTokenLimitErrorCarrier } from "./turn-stop.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
-
 import { recordModelHistoryRound } from "./turn-loop-state.js";
-
-import {
-  OUTPUT_TOKEN_LIMIT_ERROR_MESSAGE,
-  appendOutputTokenContinuation,
-  commitAssistantToTurnRequest,
-  completeOutputTokenRecovery,
-} from "./turn-output-token-continuation.js";
-
+import { OUTPUT_TOKEN_LIMIT_ERROR_MESSAGE } from "./turn-output-token-continuation.js";
+import { appendOutputTokenContinuation } from "./turn-output-token-continuation.js";
+import { commitAssistantToTurnRequest } from "./turn-output-token-continuation.js";
+import { completeOutputTokenRecovery } from "./turn-output-token-continuation.js";
 import type { ModelStepResult } from "./model-step-contract.js";
 
 export async function settleModelStepTools(
   this: AgentRuntimeInternal,
   toolCalls: ModelToolCall[],
-  streamingToolCoordinator: {
-    accept(toolCall: ModelToolCall): void;
-    abandon(reason: "cancelled" | "model_failed"): Promise<void>;
-    drain(toolCalls: readonly ModelToolCall[]): Promise<StreamedToolExecutionResult[]>;
-    recordReasoningDelta(text: string): void;
-    recordTextDelta(text: string): void;
-    recoverFromModelFailure(
-      error: unknown,
-      assistantCreatedAt: number,
-      recoveryOptions?: { failedRequestId?: string },
-    ): Promise<boolean>;
-    settleForModelFallback(assistantCreatedAt: number): Promise<boolean>;
-  },
+  streamingToolCoordinator: ReturnType<typeof createStreamingToolCoordinator>,
   outputTokenContinuation: string,
   state: RegularTurnLoopState,
-  options: {
-    drainedSteerForNextRequest?: DrainedPendingInputDiagnostics;
-    latestRealUserMessageIndex?: number;
-    messages: RunModelTextRequestOptions["messages"];
-    sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
-    requestEntries: readonly RuntimeMessageEntry[];
-    tools: ModelToolContract[];
-  },
+  options: ModelStepRequestOptions,
   assistantPersistenceAnchor: AssistantPersistenceAnchor,
   assistantCreatedAt: number,
   assistantMessageId: MessageId,
@@ -71,7 +42,9 @@ export async function settleModelStepTools(
   result: RuntimeModelTextResult,
   model: Model,
 ): Promise<ModelStepResult> {
-  const executableToolCalls = toolCalls.filter((toolCall) => !toolCall.providerExecuted);
+  const executableToolCalls = toolCalls
+    .filter((toolCall) => !toolCall.providerExecuted)
+    .map((toolCall) => streamingToolCoordinator.admit(toolCall));
   const streamedToolResults = await streamingToolCoordinator.drain(executableToolCalls);
   if (outputTokenContinuation !== "none") {
     // 首次命中 output-limit 时，当前 request 可能带有一次性的 project-memory attachment；
@@ -151,6 +124,7 @@ export async function settleModelStepTools(
     recordModelHistoryRound(state);
   }
   const toolStepResult = await executeToolCallsForModelStep.call(this, state, {
+    toolSearch: options.toolSearch,
     assistantCreatedAt,
     assistantMessageId,
     modelTraceContext,

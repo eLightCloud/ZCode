@@ -1,29 +1,26 @@
 import { Client } from "@modelcontextprotocol/client";
-
-import type { McpConnectOptions, McpServerConfig, McpServerStatus } from "@zcode/contracts";
-
-import { ZCODE_OFFICIAL_MCP_AUTH_TYPE, type McpServerFailureKind } from "@zcode/shared";
-
+import type { McpConnectOptions } from "@zcode/contracts";
+import type { McpServerConfig } from "@zcode/contracts";
+import type { McpServerStatus } from "@zcode/contracts";
+import { ZCODE_OFFICIAL_MCP_AUTH_TYPE } from "@zcode/shared";
+import type { McpServerFailureKind } from "@zcode/shared";
 import { buildMcpAppsClientCapabilities } from "@zcode/shared/mcp-apps";
-
 import { normalizeMcpToolDescriptor } from "./descriptor.js";
-
 import { classifyInteractiveAuthorizationTrigger } from "./oauth-errors.js";
-
 import { withTimeout } from "./timeout.js";
-
-import type { McpClient, McpServerRecord, McpTransport } from "./mcp-adapter-contract.js";
-
+import type { McpClient } from "./mcp-adapter-contract.js";
+import type { McpServerRecord } from "./mcp-adapter-contract.js";
+import type { McpTransport } from "./mcp-adapter-contract.js";
 import type { NodeMcpAdapterContext } from "./mcp-adapter-context.js";
-import {
-  formatVersionNegotiationMode,
-  getStdioTransportExitInfo,
-  getStdioTransportPid,
-  isProtocolNegotiationFailure,
-  isStdioTransportProcessAlive,
-  resolveAuthorizationCodeOAuthConfig,
-  resolveVersionNegotiation,
-} from "./mcp-adapter-protocol.js";
+import { formatVersionNegotiationMode } from "./mcp-adapter-protocol.js";
+import { getStdioTransportExitInfo } from "./mcp-adapter-protocol.js";
+import { getStdioTransportPid } from "./mcp-adapter-protocol.js";
+import { isProtocolNegotiationFailure } from "./mcp-adapter-protocol.js";
+import { isStdioTransportProcessAlive } from "./mcp-adapter-protocol.js";
+import { resolveAuthorizationCodeOAuthConfig } from "./mcp-adapter-protocol.js";
+import { resolveVersionNegotiation } from "./mcp-adapter-protocol.js";
+import { resolve } from "node:path";
+
 export function waitForSharedConnection(
   this: NodeMcpAdapterContext,
   name: string,
@@ -168,6 +165,7 @@ export async function openServerConnection(
         // 原判据是 `type !== "sse"`，把 stdio 一起放了进来，等于这道门槛在 stdio 上为零。
         // 注意这不是在挡凭证外泄（那由 origin 校验负责），而是在挡**结果伪造**。
         config.type === "http" && config.auth?.type === ZCODE_OFFICIAL_MCP_AUTH_TYPE,
+        config.alwaysLoad,
       ),
     );
     const negotiatedProtocolEra = client.getProtocolEra();

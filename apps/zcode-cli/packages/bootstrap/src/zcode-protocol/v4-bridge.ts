@@ -3,8 +3,9 @@
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
 // - 命令执行 = V4CommandExecutor（zcode-protocol-v4/commands/，原生直驱 core）；
 //   20 命令全部原生，supports() 未命中（未知命令）→ notImplemented。
-// - 过渡钩子（ensureModelReady / afterLegacyStateMutation / closeSession /
-//   createSessionRecord / child record registration / resumePersistedSession）在此注入旧协议实现，随旧协议一同删除。
+// - 过渡钩子（ensureModelReady / afterLegacyStateMutation / deleteSession /
+//   createSessionRecord / child record registration / resumePersistedSession）在此注入旧实现，
+//   死期 = M5 波次 2（随旧协议一同删除）。
 //
 // 不做桥接：依赖方向只允许 旧目录 → v4 目录。
 // 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
@@ -295,7 +296,6 @@ export function createConversationV4Gateway(
       }
       const stored = await context.deps.sessionStore.listSessions({
         directory: persistedWorkspacePath,
-        includeArchived: false,
         limit: 200,
         // parentID 只表达会话层级，不能作为左侧任务 membership。
         // 显式 fork 必然带 parentID，但重启后仍应由 taskType 投影进 sessions-index。
@@ -308,7 +308,13 @@ export function createConversationV4Gateway(
         ...(session.parentID ? { parentSessionId: String(session.parentID) } : {}),
         title: session.title ?? "",
         titleSource: normalizeStoredTitleSource(session.titleSource),
-        phase: "completedSuccess" as const,
+        phase:
+          session.lastOutcome === "error"
+            ? ("error" as const)
+            : session.lastOutcome === "interrupted"
+              ? ("completedInterrupted" as const)
+              : ("completedSuccess" as const),
+        ...(session.lastOutcome ? { lastOutcome: session.lastOutcome } : {}),
         sessionEnded: true,
         hasBackgroundWork: false,
         lastActivityAt: session.time?.updated ?? 0,

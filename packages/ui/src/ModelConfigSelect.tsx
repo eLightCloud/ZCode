@@ -1,54 +1,58 @@
-/* eslint-disable max-lines -- 模型菜单同时维护触发器、模型项、provider family 连接方式子菜单和焦点恢复，拆开会增加受控 Dropdown 状态同步成本。 */
-import {
-  Fragment,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { Fragment } from "react";
+import { memo } from "react";
+import { useCallback } from "react";
+import { useEffect } from "react";
+import { useMemo } from "react";
+import { useRef } from "react";
+import { useState } from "react";
+import type { CSSProperties } from "react";
+import type { ReactNode } from "react";
+import type { RefObject } from "react";
 import { useOptionalZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.js";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select.js";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip.js";
-import { AlertCircle, CheckIcon, ChevronDownIcon, LoaderIcon, PackageIcon } from "lucide-react";
-import {
-  TID_CHAT_MODEL_SELECT_GROUP,
-  TID_CHAT_MODEL_SELECT_ITEM,
-  TID_CHAT_MODEL_SELECT_TRIGGER,
-  testId,
-} from "@zcode/shared";
-import {
-  isCoarseTouchDevice,
-  shouldRestoreChatInputFocusAfterPickerClose,
-} from "@/lib/pickerFocus.js";
+import { DropdownMenu } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuContent } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuLabel } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuPortal } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuRadioGroup } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuSub } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuSubContent } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu.js";
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { Select } from "@/components/ui/select.js";
+import { SelectContent } from "@/components/ui/select.js";
+import { SelectItem } from "@/components/ui/select.js";
+import { SelectTrigger } from "@/components/ui/select.js";
+import { Tooltip } from "@/components/ui/tooltip.js";
+import { TooltipContent } from "@/components/ui/tooltip.js";
+import { TooltipProvider } from "@/components/ui/tooltip.js";
+import { TooltipTrigger } from "@/components/ui/tooltip.js";
+import { AlertCircle } from "lucide-react";
+import { CheckIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
+import { LoaderIcon } from "lucide-react";
+import { PackageIcon } from "lucide-react";
+import { TID_CHAT_MODEL_SELECT_GROUP } from "@zcode/shared/test-ids";
+import { TID_CHAT_MODEL_SELECT_ITEM } from "@zcode/shared/test-ids";
+import { TID_CHAT_MODEL_SELECT_TRIGGER } from "@zcode/shared/test-ids";
+import { testId } from "@zcode/shared/test-ids";
+import { isCoarseTouchDevice } from "@/lib/pickerFocus.js";
+import { shouldRestoreChatInputFocusAfterPickerClose } from "@/lib/pickerFocus.js";
 import { RollingToolbarLabel } from "@/chat-input-toolbar/RollingToolbarLabel.js";
+import { ComposerModelMenu } from "@/chat-input-toolbar/ComposerModelMenu.js";
+import { ComposerThoughtIndicator } from "@/chat-input-toolbar/ComposerModelMenu.js";
+import { isGlmHighspeedModel } from "@/chat-input-toolbar/ComposerModelMenu.js";
+import type { ComposerModelOptions } from "@/chat-input-toolbar/ComposerModelMenu.js";
 import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadge.js";
 import type { ProviderConfigObject } from "@zcode/provider";
 import { ProviderLogo } from "@/settings/model-provider-section/ProviderLogo.js";
+import { ComposerTriggerTransition } from "@/chat-input-toolbar/ComposerTriggerTransition.js";
+/* eslint-disable max-lines -- 模型菜单同时维护触发器、模型项、provider family 连接方式子菜单和焦点恢复，拆开会增加受控 Dropdown 状态同步成本。 */
 
 export interface ModelSelectGroupItem {
   key: string;
@@ -74,6 +78,7 @@ export interface ModelSelectGroup {
   key: string;
   label: string;
   labelBadge?: string;
+  logo?: ProviderConfigObject["logo"];
   directItems?: boolean;
   selectedOptionKey?: string;
   connectionOptions?: ModelSelectConnectionOption[];
@@ -142,6 +147,8 @@ export function getModelTriggerLabelClassName({
 }
 
 interface ModelConfigSelectProps {
+  /** Composer 合并入口；其他使用点保持原有模型选择交互。 */
+  composerOptions?: ComposerModelOptions;
   modelGroups: readonly ModelSelectGroup[];
   normalizedValue: string;
   triggerLabel: string;
@@ -194,6 +201,7 @@ interface ModelConfigSelectProps {
 }
 
 export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
+  composerOptions,
   modelGroups,
   normalizedValue,
   triggerLabel,
@@ -237,8 +245,37 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   triggerBadge,
 }: ModelConfigSelectProps) {
   const applicationIntl = useOptionalZCodeIntl();
+  const presentation = useRef({ composerOptions, modelGroups, normalizedValue, triggerLabel });
+  if (
+    composerOptions?.providerMenu?.pending &&
+    presentation.current.composerOptions?.providerMenu
+  ) {
+    // 原因：账号刷新和草稿解析分别到达，混用新选项与旧选中值会让菜单收缩并显示“—”。
+    // loading 期间只冻结展示；回调和 pending/error 仍来自当前 owner，不影响提交事实。
+    const previous = presentation.current;
+    composerOptions = {
+      ...previous.composerOptions!,
+      onValueChange: composerOptions.onValueChange,
+      providerMenu: {
+        ...composerOptions.providerMenu,
+        groups: previous.composerOptions!.providerMenu!.groups,
+        selectedKey: previous.composerOptions!.providerMenu!.selectedKey,
+      },
+    };
+    modelGroups = previous.modelGroups;
+    normalizedValue = previous.normalizedValue;
+    triggerLabel = previous.triggerLabel;
+  } else presentation.current = { composerOptions, modelGroups, normalizedValue, triggerLabel };
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
+  const hasSelectedModel = Boolean(normalizedValue.trim());
+  const showSelectionLabel = Boolean(composerOptions && open && hasSelectedModel);
+  // 未选模型不代表缺失思考档位；空态不应显示横线、绿条或 Tooltip 的伪档位。
+  const selectedThoughtLabel = hasSelectedModel
+    ? composerOptions?.levels.find((level) => level.value === composerOptions.value)?.label
+    : undefined;
   const lastOpenRequestKeyRef = useRef(openRequestKey);
   const hasSelectableModel = modelGroups.length > 0;
   // 闲时任务白名单只有一层模型值；只要存在 group 就强制展示 provider 层的话，
@@ -260,12 +297,16 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
 
   const handlePopoverOpenChange = useCallback(
     (nextOpen: boolean) => {
+      // 打开前测量真实按钮，不能在替换文案后反过来测量占位内容。
+      if (nextOpen && composerOptions && buttonRef.current)
+        setExpandedWidth(buttonRef.current.getBoundingClientRect().width);
+      else if (!nextOpen) setExpandedWidth(null);
       if (controlledOpen === undefined) {
         setUncontrolledOpen(nextOpen);
       }
       onOpenChange?.(nextOpen);
     },
-    [controlledOpen, onOpenChange],
+    [controlledOpen, onOpenChange, composerOptions],
   );
 
   useEffect(() => {
@@ -368,9 +409,11 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           {...commonProps}
           value={item.value}
           className="min-h-8 gap-2 pl-2 pr-8 text-ui-base"
-          onSelect={() => {
+          onSelect={(event) => {
             handleModelValueChange(item.value);
-            handlePopoverOpenChange(false);
+            // 合并菜单选模型后还可继续调档，阻止菜单项默认关闭；外侧点击仍走原关闭链路。
+            if (composerOptions) event.preventDefault();
+            else handlePopoverOpenChange(false);
           }}
         >
           {content}
@@ -378,6 +421,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
       );
     },
     [
+      composerOptions,
       handleModelValueChange,
       handlePopoverOpenChange,
       isItemLocked,
@@ -488,7 +532,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
 
   const renderedFooterActions = useMemo<ModelSelectFooterAction[]>(() => {
     const actions = [...footerActions];
-    if (showManageModelsAction && manageModelsLabel) {
+    if (!composerOptions && showManageModelsAction && manageModelsLabel) {
       actions.push({
         key: "manage-models",
         label: manageModelsLabel,
@@ -496,11 +540,85 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
       });
     }
     return actions;
-  }, [footerActions, manageModelsLabel, onManageModels, showManageModelsAction]);
+  }, [composerOptions, footerActions, manageModelsLabel, onManageModels, showManageModelsAction]);
+
+  const highspeed = isGlmHighspeedModel(
+    modelGroups.flatMap((group) => group.items).find((item) => item.value === normalizedValue)
+      ?.name ?? "",
+  );
+  const triggerContents = showSelectionLabel ? (
+    <>
+      <span
+        data-composer-open-label
+        className="absolute inset-x-1.5 truncate text-center text-foreground-subtle group-data-[composer-model-icon=true]/toolbar:hidden"
+      >
+        {composerOptions!.selectModelLabel}
+      </span>
+      <span
+        data-composer-open-icon
+        aria-hidden="true"
+        className="hidden size-4 shrink-0 items-center text-foreground-subtle group-data-[composer-model-icon=true]/toolbar:inline-flex"
+      >
+        {triggerIcon ?? <PackageIcon className="size-4" />}
+      </span>
+      <span
+        data-composer-open-thought
+        className="hidden group-data-[composer-model-icon=true]/toolbar:inline-flex"
+      >
+        <ComposerThoughtIndicator options={composerOptions!} highspeed={highspeed} />
+      </span>
+    </>
+  ) : (
+    <>
+      {triggerIcon ?? (
+        <PackageIcon
+          className={cn("pointer-events-none size-4 shrink-0 text-current", triggerIconClassName)}
+          aria-hidden="true"
+        />
+      )}
+      <span className={triggerLabelClassName} title={currentTriggerTitle}>
+        <RollingToolbarLabel
+          label={
+            !pending && triggerLabelPrefix === undefined && triggerLabelValue !== undefined
+              ? triggerLabelValue
+              : currentTriggerLabel
+          }
+          prefix={pending ? undefined : triggerLabelPrefix}
+          prefixClassName={triggerLabelPrefixClassName}
+          value={pending ? undefined : triggerLabelValue}
+        />
+      </span>
+      {composerOptions && hasSelectedModel ? (
+        <ComposerThoughtIndicator options={composerOptions} highspeed={highspeed} />
+      ) : null}
+      {triggerBadge}
+      {pending ? (
+        <LoaderIcon className="pointer-events-none size-3.5 animate-spin text-foreground" />
+      ) : null}
+      {!pending && (
+        <ChevronDownIcon
+          className={cn(
+            "pointer-events-none size-3.5 text-foreground-subtle",
+            indicatorClassName,
+            composerOptions && "group-data-[composer-compact=true]/combined:hidden",
+          )}
+        />
+      )}
+    </>
+  );
 
   const modelTrigger = (
     <DropdownMenuTrigger asChild>
       <Button
+        ref={buttonRef}
+        style={
+          showSelectionLabel
+            ? ({
+                // 锁宽只稳定打开态文案；图标态必须释放宽度，否则 resize 后仍挤占其他入口。
+                "--composer-model-open-width": `max(${expandedWidth ?? 0}px, 8rem)`,
+              } as CSSProperties)
+            : undefined
+        }
         type="button"
         variant="ghost"
         size="default"
@@ -508,42 +626,29 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
         data-chat-toolbar-popover-trigger="true"
         data-testid={triggerTestId}
         data-model-current-value={normalizedValue}
-        aria-label={triggerAriaLabel}
+        aria-label={
+          selectedThoughtLabel ? `${triggerAriaLabel} ${selectedThoughtLabel}` : triggerAriaLabel
+        }
+        data-composer-combined-model={composerOptions ? "true" : undefined}
+        data-composer-collapse-priority={composerOptions ? "3" : undefined}
         onClick={guideTooltipOpen ? onGuideTooltipDismiss : undefined}
         className={cn(
           "w-fit justify-between gap-1 rounded-lg pl-2 pr-1.5 text-ui-base whitespace-nowrap",
           triggerClassName,
+          composerOptions && "group/combined relative",
+          showSelectionLabel &&
+            "px-2 w-(--composer-model-open-width) min-w-32 max-w-(--composer-model-open-width) group-data-[composer-model-icon=true]/toolbar:w-auto group-data-[composer-model-icon=true]/toolbar:min-w-0 group-data-[composer-model-icon=true]/toolbar:max-w-none",
+          composerOptions &&
+            !hasSelectedModel &&
+            "text-foreground-subtle hover:text-foreground-subtle aria-expanded:text-foreground-subtle",
         )}
       >
-        {triggerIcon ?? (
-          <PackageIcon
-            className={cn("pointer-events-none size-4 shrink-0 text-current", triggerIconClassName)}
-            aria-hidden="true"
-          />
-        )}
-        <span className={triggerLabelClassName} title={currentTriggerTitle}>
-          <RollingToolbarLabel
-            label={
-              !pending && triggerLabelPrefix === undefined && triggerLabelValue !== undefined
-                ? triggerLabelValue
-                : currentTriggerLabel
-            }
-            prefix={pending ? undefined : triggerLabelPrefix}
-            prefixClassName={triggerLabelPrefixClassName}
-            value={pending ? undefined : triggerLabelValue}
-          />
-        </span>
-        {triggerBadge}
-        {pending ? (
-          <LoaderIcon className="pointer-events-none size-3.5 animate-spin text-foreground" />
-        ) : null}
-        {!pending && (
-          <ChevronDownIcon
-            className={cn(
-              "pointer-events-none size-3.5 text-foreground-subtle",
-              indicatorClassName,
-            )}
-          />
+        {composerOptions ? (
+          <ComposerTriggerTransition open={showSelectionLabel}>
+            {triggerContents}
+          </ComposerTriggerTransition>
+        ) : (
+          triggerContents
         )}
       </Button>
     </DropdownMenuTrigger>
@@ -553,10 +658,16 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
     <DropdownMenu open={open} onOpenChange={handlePopoverOpenChange}>
       {tooltipTitle ? (
         <ControlHintTooltip
-          title={guideTooltipOpen && guideTooltipTitle ? guideTooltipTitle : tooltipTitle}
+          // 合并入口的 Tooltip 应提示操作，不重复按钮已有的模型和档位。
+          title={
+            guideTooltipOpen && guideTooltipTitle
+              ? guideTooltipTitle
+              : (composerOptions?.selectModelLabel ?? tooltipTitle)
+          }
           shortcut={guideTooltipOpen ? undefined : shortcutLabel}
           triggerRef={triggerRef}
-          open={guideTooltipOpen ? true : undefined}
+          // 菜单打开时 Tooltip 不能再成为最上层；否则 Escape 只关闭提示，菜单仍锁住指针。
+          open={open ? false : guideTooltipOpen ? true : undefined}
           className={guideTooltipOpen ? "bg-background py-0.5 pr-0.5 pl-2" : undefined}
         >
           {modelTrigger}
@@ -564,17 +675,30 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
       ) : (
         modelTrigger
       )}
+      {open && composerOptions ? (
+        <DropdownMenuPortal>
+          {/* 插件 webview 显式接收指针，内部事件不冒泡到宿主；透明层让外侧点击走 Radix 关闭链路。
+              层级位于插件（10）之上、Composer（20）和浮窗（30）之下，保留同一工具栏的菜单切换。 */}
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-[19] pointer-events-auto [app-region:no-drag]"
+          />
+        </DropdownMenuPortal>
+      ) : null}
       {open ? (
         <DropdownMenuContent
           className={cn(
-            shouldShowProviderLevel
-              ? cn(
-                  "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto",
-                  modelGroups.some((group) => group.key.startsWith("application-models:")) &&
-                    "min-w-64",
-                )
-              : "w-48 max-h-72 overflow-y-auto",
+            composerOptions
+              ? "w-72 max-w-[calc(100vw-2rem)] overflow-y-hidden [app-region:no-drag] [&>*:not([data-composer-model-list]):not([data-composer-provider-list])]:shrink-0"
+              : shouldShowProviderLevel
+                ? cn(
+                    "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto",
+                    modelGroups.some((group) => group.key.startsWith("application-models:")) &&
+                      "min-w-64",
+                  )
+                : "w-48 max-h-72 overflow-y-auto",
           )}
+          collisionPadding={composerOptions ? 12 : undefined}
           align={contentAlign}
           side={contentSide}
           onCloseAutoFocus={(event) => {
@@ -603,98 +727,123 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
               {hasSelectableModel ? <DropdownMenuSeparator /> : null}
             </>
           ) : null}
-          {hasSelectableModel && shouldShowProviderLevel
-            ? modelGroups.map((group, index) => {
-                const groupSeparator = shouldRenderModelGroupSeparator(
-                  modelGroups[index - 1],
-                  group,
-                ) ? (
-                  <DropdownMenuSeparator />
-                ) : null;
-                if (group.directItems) {
-                  return (
-                    <Fragment key={group.key}>
-                      {groupSeparator}
-                      <div>
-                        <DropdownMenuLabel
-                          className="flex min-h-8 items-center px-2 py-1"
-                          data-testid={testId(TID_CHAT_MODEL_SELECT_GROUP, group.key)}
-                          data-model-provider-key={group.key}
-                        >
-                          {renderGroupLabel(group)}
-                        </DropdownMenuLabel>
-                        {renderProviderConnectionHeader(group)}
-                        <DropdownMenuRadioGroup value={normalizedValue}>
-                          {group.items.map((item) => renderModelItem(item))}
-                        </DropdownMenuRadioGroup>
-                        {group.key.startsWith("application-models:") && group.items.length === 0 ? (
-                          <div
-                            className="px-2 py-1 text-ui-sm text-foreground-subtle"
-                            role="status"
-                          >
-                            {group.key === "application-models:personal"
-                              ? (applicationIntl?.intl.formatMessage({
-                                  id: "chat.toolbar.model.customEmpty",
-                                }) ?? "No custom models yet")
-                              : (applicationIntl?.intl.formatMessage({
-                                  id: "chat.toolbar.model.systemEmpty",
-                                }) ?? "No system models available")}
-                          </div>
-                        ) : null}
-                        {group.key === "application-models:personal" &&
-                        showManageModelsAction &&
-                        onManageModels ? (
-                          <DropdownMenuItem
-                            className="min-h-8 gap-2 px-2 text-ui-base"
-                            data-model-footer-action="add-custom-model"
-                            onSelect={() => {
-                              handlePopoverOpenChange(false);
-                              onManageModels();
-                            }}
-                          >
-                            {applicationIntl?.intl.formatMessage({
-                              id: "chat.toolbar.model.addCustom",
-                            }) ?? "Add custom model"}
-                          </DropdownMenuItem>
-                        ) : null}
-                      </div>
-                    </Fragment>
-                  );
-                }
-
-                const groupSelected = isModelSelectGroupSelected(group, normalizedValue);
+          {composerOptions ? (
+            <ComposerModelMenu
+              groups={modelGroups}
+              normalizedValue={normalizedValue}
+              options={composerOptions}
+              isItemLocked={isItemLocked}
+              onSelectModel={handleModelValueChange}
+              renderItems={renderModelItems}
+              renderConnection={renderProviderConnectionHeader}
+              providerFooter={
+                showManageModelsAction && manageModelsLabel ? (
+                  <DropdownMenuItem
+                    className="min-h-8 gap-2 px-2"
+                    data-model-footer-action="manage-models"
+                    onSelect={() => {
+                      handlePopoverOpenChange(false);
+                      onManageModels?.();
+                    }}
+                  >
+                    {manageModelsLabel}
+                  </DropdownMenuItem>
+                ) : null
+              }
+            />
+          ) : hasSelectableModel && shouldShowProviderLevel ? (
+            modelGroups.map((group, index) => {
+              const groupSeparator = shouldRenderModelGroupSeparator(
+                modelGroups[index - 1],
+                group,
+              ) ? (
+                <DropdownMenuSeparator />
+              ) : null;
+              if (group.directItems) {
                 return (
                   <Fragment key={group.key}>
                     {groupSeparator}
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger
-                        className="min-h-8"
+                    <div>
+                      <DropdownMenuLabel
+                        className="flex min-h-8 items-center px-2 py-1"
                         data-testid={testId(TID_CHAT_MODEL_SELECT_GROUP, group.key)}
                         data-model-provider-key={group.key}
-                        data-model-provider-selected={groupSelected ? "true" : undefined}
                       >
                         {renderGroupLabel(group)}
-                        {groupSelected ? (
-                          <CheckIcon className="size-4 text-foreground-subtle" />
-                        ) : null}
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent
-                        className={cn(
-                          "max-h-72 overflow-y-auto",
-                          // 固定宽度会提前截断模型名；按内容扩展，并让可用空间优先于最小宽度。
-                          providerSubmenuClassName ??
-                            "w-max min-w-[min(12rem,var(--radix-dropdown-menu-content-available-width))] max-w-(--radix-dropdown-menu-content-available-width)",
-                        )}
-                      >
-                        {renderModelItems(group.items)}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                      </DropdownMenuLabel>
+                      {renderProviderConnectionHeader(group)}
+                      <DropdownMenuRadioGroup value={normalizedValue}>
+                        {group.items.map((item) => renderModelItem(item))}
+                      </DropdownMenuRadioGroup>
+                      {group.key.startsWith("application-models:") && group.items.length === 0 ? (
+                        <div className="px-2 py-1 text-ui-sm text-foreground-subtle" role="status">
+                          {group.key === "application-models:personal"
+                            ? (applicationIntl?.intl.formatMessage({
+                                id: "chat.toolbar.model.customEmpty",
+                              }) ?? "No custom models yet")
+                            : (applicationIntl?.intl.formatMessage({
+                                id: "chat.toolbar.model.systemEmpty",
+                              }) ?? "No system models available")}
+                        </div>
+                      ) : null}
+                      {group.key === "application-models:personal" &&
+                      showManageModelsAction &&
+                      onManageModels ? (
+                        <DropdownMenuItem
+                          className="min-h-8 gap-2 px-2 text-ui-base"
+                          data-model-footer-action="add-custom-model"
+                          onSelect={() => {
+                            handlePopoverOpenChange(false);
+                            onManageModels();
+                          }}
+                        >
+                          {applicationIntl?.intl.formatMessage({
+                            id: "chat.toolbar.model.addCustom",
+                          }) ?? "Add custom model"}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </div>
                   </Fragment>
                 );
-              })
-            : hasSelectableModel
-              ? renderModelItems(modelGroups.flatMap((group) => group.items))
-              : null}
+              }
+
+              const groupSelected = isModelSelectGroupSelected(group, normalizedValue);
+              return (
+                <Fragment key={group.key}>
+                  {groupSeparator}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      className="min-h-8"
+                      data-testid={testId(TID_CHAT_MODEL_SELECT_GROUP, group.key)}
+                      data-model-provider-key={group.key}
+                      data-model-provider-selected={groupSelected ? "true" : undefined}
+                    >
+                      {renderGroupLabel(group)}
+                      {groupSelected ? (
+                        <CheckIcon className="size-4 text-foreground-subtle" />
+                      ) : null}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent
+                      className={cn(
+                        "max-h-72 overflow-y-auto",
+                        // 固定宽度会提前截断模型名；按内容扩展，并让可用空间优先于最小宽度。
+                        providerSubmenuClassName ??
+                          "w-max min-w-[min(12rem,var(--radix-dropdown-menu-content-available-width))] max-w-(--radix-dropdown-menu-content-available-width)",
+                      )}
+                    >
+                      {renderModelItems(group.items)}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </Fragment>
+              );
+            })
+          ) : hasSelectableModel ? (
+            renderModelItems(
+              modelGroups.some((group) => group.key.startsWith("application-models:"))
+                ? modelGroups.flatMap((group) => group.items)
+                : (modelGroups[0]?.items ?? []),
+            )
+          ) : null}
           {renderedFooterActions.length > 0 ? (
             <div className="sticky bottom-0 z-10 bg-menu after:absolute after:left-0 after:top-full after:h-1 after:w-full after:bg-menu after:content-['']">
               {hasSelectableModel ? <DropdownMenuSeparator /> : null}

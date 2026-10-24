@@ -1,11 +1,25 @@
 import { z } from "zod";
-import { runtimeMaintenanceParamsSchema, runtimeMaintenanceResultSchema } from "@zcode/shared";
+import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
+import { runtimeMaintenanceResultSchema } from "@zcode/shared";
+import { sourceServerRunningTasksSchema } from "@zcode/shared";
+import type { SourceServerRunningTask } from "@zcode/shared";
 
 export const SERVER_CLI_PROTOCOL_VERSION = 1;
 export const SERVER_RUNTIME_NODE_VERSION = "22.16.0";
 export const CRASH_WINDOW_MS = 5 * 60_000;
 export const CRASH_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
+
+// Supervisor 停止/更新链路的时间预算唯一来源；等待 Supervisor 的调用方必须由这里推导，不能各自写死。
+export const CORE_STOP_GRACE_TIMEOUT_MS = 5_000;
+// Bug 原因：SIGKILL 只会被不可中断等待推迟，Rosetta + swap 的远端按事故时序推算回收约 3.5～5.4 秒；旧的
+// 2 秒等待把必然结束的退出误判为 stop-failed，导致 update 失败并让 Supervisor 卡住锁。
+export const CORE_KILL_TIMEOUT_MS = 10_000;
+export const CORE_READY_TIMEOUT_MS = 15_000;
+export const CONTROL_CLOSE_TIMEOUT_MS = 2_000;
+// stop 等待方需要覆盖宽限 + 强杀等待 + control socket 关闭，另留状态落盘和锁释放余量。
+export const SERVER_STOP_WAIT_TIMEOUT_MS =
+  CORE_STOP_GRACE_TIMEOUT_MS + CORE_KILL_TIMEOUT_MS + CONTROL_CLOSE_TIMEOUT_MS + 3_000;
 export const CORE_WRITER_WAIT_MS = 30_000;
 export const CORE_STARTUP_TIMEOUT_MS = CORE_WRITER_WAIT_MS + 15_000;
 
@@ -44,13 +58,32 @@ export const serverStatusSchema = z
     runningTaskCount: z.number().int().nonnegative(),
     crashBudget: crashBudgetSchema,
     updatedAt: z.number().int().nonnegative(),
-    capabilities: z.object({ idleStop: z.literal(true), dataRootLock: z.literal("kernel-sqlite-v1"), liveStatus: z.literal(true).optional(), idleMaintenance: z.literal(true).optional() }).optional(),
+    capabilities: z
+      .object({
+        idleStop: z.literal(true),
+        dataRootLock: z.literal("kernel-sqlite-v1"),
+        liveStatus: z.literal(true).optional(),
+        idleMaintenance: z.literal(true).optional(),
+      })
+      .optional(),
   })
   .strict();
 
 export type LifecycleState = z.infer<typeof lifecycleStateSchema>;
 export type CrashBudgetSnapshot = z.infer<typeof crashBudgetSchema>;
 export type ServerStatus = z.infer<typeof serverStatusSchema>;
+
+export const runtimeIdentitySchema = z
+  .object({
+    supervisorVersion: z.string().min(1),
+    supervisorReleaseId: z.string().min(1).optional(),
+    activeReleaseVersion: z.string().min(1).optional(),
+    activeReleaseId: z.string().min(1).optional(),
+    coreVersion: z.string().min(1).optional(),
+    coreReleaseId: z.string().min(1).optional(),
+  })
+  .strict();
+export type RuntimeIdentity = z.infer<typeof runtimeIdentitySchema>;
 
 export const updatePreparationResultSchema = z
   .object({
@@ -93,6 +126,8 @@ export const controlRequestSchema = z.discriminatedUnion("command", [
   requestBase.extend({ command: z.literal("stop-if-idle") }),
   requestBase.extend({ command: z.literal("maintenance"), input: runtimeMaintenanceParamsSchema }),
   requestBase.extend({ command: z.literal("restart") }),
+  requestBase.extend({ command: z.literal("runtime-identity") }),
+  requestBase.extend({ command: z.literal("running-tasks") }),
   requestBase.extend({ command: z.literal("prepare-update") }),
   requestBase.extend({ command: z.literal("apply-update"), force: z.boolean().optional() }),
   requestBase.extend({ command: z.literal("prepare-uninstall") }),
@@ -117,28 +152,43 @@ export const controlResponseSchema = z
   .strict();
 export type ControlResponse = z.infer<typeof controlResponseSchema>;
 
+const runningTasksSchema = z.custom<SourceServerRunningTask[]>(
+  (value) => sourceServerRunningTasksSchema.safeParse(value).success,
+);
+
 export const coreMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("ready"),
     host: z.string().min(1),
     port: z.number().int().positive(),
     version: z.string().min(1),
+    releaseId: z.string().min(1).optional(),
     generation: z.number().int().nonnegative(),
   }),
   z.object({
     type: z.literal("heartbeat"),
+    runningTasks: runningTasksSchema.optional(),
     at: z.number().int().nonnegative(),
     runningTaskCount: z.number().int().nonnegative(),
   }),
   z.object({
     type: z.literal("task-activity"),
+    runningTasks: runningTasksSchema.optional(),
     runningTaskCount: z.number().int().nonnegative(),
   }),
   z.object({ type: z.literal("shutdown-ack") }),
   z.object({ type: z.literal("idle-stop-blocked") }),
-  z.object({ type: z.literal("maintenance-result"), requestId: z.string().uuid(), result: runtimeMaintenanceResultSchema }),
+  z.object({
+    type: z.literal("maintenance-result"),
+    requestId: z.string().uuid(),
+    result: runtimeMaintenanceResultSchema,
+  }),
   z.object({ type: z.literal("startup-wait"), reason: z.literal("writer-lock-busy") }),
-  z.object({ type: z.literal("fatal"), message: z.string().max(500), reason: z.literal("writer-lock-timeout").optional() }),
+  z.object({
+    type: z.literal("fatal"),
+    message: z.string().max(500),
+    reason: z.literal("writer-lock-timeout").optional(),
+  }),
   z.object({ type: z.literal("exit"), reason: z.string().max(500) }),
 ]);
 export type CoreMessage = z.infer<typeof coreMessageSchema>;
@@ -146,7 +196,11 @@ export type CoreMessage = z.infer<typeof coreMessageSchema>;
 export const coreCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("shutdown") }),
   z.object({ command: z.literal("shutdown-if-idle") }),
-  z.object({ command: z.literal("maintenance"), requestId: z.string().uuid(), input: runtimeMaintenanceParamsSchema }),
+  z.object({
+    command: z.literal("maintenance"),
+    requestId: z.string().uuid(),
+    input: runtimeMaintenanceParamsSchema,
+  }),
 ]);
 export type CoreCommand = z.infer<typeof coreCommandSchema>;
 

@@ -1,61 +1,44 @@
-import { ModelId, ModelProviderId } from "@zcode/contracts";
-
-import { TurnMachineImpl, traceContextToLogContext } from "../deps.js";
-
-import type { MessageId, Model, ModelToolCall, ModelToolContract, TraceContext } from "../deps.js";
-
-import {
-  createRuntimeAssistantEntry,
-  type RuntimeMessageEntry,
-} from "../../agent/message-history.js";
-
-import {
-  isModelContextExceededError,
-  isTurnCancellationError,
-  projectExecutionErrorPayload,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
-
-import type {
-  DrainedPendingInputDiagnostics,
-  RunModelTextRequestOptions,
-  RuntimeModelStreamSnapshot,
-  StreamedToolExecutionResult,
-} from "../types.js";
-
+import { createStreamingToolCoordinator } from "./streaming-tool-coordinator.js";
+import type { ModelStepRequestOptions } from "./model-step-contract.js";
+import { ModelId } from "@zcode/contracts";
+import { ModelProviderId } from "@zcode/contracts";
+import { TurnMachineImpl } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { Model } from "../deps.js";
+import type { ModelToolCall } from "../deps.js";
+import type { ModelToolContract } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import { createRuntimeAssistantEntry } from "../../agent/message-history.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import { isModelContextExceededError } from "../helpers/index.js";
+import { isTurnCancellationError } from "../helpers/index.js";
+import { projectExecutionErrorPayload } from "../helpers/index.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
+import type { DrainedPendingInputDiagnostics } from "../types.js";
+import type { RunModelTextRequestOptions } from "../types.js";
+import type { RuntimeModelStreamSnapshot } from "../types.js";
+import type { StreamedToolExecutionResult } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
 import { persistCancelledStreamSnapshot } from "./cancelled-stream-persistence.js";
-
-import {
-  beginStartPlanBusyAdmissionRetryAttempt,
-  createStartPlanBusyAutoRetryExhaustedError,
-  emitStreamRecoveryRetryEvents,
-  emitStreamRecoveryStarted,
-  getStartPlanBusyAdmissionRetryDelayMs,
-  isStartPlanBusyStreamRecoveryFailure,
-} from "./streaming-recovery.js";
-
+import { beginStartPlanBusyAdmissionRetryAttempt } from "./streaming-recovery.js";
+import { createStartPlanBusyAutoRetryExhaustedError } from "./streaming-recovery.js";
+import { emitStreamRecoveryRetryEvents } from "./streaming-recovery.js";
+import { emitStreamRecoveryStarted } from "./streaming-recovery.js";
+import { getStartPlanBusyAdmissionRetryDelayMs } from "./streaming-recovery.js";
+import { isStartPlanBusyStreamRecoveryFailure } from "./streaming-recovery.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
-
 import { recordModelHistoryRound } from "./turn-loop-state.js";
-
 import { recordMainTurnModelUsage } from "./turn-model-step-usage.js";
-
-import {
-  applyExecutionSelectionFallback,
-  matchExecutionSelectionFallback,
-} from "./turn-execution-fallback.js";
-
-import {
-  commitTurnRequestEntries,
-  completeOutputTokenRecovery,
-  hasAssistantReasoningContent,
-} from "./turn-output-token-continuation.js";
-
+import { applyExecutionSelectionFallback } from "./turn-execution-fallback.js";
+import { matchExecutionSelectionFallback } from "./turn-execution-fallback.js";
+import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
+import { completeOutputTokenRecovery } from "./turn-output-token-continuation.js";
+import { hasAssistantReasoningContent } from "./turn-output-token-continuation.js";
 import type { ModelStepResult } from "./model-step-contract.js";
-
 import { recoverModelStepAfterContextExceeded } from "./model-step-context-recovery.js";
+import { isOffPeakUserTakeover } from "../off-peak/turn.js";
+import { refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
 
 export async function recoverFailedModelStep(
   this: AgentRuntimeInternal,
@@ -70,30 +53,10 @@ export async function recoverFailedModelStep(
   latestModelRequestId: string | undefined,
   executionModelSelection: { providerId: ModelProviderId; modelId: ModelId },
   assistantCreatedAt: number,
-  streamingToolCoordinator: {
-    accept(toolCall: ModelToolCall): void;
-    abandon(reason: "cancelled" | "model_failed"): Promise<void>;
-    drain(toolCalls: readonly ModelToolCall[]): Promise<StreamedToolExecutionResult[]>;
-    recordReasoningDelta(text: string): void;
-    recordTextDelta(text: string): void;
-    recoverFromModelFailure(
-      error: unknown,
-      assistantCreatedAt: number,
-      recoveryOptions?: { failedRequestId?: string },
-    ): Promise<boolean>;
-    settleForModelFallback(assistantCreatedAt: number): Promise<boolean>;
-  },
+  streamingToolCoordinator: ReturnType<typeof createStreamingToolCoordinator>,
   latestStreamSnapshot: RuntimeModelStreamSnapshot,
   modelStepIndex: number,
-  options: {
-    drainedSteerForNextRequest?: DrainedPendingInputDiagnostics;
-    latestRealUserMessageIndex?: number;
-    messages: RunModelTextRequestOptions["messages"];
-    sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
-    requestEntries: readonly RuntimeMessageEntry[];
-    tools: ModelToolContract[];
-  },
+  options: ModelStepRequestOptions,
 ): Promise<ModelStepResult> {
   let finalError = error;
   await recordMainTurnModelUsage(this, state, {
@@ -149,6 +112,30 @@ export async function recoverFailedModelStep(
     if (state.toolCallCount > toolCallCountBeforeStreamRecovery) {
       completeOutputTokenRecovery(state.turnRequestState);
     }
+    return "continue";
+  }
+  if (
+    !state.turnAbortSignal.aborted &&
+    isOffPeakUserTakeover(error) &&
+    refreshOffPeakTurnAfterTakeover(this, state)
+  ) {
+    await streamingToolCoordinator.abandon("model_failed");
+    await this.persistAssistantMessage(
+      assistantMessageId,
+      state.userMessageId,
+      assistantCreatedAt,
+      {
+        completed: Date.now(),
+        finish: "off_peak_request_replaced",
+      },
+      modelTraceContext,
+      model,
+    );
+    state.modelResponse = "";
+    state.modelStepCount += 1;
+    recordModelHistoryRound(state);
+    state.turnMachine = new TurnMachineImpl(state.turnMachine.receiveModelResponse(""));
+    state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
     return "continue";
   }
   const admissionRetryDelayMs = getStartPlanBusyAdmissionRetryDelayMs({

@@ -24,6 +24,7 @@ function fixture() {
     captureTextCheckpoint: vi.fn(async () => ({
       dataBase64,
       indexProjection: {
+        cliFacts: { titleSource: "generated", lastOutcome: "completed", deleted: false },
         meta: {
           taskId: "restored",
           traceId: "restored",
@@ -89,7 +90,7 @@ it("rejects unknown legacy facts, changed native data, identity changes and conc
   );
   const second = new TaskIndexRepo();
   value.agent.captureTextCheckpoint.mockImplementationOnce(async () => {
-    await second.syncTaskMeta({
+    await second.applyCliFacts({
       meta: {
         taskId: value.session,
         traceId: "later",
@@ -101,11 +102,12 @@ it("rejects unknown legacy facts, changed native data, identity changes and conc
         workspacePurpose: "conversation",
         provider: "glm",
       },
-      titleOverridden: true,
+      titleSource: "custom",
     });
     return {
       dataBase64: value.dataBase64,
       indexProjection: {
+        cliFacts: { titleSource: "generated", lastOutcome: "completed", deleted: false },
         meta: {
           taskId: value.session,
           traceId: "restored",
@@ -151,4 +153,18 @@ it("ordinary deletion recreates the hidden index without reviving or claiming re
     await index.listTaskMetas({ workspacePath: getConversationWorkspaceDir(), archived: true }),
   ).toEqual([]);
   expect((await value.host.capture(value.session)).management.deleted).toBe(true);
+});
+
+it("does not guess CLI facts when an older capture lacks them", async () => {
+  const value = fixture();
+  const captured = await value.agent.captureTextCheckpoint();
+  Reflect.deleteProperty(captured.indexProjection, "cliFacts");
+  value.agent.captureTextCheckpoint.mockResolvedValueOnce(captured);
+  await expect(value.host.rebuildIndex!({ ...value })).rejects.toThrow("unsupported");
+  expect(
+    await index.getTaskMeta({
+      workspacePath: getConversationWorkspaceDir(),
+      taskId: value.session,
+    }),
+  ).toBeNull();
 });

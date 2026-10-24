@@ -1,35 +1,25 @@
 import { createLinkedAbortController } from "./stream-idle-timeout.js";
-
 import type { ModelStreamEvent } from "@zcode/contracts";
-
 import { readNextWithStreamIdleTimeout } from "./stream-idle-timeout.js";
-
-import { StreamDiagnostics, isZeroOutputModelCompletion } from "./runner-diagnostics.js";
-
+import { StreamDiagnostics } from "./runner-diagnostics.js";
+import { isZeroOutputModelCompletion } from "./runner-diagnostics.js";
 import { canRetryEmptyCompletion } from "./empty-completion-retry.js";
-
-import { type AttemptAdmission } from "./request-admission.js";
-
-import { publishModelStatus, publishModelTelemetryMilestone } from "./runner-status.js";
-
+import type { AttemptAdmission } from "./request-admission.js";
+import { publishModelStatus } from "./runner-status.js";
+import { publishModelTelemetryMilestone } from "./runner-status.js";
 import { StreamingToolCallAssembler } from "./streaming-tool-call-assembler.js";
-
 import { AccountRequestRetry } from "./account-request-retry.js";
-
-import type {
-  RunStreamTextInput,
-  StreamDeliveryState,
-  StreamIteratorState,
-  StreamMetricState,
-  StreamRequestState,
-  StreamStatusState,
-} from "./stream-attempt-contract.js";
-
-import { observeVisibleStreamEvent, statusPublishOptions } from "./stream-status.js";
-
+import type { RunStreamTextInput } from "./stream-attempt-contract.js";
+import type { StreamDeliveryState } from "./stream-attempt-contract.js";
+import type { StreamIteratorState } from "./stream-attempt-contract.js";
+import type { StreamMetricState } from "./stream-attempt-contract.js";
+import type { StreamRequestState } from "./stream-attempt-contract.js";
+import type { StreamStatusState } from "./stream-attempt-contract.js";
+import { observeVisibleStreamEvent } from "./stream-status.js";
+import { statusPublishOptions } from "./stream-status.js";
 import { handleStreamChunk } from "./stream-chunk-handling.js";
-
 import { compactDirectToolCallCommitEvent } from "./stream-retry-boundaries.js";
+import { createEmptyContextExceededError } from "./runner-diagnostics.js";
 
 export async function* consumeStreamChunks(
   iteratorState: StreamIteratorState,
@@ -129,12 +119,24 @@ export async function* consumeStreamChunks(
       }
       throw error;
     }
+    if (event.visibleEvents.some((visibleEvent) => visibleEvent.type === "finish")) {
+      const contextError = createEmptyContextExceededError({
+        finishReason: diagnostics.finishReason,
+        rawFinishReason: diagnostics.rawFinishReason,
+        hasAssistantContent: diagnostics.textDeltaChars > 0 || diagnostics.hasReasoningContent,
+        toolCallCount: toolCallAssembler.snapshotNormalizedToolCalls().length,
+        usage: diagnostics.usage,
+      });
+      // 先于 yield finish 进入既有 catch，每个请求只发布一个失败终态。
+      if (contextError) throw contextError;
+    }
     const shouldHoldEmptyCompletionEvents =
       !event.emittedError &&
       event.visibleEvents.some((visibleEvent) => visibleEvent.type === "finish") &&
       input.request.preserveProviderStreamBoundaries !== true &&
       isZeroOutputModelCompletion({
         finishReason: diagnostics.finishReason,
+        rawFinishReason: diagnostics.rawFinishReason,
         reasoningLength: diagnostics.reasoningDeltaChars,
         textLength: diagnostics.textDeltaChars,
         toolCallCount: diagnostics.toolCallCount,

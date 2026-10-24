@@ -1,9 +1,4 @@
-import { createTestModelProperties } from "./test-model-format.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ModelErrorCode } from "@zcode/contracts";
-import { createModel } from "../src/model/model.js";
-import { compileModelOptionMaps, RestrictedCelError } from "@zcode/model-option-map";
-import { createModelOptionMapFetch } from "../src/model/model-option-map-fetch.js";
 import {
   createGenerateTextOptions,
   createStreamTextOptions,
@@ -13,81 +8,7 @@ import { isOpenCodeGoBaseUrl } from "../src/model/opencode-session.js";
 import type { ResolvedAiSdkModel } from "../src/model/runner-runtime.js";
 
 function resolved(partial: Partial<ResolvedAiSdkModel>): ResolvedAiSdkModel {
-  // fixture 以 Registry 已解析的 ModelProperties 和平铺身份构造执行句柄。
-  return { properties: createTestModelProperties(), ...partial } as ResolvedAiSdkModel;
-}
-
-// 当前公共 Model 验证显式预算；per-option map 在最终 JSON 出口落实协议字段。
-// 这里复用生产 Model/Fetch，绝不在测试夹具恢复旧预算或 Provider-name 推断算法。
-async function executeBudget(
-  maxOutputTokens: number | undefined,
-  map: string,
-  body: Record<string, any> = {},
-) {
-  let wire: unknown;
-  const transport = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-    wire = JSON.parse(String(init?.body));
-    return new Response("{}");
-  });
-  const generateText = vi.fn(
-    async (request: import("../src/model/model.js").ModelExecutionRequest) => {
-      const fetch = createModelOptionMapFetch({
-        fetch: transport,
-        maps: compileModelOptionMaps({
-          reasoningLevel: { map: "{}" },
-          maxOutputTokens: { map },
-        }),
-        values: request.options,
-      });
-      await fetch("https://model.example.test", { method: "POST", body: JSON.stringify(body) });
-      return {
-        text: "ok",
-        finishReason: "stop" as const,
-        usage: {},
-        providerId: "provider",
-        modelId: "model",
-      };
-    },
-  );
-  const model = createModel({
-    providerId: "provider",
-    modelId: "model",
-    properties: createTestModelProperties(),
-    optionSpecs: {
-      maxOutputTokens: { type: "limit", max: 200_000, map },
-      reasoningLevel: { type: "enum", values: ["low"], map: "{}" },
-    },
-    executor: {
-      generateText,
-      async *streamText() {
-        throw new Error("unexpected stream executor");
-      },
-    },
-    options: { reasoningLevel: "low" },
-  });
-  const request = {
-    messages: [{ role: "user" as const, content: "hello" }],
-    options: { maxOutputTokens },
-  };
-  if (
-    maxOutputTokens === undefined ||
-    !Number.isInteger(maxOutputTokens) ||
-    maxOutputTokens <= 0 ||
-    maxOutputTokens > 200_000
-  ) {
-    await expect(model.generateText(request)).rejects.toMatchObject({
-      code: ModelErrorCode.InvalidModelRequest,
-    });
-    expect(() => model.streamText(request)).toThrow("maxOutputTokens is outside");
-    expect(generateText).not.toHaveBeenCalled();
-    expect(transport).not.toHaveBeenCalled();
-    return;
-  }
-  await model.generateText(request);
-  expect(generateText).toHaveBeenCalledTimes(1);
-  expect(transport).toHaveBeenCalledTimes(1);
-  expect(model.options).toEqual({ reasoningLevel: "low" });
-  return wire;
+  return { properties: {}, ...partial } as ResolvedAiSdkModel;
 }
 
 describe("shouldIncludeStreamResponseBody", () => {
@@ -101,8 +22,8 @@ describe("shouldIncludeStreamResponseBody", () => {
       shouldIncludeStreamResponseBody(
         resolved({
           providerKind: "openai-compatible",
-          accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
           baseURL: "https://zcode.z.ai/api/v1/zcode-plan",
+          accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
         }),
       ),
     ).toBe(true);
@@ -221,7 +142,7 @@ describe("createStreamTextOptions", () => {
       ...input,
       request: {
         ...input.request,
-        maxOutputTokens: 256,
+        options: { maxOutputTokens: 256 },
         providerOptions: { anthropic: {} },
       },
       resolved: {
@@ -236,7 +157,6 @@ describe("createStreamTextOptions", () => {
     };
 
     const generateOptions = createGenerateTextOptions(generateInput);
-    // 总预算在 Model/Option Map 边界处理，SDK options 不推导第二份预算。
     expect(generateOptions).not.toHaveProperty("maxOutputTokens");
     expect(generateOptions.providerOptions).toEqual({
       anthropic: { structuredOutputMode: "outputFormat" },
@@ -289,7 +209,9 @@ describe("createStreamTextOptions", () => {
         ],
       },
       resolved: resolved({
-        properties: createTestModelProperties({ supportsImage: false }),
+        properties: {
+          inputFormat: { text: true, image: false, audio: false, video: false, pdf: false },
+        },
         model: {} as ResolvedAiSdkModel["model"],
         providerId: "zai",
         modelId: "glm-text",
@@ -331,7 +253,9 @@ describe("createStreamTextOptions", () => {
           ],
         },
         resolved: resolved({
-          properties: createTestModelProperties({ supportsVideo: false }),
+          properties: {
+            inputFormat: { text: true, image: false, audio: false, video: true, pdf: false },
+          },
           model: {} as ResolvedAiSdkModel["model"],
           providerId: "openai",
           modelId: "gpt-test",
@@ -355,251 +279,28 @@ describe("createStreamTextOptions", () => {
     }
   });
 
-  it("maps the total Anthropic generate budget without subtracting a second budget", async () => {
-    const body = { thinking: { type: "enabled", budget_tokens: 1_024 } };
-    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}", body)).toEqual({
-      ...body,
-      max_tokens: 131_072,
-    });
-  });
-
-  it("maps the total Anthropic stream budget without guessing thinking overhead", async () => {
-    expect(
-      await executeBudget(131_072, "{'max_tokens': maxOutputTokens}", { stream: true }),
-    ).toEqual({ stream: true, max_tokens: 131_072 });
-  });
-
-  it("does not mutate fixed thinking fields while mapping the explicit total budget", async () => {
-    const body = {
-      thinking: { type: "enabled", budget_tokens: 32_000 },
-      effort: "high",
-      vendorFlag: "kept",
-    };
-    const before = structuredClone(body);
-    expect(await executeBudget(20_000, "{'max_tokens': maxOutputTokens}", body)).toEqual({
-      ...body,
-      max_tokens: 20_000,
-    });
-    expect(body).toEqual(before);
-  });
-
-  it.each([0.5, 1])(
-    "validates the total budget without inferring a thinking minimum: %s",
-    async (maxOutputTokens) => {
-      const wire = await executeBudget(maxOutputTokens, "{'max_tokens': maxOutputTokens}");
-      if (maxOutputTokens === 1) expect(wire).toEqual({ max_tokens: 1 });
+  // 最终输出预算由 Model Option Map 写入原始请求体；runner 不再二次推导、扣减或投影旧字段。
+  it.each([createGenerateTextOptions, createStreamTextOptions])(
+    "keeps canonical model options out of SDK-specific legacy projection",
+    (createOptions) => {
+      const options = createOptions({
+        includeModelIO: false,
+        request: {
+          messages: [{ role: "user", content: "hello" }],
+          options: { maxOutputTokens: 20_000, reasoningLevel: "high" },
+        },
+        resolved: resolved({
+          model: {} as ResolvedAiSdkModel["model"],
+          providerId: "example",
+          modelId: "example-model",
+          providerKind: "anthropic",
+        }),
+        statusContext: { model: { providerId: "example", modelId: "example-model" } } as never,
+      });
+      expect(options).not.toHaveProperty("maxOutputTokens");
+      expect(options.providerOptions).toBeUndefined();
     },
   );
-
-  it("maps explicit OpenAI-compatible total tokens at the raw-body boundary", async () => {
-    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}")).toEqual({
-      max_tokens: 131_072,
-    });
-  });
-
-  it.each([
-    { caseId: "OTB01", modelLimit: undefined },
-    { caseId: "OTB02", modelLimit: 16_000 },
-    { caseId: "OTB03", modelLimit: 64_000 },
-    { caseId: "fractional normalization", modelLimit: 16_000.9 },
-    { caseId: "invalid zero", modelLimit: 0 },
-    { caseId: "invalid negative", modelLimit: -1 },
-    { caseId: "invalid non-finite", modelLimit: Number.NaN },
-  ])(
-    "$caseId validates explicit model budget $modelLimit without fallback or rounding",
-    async ({ modelLimit }) => {
-      const wire = await executeBudget(modelLimit, "{'max_tokens': maxOutputTokens}");
-      if (Number.isInteger(modelLimit) && modelLimit > 0)
-        expect(wire).toEqual({ max_tokens: modelLimit });
-    },
-  );
-
-  it.each([
-    {
-      name: "model-capability source",
-      providerKind: "openai-compatible" as const,
-      source: "model-capability" as const,
-    },
-    {
-      name: "runtime-default source",
-      providerKind: "openai-compatible" as const,
-      source: "runtime-default" as const,
-    },
-    {
-      name: "legacy Anthropic request",
-      providerKind: "anthropic" as const,
-      source: undefined,
-    },
-    {
-      name: "legacy non-Anthropic request",
-      providerKind: "openai-compatible" as const,
-      source: undefined,
-    },
-  ])("rejects a missing explicit budget before I/O for $name", async () => {
-    await executeBudget(undefined, "{'max_tokens': maxOutputTokens}");
-  });
-
-  it.each(["openai", "openai-compatible", "gateway", "custom"] as const)(
-    "uses an explicit option map instead of inferring budget from %s kind",
-    async (providerKind) => {
-      const map =
-        providerKind === "openai"
-          ? "{'max_completion_tokens': maxOutputTokens}"
-          : "{'max_tokens': maxOutputTokens}";
-      expect(await executeBudget(131_072, map)).toEqual(
-        providerKind === "openai" ? { max_completion_tokens: 131_072 } : { max_tokens: 131_072 },
-      );
-    },
-  );
-
-  it("maps an explicitly selected Compact budget for OpenAI-compatible transport", async () => {
-    expect(await executeBudget(20_000, "{'max_tokens': maxOutputTokens}")).toEqual({
-      max_tokens: 20_000,
-    });
-  });
-
-  it("lets the declared option map override SDK output fields while retaining vendor fields", async () => {
-    const body = { max_tokens: 32_768, vendor_flag: true };
-    expect(await executeBudget(64_000, "{'max_tokens': maxOutputTokens}", body)).toEqual({
-      max_tokens: 64_000,
-      vendor_flag: true,
-    });
-    expect(body).toEqual({ max_tokens: 32_768, vendor_flag: true });
-  });
-
-  it("rejects missing Model budget even if a raw provider body contains max_tokens", async () => {
-    await executeBudget(undefined, "{'max_tokens': maxOutputTokens}", { max_tokens: 32_768 });
-  });
-
-  it("maps explicitly bound Anthropic total output tokens", async () => {
-    expect(await executeBudget(131_072, "{'max_tokens': maxOutputTokens}")).toEqual({
-      max_tokens: 131_072,
-    });
-  });
-
-  it("maps the explicit Compact summary budget on Anthropic transport", async () => {
-    expect(
-      await executeBudget(20_000, "{'max_tokens': maxOutputTokens}", {
-        thinking: { type: "disabled" },
-      }),
-    ).toEqual({ max_tokens: 20_000, thinking: { type: "disabled" } });
-  });
-
-  it("passes static provider namespaces without guessing a provider-name projection", () => {
-    const options = createStreamTextOptions({
-      includeModelIO: false,
-      request: {
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          openaiCompatible: {
-            extra_body: {
-              chat_template_kwargs: {
-                reasoning_effort: "max",
-              },
-            },
-          },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        providerId: "custom-glm",
-        modelId: "GLM-5.2",
-        providerKind: "openai-compatible",
-        baseURL: "https://api.example.test/v1",
-        providerOptionsName: "GLM52 E2E",
-      } as Partial<ResolvedAiSdkModel> & { providerOptionsName: string }),
-      statusContext: {
-        model: { providerId: "custom-glm", modelId: "GLM-5.2" },
-        providerKind: "openai-compatible",
-        requestId: "req_glm52",
-        sessionId: "sess_glm52",
-        traceId: "trace_glm52",
-      } as never,
-    });
-
-    expect(options.providerOptions).toEqual({
-      openaiCompatible: {
-        extra_body: {
-          chat_template_kwargs: {
-            reasoning_effort: "max",
-          },
-        },
-      },
-    });
-  });
-
-  it("preserves raw and sibling namespaces without implicit rewriting", () => {
-    const options = createStreamTextOptions({
-      includeModelIO: false,
-      request: {
-        messages: [{ role: "user", content: "hi" }],
-        providerOptions: {
-          openaiCompatible: {
-            extra_body: {
-              mode: "legacy",
-              thinking: { type: "enabled" },
-            },
-            mode: "direct",
-            reasoningEffort: "max",
-          },
-          "foo-bar": {
-            rawOnly: true,
-          },
-          fooBar: {
-            camelOnly: true,
-          },
-          "openai-compatible": {
-            legacyOnly: true,
-          },
-          anthropic: {
-            siblingOnly: true,
-          },
-        },
-      },
-      resolved: resolved({
-        model: {} as ResolvedAiSdkModel["model"],
-        providerId: "foo-bar",
-        modelId: "reasoning-model",
-        providerKind: "openai-compatible",
-        baseURL: "https://api.example.test/v1",
-        providerOptionsName: "foo-bar",
-      } as Partial<ResolvedAiSdkModel> & { providerOptionsName: string }),
-      statusContext: {
-        model: { providerId: "foo-bar", modelId: "reasoning-model" },
-        providerKind: "openai-compatible",
-        requestId: "req_namespace_pass_through",
-        sessionId: "sess_namespace_pass_through",
-        traceId: "trace_namespace_pass_through",
-      } as never,
-    });
-
-    expect(options.providerOptions).toEqual({
-      openaiCompatible: {
-        extra_body: {
-          mode: "legacy",
-          thinking: { type: "enabled" },
-        },
-        mode: "direct",
-        reasoningEffort: "max",
-      },
-      "foo-bar": { rawOnly: true },
-      fooBar: {
-        camelOnly: true,
-      },
-      "openai-compatible": {
-        legacyOnly: true,
-      },
-      anthropic: {
-        siblingOnly: true,
-      },
-    });
-  });
-
-  it("rejects an option map with a non-object patch before network I/O", () => {
-    expect(() =>
-      compileModelOptionMaps({ reasoningLevel: { map: "{}" }, maxOutputTokens: { map: "[]" } }),
-    ).toThrow(RestrictedCelError);
-  });
 
   it("passes experimental_include.responseBody for zcode-plan streams", () => {
     const options = createStreamTextOptions({
@@ -611,9 +312,9 @@ describe("createStreamTextOptions", () => {
         model: {} as ResolvedAiSdkModel["model"],
         providerId: "builtin:zai-coding-plan",
         modelId: "glm-5.1",
-        accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
         providerKind: "openai-compatible",
         baseURL: "https://zcode.z.ai/api/v1/zcode-plan",
+        accountAccess: { mode: "start-plan" } as ResolvedAiSdkModel["accountAccess"],
       }),
       statusContext: {
         model: { providerId: "builtin:zai-coding-plan", modelId: "glm-5.1" },
@@ -676,7 +377,7 @@ describe("createStreamTextOptions", () => {
     expect(options.providerOptions).toEqual({ apiFormat: "openai-responses" });
   });
 
-  it("preserves static OpenAI options without interpreting obsolete top-level aliases", () => {
+  it("preserves explicit provider option namespaces without inferring model options", () => {
     for (const createOptions of [createGenerateTextOptions, createStreamTextOptions]) {
       const options = createOptions({
         includeModelIO: false,
@@ -701,10 +402,7 @@ describe("createStreamTextOptions", () => {
       });
 
       expect(options.providerOptions).toEqual({
-        openai: {
-          reasoningEffort: "high",
-          store: false,
-        },
+        openai: { reasoningEffort: "high", store: false },
         reasoningEffort: "none",
       });
     }
@@ -880,28 +578,4 @@ describe("createStreamTextOptions", () => {
       });
     },
   );
-
-  it("does not add OpenCode Go session header for other providers on the same host", () => {
-    const options = createGenerateTextOptions({
-      includeModelIO: false,
-      request: { messages: [{ role: "user", content: "hi" }] },
-      resolved: resolved({
-        baseURL: "https://opencode.ai/zen/v1",
-        model: {} as ResolvedAiSdkModel["model"],
-        providerKind: "openai-compatible",
-        providerId: "custom-provider",
-        modelId: "kimi-k2.5",
-      }),
-      statusContext: {
-        model: { providerId: "custom-provider", modelId: "kimi-k2.5" },
-        modelRequestSessionType: "main",
-        providerKind: "openai-compatible",
-        requestId: "req_opencode_zen",
-        sessionId: "sess_conversation_stable",
-        traceId: "trace_opencode_zen",
-      } as never,
-    });
-
-    expect(options.headers).not.toHaveProperty("x-opencode-session");
-  });
 });

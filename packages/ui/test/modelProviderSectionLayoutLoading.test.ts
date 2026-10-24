@@ -1,11 +1,12 @@
-import { createElement, type ReactNode } from "react";
+import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, type ReactNode } from "react";
+
 import { describe, expect, it, vi } from "vitest";
 import {
   ModelProviderSectionLayout,
   shouldShowModelProviderRefreshLoading,
 } from "@/settings/model-provider-section/SectionLayout.js";
-import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 
 vi.mock("@/settings/model-provider-section/Navigation.js", () => ({
   ModelProviderSectionNavigation: () => createElement("nav", null, "providers"),

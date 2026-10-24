@@ -1,3 +1,11 @@
+import type { SessionId } from "@zcode/contracts";
+import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
+import { cloneModelSelection } from "./fork-model-selection.js";
+import { resolveWorkspaceRefFromId } from "./mapper.js";
+import { createSessionRecordForV4 } from "./server-operations.js";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+import { registerCommittedForkBestEffort } from "./v4-bridge-fork-commit.js";
+
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
@@ -9,60 +17,16 @@
 // 不做桥接：依赖方向只允许 旧目录 → v4 目录。
 // 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
 
-import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
-
-import type { SessionId } from "@zcode/contracts";
-
-import { cloneModelSelection } from "./fork-model-selection.js";
-
-import { resolveWorkspaceRefFromId } from "./mapper.js";
-
-import { createSessionRecordForV4 } from "./server-operations.js";
-
-import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
-
-import { registerCommittedForkBestEffort } from "./v4-bridge-fork-commit.js";
-
 export function createV4SessionCreationHost(
   context: ZCodeProtocolAgentServerContext,
-  queuedTurnExecutions: Map<
-    string,
-    Map<
-      string,
-      {
-        selectionScope: "execution";
-        memoryExtraction?: "skip" | undefined;
-        requestAuth?:
-          | {
-              apiKey?: string | undefined;
-              apiKeyId?: string | undefined;
-              accountScope?: string | undefined;
-              headers?: Record<string, string> | undefined;
-            }
-          | undefined;
-        subagents?: { foregroundModel: "submission"; background: "deny" } | undefined;
-        selectionFallback?:
-          | {
-              providerId: string;
-              rules: {
-                reason: "highspeed_card_expired" | "highspeed_request_failed";
-                providerErrorCode?: string | undefined;
-              }[];
-              target?:
-                | {
-                    providerId: string;
-                    modelId: string;
-                    options?: { reasoningLevel?: string | undefined } | undefined;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    >
-  >,
+  queuedTurnExecutions: Pick<Map<string, unknown>, "delete">,
 ) {
   return {
-    closeSession: async (sessionId) => {
+    // 删除先由会话存储提交软删除事实，再释放同一个原生运行载体。
+    deleteSession: async (sessionId) => {
+      if (!context.deps.sessionStore?.softDeleteSession)
+        throw new Error("Session soft deletion is unavailable");
+      await context.deps.sessionStore.softDeleteSession(sessionId as SessionId);
       const record = context.sessions.get(sessionId);
       if (!record) {
         // handler 已校验存在性；此处只兜并发竞态（重复删除幂等成功）。
@@ -75,7 +39,7 @@ export function createV4SessionCreationHost(
       // gateway 靠 getSessionWorkspaceId（读 context.sessions）定位 workspace 才能把
       // session.removed 推给 sessions-index 订阅者；先 delete 再 dispose 时 workspaceId
       // 恒为 null，删除会话后侧栏列表项永不消失（e2e conversation-session-v4-sidebar 抓出）。
-      context.v4Gateway?.disposeSession(sessionId);
+      context.v4Gateway?.disposeSession(sessionId, { deleted: true });
       queuedTurnExecutions.delete(sessionId);
       context.sessions.delete(sessionId);
     },
@@ -83,6 +47,8 @@ export function createV4SessionCreationHost(
     // createSession op 内（半初始化 record 的回收顺序修过 bug，不重复实现）。
     // 语义决策（draft persistence / firstInput 走原生 prompt turn）在原生 handler。
     createSessionRecord: async ({
+      sessionId,
+      additionalDirectories,
       workspaceId,
       mcpServers,
       offPeakToolEnabled,
@@ -102,6 +68,8 @@ export function createV4SessionCreationHost(
       // shared parser 统一兼容 WSL legacy 与显式 user identity；非远程格式继续按
       // 本地 workspacePath 处理。
       const created = await createSessionRecordForV4(context, {
+        sessionId,
+        additionalDirectories,
         workspace: resolveWorkspaceRefFromId(workspaceId),
         // 群任务已经由首条真实需求触发，先落盘隔离授权，再开放任务与配置。
         // 普通 Desktop draft 仍保持 deferred。

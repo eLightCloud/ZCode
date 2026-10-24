@@ -1,3 +1,4 @@
+export type SessionLastOutcome = "completed" | "error" | "interrupted";
 // Session Store Port：为会话输入、消息和投影提供稳定的存储边界。
 
 // ============================================================
@@ -42,6 +43,7 @@ export interface SessionInfo {
   titleSource?: SessionTitleSource;
   titleMessageID?: MessageId;
   version: string;
+  lastOutcome?: SessionLastOutcome;
   shareURL?: string;
   summaryAdditions?: number;
   summaryDeletions?: number;
@@ -54,7 +56,7 @@ export interface SessionInfo {
     updated: number;
     titleUpdated?: number;
     compacting?: number;
-    archived?: number;
+    deleted?: number;
   };
 }
 
@@ -133,6 +135,7 @@ export interface ForkCommitBundle {
 
 export interface UpdateSessionInput {
   id: SessionId;
+  lastOutcome?: SessionLastOutcome;
   directory?: string;
   path?: string | null;
   timeUpdated?: number;
@@ -150,7 +153,6 @@ export interface UpdateSessionInput {
   revert?: SessionRevert | null;
   permission?: PermissionRuleset | null;
   timeCompacting?: number | null;
-  timeArchived?: number | null;
 }
 
 export interface FileDiff {
@@ -188,7 +190,6 @@ export interface ListSessionsInput {
   path?: string;
   roots?: boolean;
   taskTypes?: SessionTaskType[];
-  includeArchived?: boolean;
   limit?: number;
 }
 

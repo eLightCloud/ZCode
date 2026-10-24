@@ -105,6 +105,7 @@ export async function completeRegularTurn(
       displayInput,
       userMessageId,
       turnTraceContext,
+      options?.offPeakExecutionId,
     );
   }
   this.turnNumber++;

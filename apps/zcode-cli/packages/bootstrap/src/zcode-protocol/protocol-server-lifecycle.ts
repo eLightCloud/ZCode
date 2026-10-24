@@ -24,6 +24,31 @@ export function disconnectClient(this: ZCodeProtocolAgentServerMethodsContext, e
     this.cleanupClientRequest(pending);
     pending.reject(error);
   }
+  // Bug 原因：Server Core 被 SIGKILL 后，Agent 的 stdin 虽然收到 EOF，但连接关闭
+  // 只拒绝了反向请求，没有打断已经进入 Bash/工具循环的前台执行。transport 会继续
+  // 等待该请求自然结束，旧 Agent 因而成为 PPID 1 的孤儿并在新 Core generation 之外
+  // 继续写文件。协议 owner 消失就是本进程全部前台执行的终止边界，必须同步取消。
+  for (const record of this.context.sessions.values()) {
+    try {
+      record.app.runtime.stopActiveForegroundExecution?.({
+        reason: "ZCode Protocol owner disconnected",
+      });
+    } catch (cause) {
+      this.logger?.warn("Failed to stop foreground execution after protocol disconnect", {
+        errorType: cause instanceof Error ? cause.name : typeof cause,
+        sessionId: record.app.sessionId,
+      });
+    }
+    record.activeAbortController?.abort(error);
+  }
+  for (const controller of this.workspaceGenerateTextControllers.values()) {
+    controller.abort(error);
+  }
+  this.workspaceGenerateTextControllers.clear();
+  for (const controller of this.pluginOperationControllers.values()) {
+    controller.abort(error);
+  }
+  this.pluginOperationControllers.clear();
 }
 
 /** 进程资源关闭，不使用会删除产品会话/发布 session.removed 的 session/close。 */

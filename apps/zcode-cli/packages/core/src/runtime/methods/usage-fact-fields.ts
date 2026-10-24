@@ -1,17 +1,14 @@
-import { SessionEventType, isCoreError } from "../deps.js";
-
-import type {
-  MessageId,
-  Model,
-  SessionEvent,
-  TraceContext,
-  TurnId,
-  UsageStorePort,
-} from "@zcode/contracts";
-
+import { SessionEventType } from "../deps.js";
+import { isCoreError } from "../deps.js";
+import type { MessageId } from "@zcode/contracts";
+import type { Model } from "@zcode/contracts";
+import type { SessionEvent } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
+import type { TurnId } from "@zcode/contracts";
+import type { UsageStorePort } from "@zcode/contracts";
 import type { RuntimeModelTextResult } from "../types.js";
-
 import type { AgentRuntimeInternal } from "../internal.js";
+import type { ModelUsage } from "@zcode/contracts";
 
 export type ModelUsageQuerySource =
   | "main_turn"
@@ -69,6 +66,7 @@ export function modelNetworkEvents(events: readonly SessionEvent[]) {
         reason?: string;
         retryable?: boolean;
         message?: string;
+        usage?: ModelUsage;
       } => Boolean(payload && typeof payload === "object" && "type" in payload),
     );
 }

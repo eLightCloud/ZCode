@@ -22,6 +22,7 @@ import type {
 
 import {
   DELIVERY_PROFILES,
+  statePatchSchema,
   PROTOCOL_V4_LIMITS,
   clampWorkflowRunsForLegacy,
   filterConversationDeltasForProfile,

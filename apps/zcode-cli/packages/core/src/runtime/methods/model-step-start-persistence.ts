@@ -1,3 +1,4 @@
+import type { ModelStepRequestOptions } from "./model-step-contract.js";
 import { beginLocalTurnPreparation } from "@zcode/contracts";
 
 import { SessionEventType, createPartId } from "../deps.js";
@@ -15,15 +16,7 @@ import type { RegularTurnLoopState } from "./turn-loop-state.js";
 export async function persistModelStepStart(
   this: AgentRuntimeInternal,
   state: RegularTurnLoopState,
-  options: {
-    drainedSteerForNextRequest?: DrainedPendingInputDiagnostics;
-    latestRealUserMessageIndex?: number;
-    messages: RunModelTextRequestOptions["messages"];
-    sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
-    requestEntries: readonly RuntimeMessageEntry[];
-    tools: ModelToolContract[];
-  },
+  options: ModelStepRequestOptions,
   modelTraceContext: TraceContext,
   assistantMessageId: MessageId,
   assistantCreatedAt: number,

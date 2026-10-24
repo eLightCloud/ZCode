@@ -75,7 +75,7 @@ async function setup() {
   const root = await mkdtemp(join(tmpdir(), "zcode-checkpoint-"));
   roots.push(root);
   const dbPath = join(root, "db.sqlite");
-  const store = createSqliteSessionStore({ dbPath });
+  const store = await createSqliteSessionStore({ dbPath });
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
@@ -94,7 +94,7 @@ describe("native text checkpoint contract", () => {
       error() {},
       child: (context) => capture({ ...base, ...context }),
     });
-    const store = createSqliteSessionStore({
+    const store = await createSqliteSessionStore({
       dbPath: join(root, "observed.sqlite"),
       logger: capture(),
     });

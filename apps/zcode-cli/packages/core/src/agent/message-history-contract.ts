@@ -1,25 +1,33 @@
+import type { Model } from "@zcode/contracts";
+import type { ModelCacheControl } from "@zcode/contracts";
+import type { ModelMessageContent } from "@zcode/contracts";
+import type { ModelReasoningContentBlock } from "@zcode/contracts";
+import type { RuntimeInputPresentation } from "@zcode/contracts";
+import type { TokenUsageInfo } from "@zcode/contracts";
+import type { AgentListingDelta } from "./agent-listing-metadata.js";
+import type { SystemReminderSource } from "../system-reminder/source.js";
+import type { ModelCallWrapper } from "@zcode/contracts";
+import type { ModelToolCall } from "@zcode/contracts";
 // ============================================================
 // Message History - Maintains conversation context across turns
 // ============================================================
 
-import {
-  type Model,
-  type ModelCacheControl,
-  type ModelMessageContent,
-  type ModelReasoningContentBlock,
-  type RuntimeInputPresentation,
-  type TokenUsageInfo,
-} from "@zcode/contracts";
-
-import { type AgentListingDelta } from "./agent-listing-metadata.js";
-
-import { type SystemReminderSource } from "../system-reminder/source.js";
-
 // Tool call from model (simple type, no brand)
 export interface ToolCallInput {
+  modelCallWrapper?: ModelCallWrapper;
   id: string;
   name: string;
   input: unknown;
+}
+
+// 仅模型协议出口和原始调用诊断使用；内部消费者始终读取目标 name/input。
+export function toModelToolCall(call: ToolCallInput): ModelToolCall {
+  if (!call.modelCallWrapper) return call;
+  return {
+    id: call.id,
+    name: call.modelCallWrapper,
+    input: { name: call.name, input: call.input },
+  };
 }
 
 export type ReasoningContentInput = ModelReasoningContentBlock;
@@ -31,6 +39,7 @@ export interface ModelInputMessage {
   toolCalls?: ToolCallInput[];
   toolCallId?: string;
   toolName?: string;
+  modelCallWrapper?: ModelCallWrapper;
   isError?: boolean;
   providerId?: Model["providerId"];
   modelId?: Model["modelId"];
@@ -43,6 +52,12 @@ export type RuntimeMessageSource =
   | "legacy_synthetic";
 
 export interface RuntimeMessageMetadata {
+  compactBoundary?: { boundaryId: string; preCompactDiscoveredTools?: readonly string[] };
+  toolSearchAnnouncement?: {
+    addedNames: readonly string[];
+    removedNames: readonly string[];
+    readdedNames: readonly string[];
+  };
   source: RuntimeMessageSource;
   agentListingDelta?: AgentListingDelta;
   inputPresentation?: RuntimeInputPresentation;
@@ -107,6 +122,7 @@ export interface MessageHistory {
     content: ModelMessageContent,
     success: boolean,
     isError?: boolean,
+    modelCallWrapper?: ModelCallWrapper,
   ): void;
 
   // 借用当前权威 entries，只允许同步只读；跨异步边界时由调用方做数组浅快照。

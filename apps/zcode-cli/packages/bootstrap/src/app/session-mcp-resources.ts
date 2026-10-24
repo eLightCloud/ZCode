@@ -19,6 +19,7 @@ export function createSessionMcpReadFacade(
   | "unsubscribeMcpResourcesForUi"
   | "onMcpAppConnectionInvalidated"
   | "getMcpAppConnectionSnapshot"
+  | "waitForMcpAppConnection"
 > {
   return {
     listMcpServers: async () =>
@@ -107,6 +108,10 @@ export function createSessionMcpReadFacade(
     },
     onMcpAppConnectionInvalidated: (name, listener) =>
       deps.mcpPort?.onAppConnectionInvalidated?.(name, listener) ?? (() => {}),
+    waitForMcpAppConnection: async (name) =>
+      deps.mcpPort?.waitForAppConnection
+        ? deps.mcpPort.waitForAppConnection(name)
+        : (deps.mcpPort?.appConnectionSnapshot?.(name) ?? null),
     getMcpAppConnectionSnapshot: (name) => deps.mcpPort?.appConnectionSnapshot?.(name) ?? null,
   } satisfies Partial<SessionFacade>;
 }

@@ -40,7 +40,9 @@ describe("portable text checkpoint / isolated cold resume", () => {
         hasOriginalContext: true,
       });
       expect(target.messages).toBeGreaterThan(source.messages);
-      const store = createSqliteSessionStore({ dbPath: join(root, "return", "sessions.sqlite") });
+      const store = await createSqliteSessionStore({
+        dbPath: join(root, "return", "sessions.sqlite"),
+      });
       try {
         const checkpoint = JSON.parse(await readFile(`${transfer}.return`, "utf8"));
         await store.importTextCheckpoint({

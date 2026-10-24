@@ -1,3 +1,4 @@
+import { recordPublishedModelSelection } from "./turn-model.js";
 import { SessionEventType, createSessionEvent } from "../deps.js";
 
 import type {
@@ -114,6 +115,7 @@ export async function emitModelSelected(
     { traceId: options.traceContext.traceId },
   );
   await this.appendEvent(event, options.traceContext);
+  recordPublishedModelSelection(this, options.modelSelection);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  dispatchClaimedOffPeakTask,
   OFF_PEAK_DISPATCH_RETRY_BASE_MS,
   settleOffPeakDispatchResult,
 } from "../src/session/automationOffPeakDispatchSettlement.js";
@@ -31,6 +32,17 @@ function makeDeps() {
 }
 
 describe("settleOffPeakDispatchResult", () => {
+  it("生命周期已由 Host 接纳时，迟到派发确认不能覆写等待新票状态", async () => {
+    const state = makeDeps();
+    await settleOffPeakDispatchResult(state.deps, {
+      type: "offpeak-dispatch-result",
+      offPeakTaskId: "task",
+      ok: true,
+      lifecycleManaged: true,
+    });
+    expect(state.repo.markRunning).not.toHaveBeenCalled();
+    expect(state.repo.releaseClaim).not.toHaveBeenCalled();
+  });
   it("permanent 错误直接转 failed 并清除退避", async () => {
     const state = makeDeps();
     state.retryAt.set("task-1", NOW + 10_000);
@@ -95,5 +107,38 @@ describe("settleOffPeakDispatchResult", () => {
     });
     expect(state.retryAt.has("task-3")).toBe(false);
     expect(state.retryAttempts.has("task-3")).toBe(false);
+  });
+});
+
+describe("off-peak native dispatch scope", () => {
+  it("forwards the persisted project, host and directory scope; missing selection releases without admission", async () => {
+    const repo = { releaseClaim: vi.fn(async () => undefined) };
+    const postMessage = vi.fn();
+    const inFlight = new Set<string>();
+    const deps = { repo, retryAt: new Map<string, number>(), inFlight, postMessage, log: vi.fn() };
+    const task = {
+      offPeakTaskId: "scope-proof",
+      projectId: "project-proof",
+      hostId: "host-proof",
+      additionalDirectories: ["/additional-proof"],
+      workspacePath: "/proof",
+      prompt: "safe proof",
+      permissionMode: "build",
+      modelSelection: { providerId: "proof", modelId: "proof" },
+    } as import("@zcode/shared").ZCodeOffPeakTask;
+    await dispatchClaimedOffPeakTask(deps, task, NOW);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: task.projectId,
+        hostId: task.hostId,
+        additionalDirectories: task.additionalDirectories,
+      }),
+    );
+    postMessage.mockClear();
+    inFlight.clear();
+    await dispatchClaimedOffPeakTask(deps, { ...task, modelSelection: undefined }, NOW);
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(inFlight.size).toBe(0);
+    expect(repo.releaseClaim).toHaveBeenCalledWith(task.offPeakTaskId, { now: NOW });
   });
 });

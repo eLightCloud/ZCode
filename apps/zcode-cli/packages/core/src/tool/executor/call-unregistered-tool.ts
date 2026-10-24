@@ -43,7 +43,16 @@ export async function rejectUnregisteredTool(
   }
   // registry miss 发生在 handler/ToolCallStarted 之前；旧代码只把失败
   // 返回给 provider，没有发布 ToolCallError，V4 tool row 因而永久停在 inputStreaming。
-  await emitToolCallError(deps, toolCall.id, traceContext, turnId, result.error);
+  await emitToolCallError(
+    deps,
+    toolCall.id,
+    traceContext,
+    turnId,
+    result.error,
+    undefined,
+    // 未注册的工具没有可信插件归属，不能采用客户端自报的身份。
+    undefined,
+  );
   deps.logger?.warn("Tool call rejected because the tool is not registered", {
     ...traceContextToLogContext(traceContext),
     event: "tool.call.not_found",

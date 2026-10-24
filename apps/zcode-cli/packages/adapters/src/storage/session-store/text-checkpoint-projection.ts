@@ -50,7 +50,8 @@ export function projectTextCheckpoint(
     session.parentID ||
     session.revert ||
     session.time.compacting ||
-    session.time.archived ||
+    // 软删除已归原生会话 owner；导出不得把删除会话当成可恢复的活动文本。
+    session.time.deleted ||
     session.summaryDiffs?.length
   )
     unsupported();

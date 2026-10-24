@@ -1,30 +1,25 @@
 import { requiredPluginSelection } from "./required-plugin.js";
-
-import {
-  SessionEventType,
-  createQueryId,
-  createSessionEvent,
-  traceContextToLogContext,
-} from "../deps.js";
-
-import type {
-  PendingTurnInput,
-  QueryId,
-  TraceContext,
-  TurnId,
-  TurnSteerInput,
-  TurnSteerRejectReason,
-  TurnSteerResult,
-  TurnSteerSource,
-} from "../deps.js";
-
-import { MAX_TURN_STEER_INPUT_BYTES, measureUtf8Bytes, previewInput } from "../helpers/index.js";
-
-import type { ActiveTurnKind, ActiveTurnSteeringState } from "../types.js";
-
+import { SessionEventType } from "../deps.js";
+import { createQueryId } from "../deps.js";
+import { createSessionEvent } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import type { PendingTurnInput } from "../deps.js";
+import type { QueryId } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import type { TurnId } from "../deps.js";
+import type { TurnSteerInput } from "../deps.js";
+import type { TurnSteerRejectReason } from "../deps.js";
+import type { TurnSteerResult } from "../deps.js";
+import type { TurnSteerSource } from "../deps.js";
+import { MAX_TURN_STEER_INPUT_BYTES } from "../helpers/index.js";
+import { measureUtf8Bytes } from "../helpers/index.js";
+import { previewInput } from "../helpers/index.js";
+import type { ActiveTurnKind } from "../types.js";
+import type { ActiveTurnSteeringState } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
-import { createTurnInProgressError, hasSteerInput } from "./pending-input-facts.js";
+import { createTurnInProgressError } from "./pending-input-facts.js";
+import { hasSteerInput } from "./pending-input-facts.js";
+import { acceptSubmissionModelSelection } from "./turn-model.js";
 
 export async function steerTurn(
   this: AgentRuntimeInternal,
@@ -126,7 +121,21 @@ export async function steerTurn(
     ...(toolDisallowlist ? { toolDisallowlist } : {}),
     turnId: activeTurn.turnId,
   };
+  const selectionAccepted = acceptSubmissionModelSelection(
+    this,
+    intent,
+    activeTurn.traceContext,
+    request.modelSelectionScope
+      ? {
+          selectionScope: request.modelSelectionScope,
+          highspeedFallbackSelection: request.highspeedFallbackSelection,
+        }
+      : undefined,
+  );
   activeTurn.pendingInputs.push(pendingInput);
+  // 用户亲手 steer 进来的话（协调者 / 信箱 / 工具跟进也走这里，它们不算）：与 prompt 一样，给每个
+  // 欠着决定的 run 一对新的提醒。
+  if (request.inputPresentation === "user_steer") this.workflowBlockedReminder?.userSpoke();
   const queueLength = activeTurn.pendingInputs.length;
   const event = createSessionEvent(
     SessionEventType.TurnSteerQueued,
@@ -153,6 +162,7 @@ export async function steerTurn(
     },
   );
   await this.appendEvent(event, activeTurn.traceContext);
+  await selectionAccepted;
   this.logger?.debug("Turn steer queued", {
     ...traceContextToLogContext(activeTurn.traceContext),
     activeTurnKind: activeTurn.kind,
@@ -254,6 +264,17 @@ export async function enqueueDeferredInput(
     },
   );
   await this.appendEvent(event, traceContext);
+  await acceptSubmissionModelSelection(
+    this,
+    intent,
+    traceContext,
+    request.modelSelectionScope
+      ? {
+          selectionScope: request.modelSelectionScope,
+          highspeedFallbackSelection: request.highspeedFallbackSelection,
+        }
+      : undefined,
+  );
   this.logger?.debug("Deferred input queued", {
     ...traceContextToLogContext(traceContext),
     delivery,

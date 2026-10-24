@@ -3,6 +3,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.0",
     id: "0011_session_target_summary_title",
+    touchedTables: ["session_target"],
     sql: `
       alter table session_target add column summary_title text;
     `,
@@ -11,6 +12,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.0",
     id: "0012_session_trace_id",
+    touchedTables: ["session"],
     sql: `
       alter table session add column trace_id text;
 
@@ -21,6 +23,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.0",
     id: "0013_session_target_active_run_accounting",
+    touchedTables: ["session_target"],
     sql: `
       alter table session_target add column active_input_id text;
       alter table session_target add column active_run_started_at integer;
@@ -31,6 +34,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.0",
     id: "0014_message_part_sequence",
+    touchedTables: ["message", "part"],
     sql: `
       alter table message add column sequence integer;
       alter table part add column sequence integer;
@@ -83,7 +87,8 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.2",
     id: "0015_message_part_sequence_backfill_and_guard",
-    // 背景：0014 backfill 之后仍持续出现 NULL sequence
+    touchedTables: ["message", "part"],
+    // 背景（16-timeline-authority-plan P0）：0014 backfill 之后仍持续出现 NULL sequence
     // （本机观测 message 1,690 / part 5,933 行，跨 331 sessions），主要嫌疑是旧版本二进制
     // 并存写同一 DB（其 INSERT 不含 sequence 列）。本迁移做两件事：
     // 1. 增量 backfill：只补 NULL 行，序号从各 scope 现有 max(sequence)+1 起、按

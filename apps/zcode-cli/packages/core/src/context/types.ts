@@ -100,7 +100,10 @@ export interface OutputStylePromptConfig {
 // -----------------------------------------------
 
 export interface ContextBuilderConfig {
+  /** Optional trusted product display name; does not change technical identity. */
+  productName?: string;
   workingDirectory: string;
+  additionalDirectories?: readonly string[];
   envInfo: EnvInfo;
   /** 当前步骤的执行对象，不进入 Context Source 或持久化环境快照。 */
   model?: Model;

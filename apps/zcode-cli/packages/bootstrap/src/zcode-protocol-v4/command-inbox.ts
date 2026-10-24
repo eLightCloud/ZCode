@@ -81,6 +81,7 @@ export class CommandInbox {
           return this.ackOnly(this.retryAck(afterWait));
         }
 
+        await this.host.prepareDecision?.(envelope);
         const decision = this.decide(envelope);
         if (decision.kind === "ack") {
           if (decision.remember) this.rememberSettled(bucketKey, envelope.commandId, decision.ack);

@@ -101,6 +101,7 @@ export async function reactiveCompactAfterContextExceeded(
         trigger: CompactTrigger.Reactive,
         agentListingTools: context.agentListingTools,
         activeEntries,
+        getContinuationTools: context.getContinuationTools,
         model: context.model,
       },
     );

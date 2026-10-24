@@ -1,3 +1,5 @@
+import type { CompactActiveOptions } from "./compact-active.js";
+import { prepareRuntimeProviderRequest } from "../helpers/runtime-provider-request-messages.js";
 import {
   CompactPhase,
   CompactReason,
@@ -41,40 +43,32 @@ export async function prepareCompactModelRequest(
   compactModel: Model,
   modelTraceContext: TraceContext,
   stripMediaForSummary: boolean,
-  compactTools: ModelToolContract[],
+  compactCandidates: ModelToolContract[],
   compactPromptTooLongAttempts: number,
   events: SessionEvent[],
-  options: {
-    abortSignal?: AbortSignal;
-    compactContextTelemetry?: {
-      inputTokens: number;
-      policyContextWindowTokens: number;
-      thresholdTokens?: number;
-      tokenSource: "estimate" | "provider_usage";
-    };
-    autoCompactThreshold?: number;
-    compactReason?: CompactReason;
-    initialPromptTooLongCause?: unknown;
-    phase?: CompactPhase;
-    sourceCommandId?: string;
-    trigger?: CompactTrigger;
-    model?: Model;
-    agentListingTools?: readonly { name: string }[];
-    activeEntries?: readonly RuntimeMessageEntry[];
-  },
+  options: CompactActiveOptions,
   attempt: number,
   trigger: string,
   compactTimeline: CompactTimelineContext,
+  registry: ReturnType<AgentRuntimeInternal["getToolRegistry"]>,
 ) {
-  const requestMessages = buildCompactSummaryRequestMessages(entriesForSummary, compactPrompt, {
-    useMidConversationSystem,
+  const prepared = prepareRuntimeProviderRequest(this, {
+    model: compactModel,
+    tools: compactCandidates,
+    registry,
+    entries: entriesForSummary,
+    prompt: compactPrompt,
+    applyCacheControl: true,
+    skipCacheWrite: true,
   });
-  const recordableEntries = filterOutputTokenContinuationEntries(entriesForSummary);
+  const requestMessages = prepared.request.messages;
+  const recordableEntries = filterOutputTokenContinuationEntries(prepared.entries);
   const recordableRequestMessages =
-    recordableEntries === entriesForSummary
+    recordableEntries === prepared.entries
       ? requestMessages
       : buildCompactSummaryRequestMessages(recordableEntries, compactPrompt, {
           useMidConversationSystem,
+          loadedToolCallIds: prepared.loadedToolCallIds,
         });
   // Compact 曾只执行 capability projection，漏掉普通 turn 共用的聚合
   // 媒体预算；统一走模型媒体策略，避免 summary 请求绕过全局请求上限。
@@ -129,7 +123,7 @@ export async function prepareCompactModelRequest(
       providerId: String(compactModel.providerId),
       modelId: String(compactModel.modelId),
       querySource: "compact",
-      toolCount: compactTools.length,
+      toolCount: prepared.request.tools.length,
       compactPromptTooLongRetry: compactPromptTooLongAttempts,
     },
     modelTraceContext,
@@ -157,7 +151,8 @@ export async function prepareCompactModelRequest(
     // content block 提交前仍可丢弃并 HTTP fallback，block end 后则禁止任何重放。
     preserveProviderStreamBoundaries: true,
     traceContext: modelTraceContext,
-    tools: compactTools,
+    tools: prepared.request.tools,
+    toolSearchEnabled: prepared.request.toolSearchEnabled,
     refreshRuntimeHeadersBeforeAttempt: createRefreshRuntimeHeadersBeforeModelAttempt(this, {
       abortSignal: options.abortSignal,
       model: compactModel,

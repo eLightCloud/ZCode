@@ -1,3 +1,11 @@
+import type { SessionEvent } from "@zcode/contracts";
+import type { TargetChangedPayload } from "@zcode/contracts";
+import { SessionEventType } from "@zcode/contracts";
+import { ProjectionPayloadTooLargeError } from "./conversation-topic-publisher.js";
+import { MAX_TELEMETRY_EVENT_IDS } from "./gateway-support.js";
+import { ProjectionEventCommitWaitError } from "./gateway-support.js";
+import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
+import { pluginUiToolResultNotificationSchema } from "@zcode/shared/mcp-apps";
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
 // + v4/command → CommandInbox → 宿主 executor 的收口。
@@ -7,15 +15,7 @@
 // - 命令副作用不在本类实现：inbox 裁决通过后经 host.executeCommand 调宿主操作
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
-import type { SessionEvent, TargetChangedPayload } from "@zcode/contracts";
 
-import { SessionEventType } from "@zcode/contracts";
-
-import { ProjectionPayloadTooLargeError } from "./conversation-topic-publisher.js";
-
-import { MAX_TELEMETRY_EVENT_IDS, ProjectionEventCommitWaitError } from "./gateway-support.js";
-
-import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
 /** 权威事件入口：投影推进 + 各订阅者按 profile.flushWindowMs 调度打帧。 */
 
 export function ingest(
@@ -135,6 +135,26 @@ export function ingestNormalizedEvent(
     return;
   }
   this.resolveProjectionEventCommit(sessionId, String(event.id));
+  // 原因：后台会话没有卡片/订阅时无法创建 guest。只在 live 投影提交后投递，
+  // 从同一权威工具行取输入和 UI 描述；历史 hydration 直接写 publisher，不走此入口。
+  if (event.type === SessionEventType.ToolCallResult && this.host.emitPluginUiToolResult) {
+    const toolCallId = (event.payload as { toolCallId: string }).toolCallId;
+    const row = publisher
+      .getSnapshot()
+      .rows.window.find((row) => row.kind === "toolCall" && row.toolCallId === toolCallId);
+    if (row?.kind === "toolCall" && row.status === "success" && row.display?.kind === "mcp_tool") {
+      const result = pluginUiToolResultNotificationSchema.safeParse({
+        sessionId,
+        toolCallId,
+        serverName: row.display.serverName,
+        ui: row.display.ui,
+        ...(row.input && typeof row.input === "object" && !Array.isArray(row.input)
+          ? { input: row.input }
+          : {}),
+      });
+      if (result.success) this.host.emitPluginUiToolResult(result.data);
+    }
+  }
   if (
     !this.hydrationBuffers.has(sessionId) &&
     (event.type === SessionEventType.TurnComplete || event.type === SessionEventType.TurnError)

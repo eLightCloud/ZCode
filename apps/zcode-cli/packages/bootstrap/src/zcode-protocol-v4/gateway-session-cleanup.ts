@@ -14,10 +14,14 @@ import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
 /** 会话关闭：清 publisher 与其全部订阅调度；hydration 标记同清（重开走冷启动重建）；
  *  并从其 workspace index 移除该会话（session.removed 推给列表订阅者）。 */
 
-export function disposeSession(this: ConversationV4GatewayMethodsContext, sessionId: string): void {
+export function disposeSession(
+  this: ConversationV4GatewayMethodsContext,
+  sessionId: string,
+  options: { deleted?: boolean } = {},
+): void {
   this.cleanupSessionRuntime(sessionId, {
     clearCommandInbox: false,
-    notifyIndexRemoved: true,
+    notifyIndexRemoved: options.deleted === true,
   });
 }
 
@@ -125,6 +129,7 @@ export function cleanupSessionRuntime(
   this.hydrationBuffers.delete(sessionId);
   this.hydrationInFlight.delete(sessionId);
   this.readyFlights.delete(sessionId);
+  this.historyOpenings.get(sessionId)?.cancel();
   this.rawSequenceStates.delete(sessionId);
   if (options.clearCommandInbox) this.inbox.clearSession(sessionId);
   this.telemetryNormalizer.clearSession(sessionId);
@@ -177,6 +182,8 @@ export function dispose(this: ConversationV4GatewayMethodsContext): void {
   this.hydrationBuffers.clear();
   this.hydrationInFlight.clear();
   this.readyFlights.clear();
+  for (const opening of this.historyOpenings.values()) opening.cancel();
+  this.historyOpenings.clear();
   this.rawSequenceStates.clear();
   this.telemetryEventIds.clear();
   this.detachedLiveSessions.clear();

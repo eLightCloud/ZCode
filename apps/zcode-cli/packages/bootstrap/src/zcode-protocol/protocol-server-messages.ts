@@ -1,3 +1,4 @@
+import { normalizeStoredTitleSource } from "./v4-bridge-session-facts.js";
 import { networkCaptureControlSchema } from "@zcode/shared";
 import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
 import { conversationCheckpointParamsSchema } from "@zcode/shared";
@@ -94,13 +95,31 @@ export async function handleRequest(
       )
         throw new TextCheckpointError("unsupported_state");
       const directory = this.context.deps.cwd ?? process.cwd();
-      const checkpoint = await pool.withCheckpoint(sessionId, async () => {
+      const { checkpoint, cliFacts } = await pool.withCheckpoint(sessionId, async () => {
         const stored = await store.getSession(sessionId as SessionId);
         if (!stored) throw new TextCheckpointError("session_not_found");
         // tasks 库丢失后不能仅凭全局 session ID 把目录项目补成普通会话。
         if (stored.workspaceID || resolve(stored.directory) !== resolve(directory))
           throw new TextCheckpointError("unsupported_state");
-        return store.exportTextCheckpoint!({ sessionID: sessionId as SessionId });
+        const checkpoint = await store.exportTextCheckpoint!({ sessionID: sessionId as SessionId });
+        const current = await store.getSession(sessionId as SessionId);
+        if (
+          !current ||
+          current.workspaceID ||
+          resolve(current.directory) !== resolve(directory) ||
+          current.title !== checkpoint.session.title ||
+          current.time.created !== checkpoint.session.time.created ||
+          current.time.updated !== checkpoint.session.time.updated
+        )
+          throw new TextCheckpointError("unsupported_state");
+        return {
+          checkpoint,
+          cliFacts: {
+            titleSource: normalizeStoredTitleSource(current.titleSource),
+            ...(current.lastOutcome ? { lastOutcome: current.lastOutcome } : {}),
+            deleted: current.time.deleted !== undefined,
+          },
+        };
       });
       this.logger?.info("Native checkpoint captured", {
         event: "conversation.sync.capture",
@@ -110,7 +129,7 @@ export async function handleRequest(
       return this.ok(request.id, {
         dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
         ...(request.method === zcodeProtocolMethods.sessionTextCheckpointIndex
-          ? { indexProjection: checkpointIndexProjection(checkpoint, directory) }
+          ? { indexProjection: checkpointIndexProjection(checkpoint, directory, cliFacts) }
           : {}),
       });
     }

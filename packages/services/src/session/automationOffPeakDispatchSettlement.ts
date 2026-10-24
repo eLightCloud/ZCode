@@ -38,6 +38,8 @@ export async function settleOffPeakDispatchResult(
   if (msg.ok) {
     deps.retryAt.delete(msg.offPeakTaskId);
     deps.retryAttempts.delete(msg.offPeakTaskId);
+    // Host 在放行 CLI 生命周期通知前已落 running；迟到 ACK 不得覆写新票等待或接管状态。
+    if (msg.lifecycleManaged) return;
     const updated = await deps.repo.markRunning(msg.offPeakTaskId, {
       startedAt: now,
       ...(msg.conversationId ? { conversationId: msg.conversationId } : {}),
@@ -107,6 +109,20 @@ export async function dispatchClaimedOffPeakTask(
     await deps.repo.releaseClaim(task.offPeakTaskId, { now });
     return;
   }
+  if (!task.modelSelection) {
+    await deps.repo.releaseClaim(task.offPeakTaskId, { now });
+    deps.log(
+      "warn",
+      `off-peak task claimed without model selection, released task=${task.offPeakTaskId}`,
+      {
+        event: "automation.offpeak.dispatch",
+        outcome: "skipped",
+        reason: "model_selection_missing",
+        offPeakTaskId: task.offPeakTaskId,
+      },
+    );
+    return;
+  }
   deps.inFlight.add(task.offPeakTaskId);
   const request: SchedulerToMainMessage = {
     type: "offpeak-dispatch-request",
@@ -114,10 +130,13 @@ export async function dispatchClaimedOffPeakTask(
     prompt: task.prompt,
     permissionMode: task.permissionMode,
     // claimDue 已校验模型选择；保留认领 owner 的唯一裁决，不另选默认模型。
-    modelSelection: task.modelSelection!,
+    modelSelection: task.modelSelection,
     ...(task.conversationId ? { conversationId: task.conversationId } : {}),
     ...(task.sessionId ? { sessionId: task.sessionId } : {}),
     ...(task.serverTicketId ? { serverTicketId: task.serverTicketId } : {}),
+    projectId: task.projectId,
+    hostId: task.hostId,
+    additionalDirectories: task.additionalDirectories,
     workspacePath: task.workspacePath,
     ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
   };

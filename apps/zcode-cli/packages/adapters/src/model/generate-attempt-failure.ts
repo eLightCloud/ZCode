@@ -1,22 +1,16 @@
-import type { AiSdkGenerateTextOptions, AiSdkModelTextRequest } from "./runner-runtime.js";
-
+import type { AiSdkGenerateTextOptions } from "./runner-runtime.js";
+import type { AiSdkModelTextRequest } from "./runner-runtime.js";
 import type { ClassifiedModelFailure } from "./failure-classifier.js";
-
 import { unwrapRetryError } from "./failure-inspection.js";
-
 import { recordGenerateTextDebug } from "./runner-debug.js";
-
-import { ModelStatusContext, publishModelStatus } from "./runner-status.js";
-
+import { ModelStatusContext } from "./runner-status.js";
+import { publishModelStatus } from "./runner-status.js";
 import type { ResolvedAiSdkModel } from "./runner-runtime.js";
-
 import { modelFailureStatusFields } from "./runner-telemetry.js";
-
-import { type AttemptAdmission } from "./request-admission.js";
-
+import type { AttemptAdmission } from "./request-admission.js";
 import type { RunGenerateTextInput } from "./generate-contract.js";
-
 import { statusPublishOptions } from "./generate-status.js";
+import { AiSdkModelAdapterError } from "./errors.js";
 
 export async function publishGenerateAttemptFailure(
   options: AiSdkGenerateTextOptions | undefined,
@@ -69,6 +63,7 @@ export async function publishGenerateAttemptFailure(
       ...modelFailureStatusFields(error, failure, options ? "response" : "prepare"),
       timestamp: new Date(completedAt).toISOString(),
       type: "model_request_failed",
+      ...(error instanceof AiSdkModelAdapterError && error.usage ? { usage: error.usage } : {}),
     },
     {
       ...statusPublishOptions(input, admission),

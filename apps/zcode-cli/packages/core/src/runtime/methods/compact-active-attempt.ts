@@ -1,90 +1,56 @@
-import {
-  CompactPhase,
-  CompactReason,
-  CompactTimelineStatus,
-  CompactTrigger,
-  SessionEventType,
-  buildCompactPrompt,
-  createChildTraceContext,
-  createMessageId,
-  createPartId,
-  traceContextToLogContext,
-} from "../deps.js";
-
-import type { SessionEvent, TraceContext } from "../deps.js";
-
-import {
-  compactFailureReasonFromError,
-  defaultCompactPhaseForTrigger,
-  defaultCompactReasonForTrigger,
-  estimateRuntimeEntryTokens,
-  getRuntimeEntriesToSummarize,
-  hasEnoughRuntimeEntriesToCompact,
-  isModelContextExceededError,
-  isModelMediaTooLargeError,
-  isTurnCancellationError,
-  selectCompactEntriesAfterPromptTooLong,
-  throwIfTurnAborted,
-  truncateCompactSummaryRequestEntriesAfterPromptTooLong,
-} from "../helpers/index.js";
-
-import type { CompactTimelineContext, RuntimeModelTextResult } from "../types.js";
-
+import type { CompactActiveOptions } from "./compact-active.js";
+import { CompactPhase } from "../deps.js";
+import { CompactReason } from "../deps.js";
+import { CompactTimelineStatus } from "../deps.js";
+import { CompactTrigger } from "../deps.js";
+import { SessionEventType } from "../deps.js";
+import { buildCompactPrompt } from "../deps.js";
+import { createChildTraceContext } from "../deps.js";
+import { createMessageId } from "../deps.js";
+import { createPartId } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import type { SessionEvent } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import { compactFailureReasonFromError } from "../helpers/index.js";
+import { defaultCompactPhaseForTrigger } from "../helpers/index.js";
+import { defaultCompactReasonForTrigger } from "../helpers/index.js";
+import { estimateRuntimeEntryTokens } from "../helpers/index.js";
+import { getRuntimeEntriesToSummarize } from "../helpers/index.js";
+import { hasEnoughRuntimeEntriesToCompact } from "../helpers/index.js";
+import { isModelContextExceededError } from "../helpers/index.js";
+import { isModelMediaTooLargeError } from "../helpers/index.js";
+import { isTurnCancellationError } from "../helpers/index.js";
+import { selectCompactEntriesAfterPromptTooLong } from "../helpers/index.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
+import { truncateCompactSummaryRequestEntriesAfterPromptTooLong } from "../helpers/index.js";
+import type { CompactTimelineContext } from "../types.js";
+import type { RuntimeModelTextResult } from "../types.js";
 import type { Model } from "../deps.js";
-
 import type { AgentRuntimeInternal } from "../internal.js";
-
 import type { CompactAttemptOutcome } from "./turn-loop-state.js";
-
-import { type RuntimeMessageEntry } from "../../agent/message-history.js";
-
-import {
-  createCompactContextExceededFinishError,
-  createCompactPromptTooLongError,
-  persistCompactTimelineEvent,
-} from "./compact-active-helpers.js";
-
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import { createCompactContextExceededFinishError } from "./compact-active-helpers.js";
+import { createCompactPromptTooLongError } from "./compact-active-helpers.js";
+import { persistCompactTimelineEvent } from "./compact-active-helpers.js";
 import { runCompactSummaryModelRequest } from "./compact-summary-model-request.js";
-
 import { recordModelUsageFact } from "./usage-observability.js";
-
 import { createRuntimeModel } from "./runtime-model.js";
-
-import {
-  canUseCompactSummaryTruncationFallback,
-  isAutoCompactRetryableError,
-  selectInitialCompactEntriesForActiveConversation,
-} from "./compact-active-selection.js";
-
+import { canUseCompactSummaryTruncationFallback } from "./compact-active-selection.js";
+import { isAutoCompactRetryableError } from "./compact-active-selection.js";
+import { selectInitialCompactEntriesForActiveConversation } from "./compact-active-selection.js";
 import { prepareCompactModelRequest } from "./compact-request-assembly.js";
-
 import { commitCompactSummary } from "./compact-summary-commit.js";
-
-import { AUTO_COMPACT_MAX_ATTEMPTS, COMPACT_TOOL_KEEP_MAX_COUNT } from "./compact-active-policy.js";
+import { AUTO_COMPACT_MAX_ATTEMPTS } from "./compact-active-policy.js";
+import { COMPACT_TOOL_KEEP_MAX_COUNT } from "./compact-active-policy.js";
+import { TOOL_SEARCH_NAME } from "@zcode/contracts";
+import { buildToolExposure } from "../../tool/search/exposure.js";
 
 export async function compactActiveConversationImpl(
   this: AgentRuntimeInternal,
   customInstructions: string | undefined,
   turnTraceContext: TraceContext,
   events: SessionEvent[],
-  options: {
-    abortSignal?: AbortSignal;
-    compactContextTelemetry?: {
-      inputTokens: number;
-      policyContextWindowTokens: number;
-      thresholdTokens?: number;
-      tokenSource: "estimate" | "provider_usage";
-    };
-    autoCompactThreshold?: number;
-    compactReason?: CompactReason;
-    initialPromptTooLongCause?: unknown;
-    phase?: CompactPhase;
-    sourceCommandId?: string;
-    trigger?: CompactTrigger;
-    model?: Model;
-    agentListingTools?: readonly { name: string }[];
-    activeEntries?: readonly RuntimeMessageEntry[];
-  } = {},
+  options: CompactActiveOptions = {},
 ): Promise<{
   displayText: string;
   entries: readonly RuntimeMessageEntry[];
@@ -172,13 +138,33 @@ export async function compactActiveConversationImpl(
     turnTraceContext,
     events,
   );
-  // 止血原因：massive MCP 工具会把 compact summary request 的 provider context 撑爆。
-  // ToolSearch/deferred tools 完成前，仅在工具数超过阈值时让 compact summary 保持无工具。
   await this.initializeMcp(turnTraceContext);
   throwIfTurnAborted(options.abortSignal);
   const runtimeCompactTools = this.getTools(compactModel);
-  const compactTools =
-    runtimeCompactTools.length > COMPACT_TOOL_KEEP_MAX_COUNT ? [] : runtimeCompactTools;
+  const registry = this.getToolRegistry();
+  let compactCandidates = runtimeCompactTools.filter(
+    (tool) =>
+      tool.name === "Read" ||
+      tool.name === TOOL_SEARCH_NAME ||
+      tool.name === "DeferredToolCall" ||
+      registry.get(tool.name)?.metadata.mcpPresentation,
+  );
+  // Bug 根因：只看 provider 能力会在 ToolSearch 被禁用或全部常驻时绕过数量保护，
+  // 让大量 MCP schema 再次撑大压缩请求；实际不可启用时恢复原普通工具策略。
+  if (
+    !buildToolExposure({
+      model: compactModel,
+      mode: this.config.toolSearch?.mode,
+      tools: compactCandidates,
+      registry,
+      entries: [],
+    }).enabled
+  ) {
+    compactCandidates = runtimeCompactTools.filter(
+      (tool) => tool.name !== TOOL_SEARCH_NAME && tool.name !== "DeferredToolCall",
+    );
+    if (compactCandidates.length > COMPACT_TOOL_KEEP_MAX_COUNT) compactCandidates = [];
+  }
 
   while (true) {
     try {
@@ -239,13 +225,14 @@ export async function compactActiveConversationImpl(
             compactModel,
             modelTraceContext,
             stripMediaForSummary,
-            compactTools,
+            compactCandidates,
             compactPromptTooLongAttempts,
             events,
             options,
             attempt,
             trigger,
             compactTimeline,
+            registry,
           );
 
         try {

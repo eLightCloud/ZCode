@@ -1,8 +1,9 @@
+import type { ModelId } from "./request-identity.js";
+import type { ModelProviderId } from "./request-identity.js";
+import type { ModelToolReferenceContentBlock } from "../tools/tool-search.js";
 // ============================================================
 // Model Protocol - provider-neutral model contracts
 // ============================================================
-
-import type { ModelId, ModelProviderId } from "./request-identity.js";
 
 export type ModelMessageRole = "system" | "user" | "assistant" | "tool";
 
@@ -71,6 +72,7 @@ export interface ModelResourceLinkContentBlock {
 }
 
 export type ModelMessageContentBlock =
+  | ModelToolReferenceContentBlock
   | ModelTextContentBlock
   | ModelReasoningContentBlock
   | ModelImageContentBlock
@@ -110,6 +112,8 @@ export function modelMessageContentBlockToText(block: ModelMessageContentBlock):
       return block.text;
     case "reasoning":
       return "";
+    case "tool_reference":
+      return block.toolName;
     case "image":
       return attachmentPlaceholder("Attached", block.mediaType, block.source?.placeholder);
     case "video":

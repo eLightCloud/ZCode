@@ -244,6 +244,7 @@ export async function* runStreamText(input: RunStreamTextInput): AsyncGenerator<
             input.request.preserveProviderStreamBoundaries !== true &&
             isZeroOutputModelCompletion({
               finishReason: diagnostics.finishReason,
+              rawFinishReason: diagnostics.rawFinishReason,
               reasoningLength: diagnostics.reasoningDeltaChars,
               textLength: diagnostics.textDeltaChars,
               toolCallCount: diagnostics.toolCallCount,

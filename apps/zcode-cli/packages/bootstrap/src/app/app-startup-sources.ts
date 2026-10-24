@@ -1,29 +1,19 @@
-import { subagentProfilesFromSnapshot } from "../subagent-runtime-config.js";
-
-import { ConfigResult, resolvePath } from "@zcode/adapters/config";
-
-import { Logger, type TraceContext } from "@zcode/contracts";
-
+import { subagentProfilesFromSnapshot } from "../runtime-subagents/index.js";
+import { ConfigResult } from "@zcode/adapters/config";
+import { resolvePath } from "@zcode/adapters/config";
+import { Logger } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
 import { resolveZCodeRuntimeEnv } from "@zcode/shared";
-
 import { StartupTimer } from "../startup-logging.js";
-
 import type { ZCodeAppOptions } from "./types.js";
-
-import { getCliStorageRoot, getModelIoDir } from "./paths.js";
-
+import { getCliStorageRoot } from "./paths.js";
+import { getModelIoDir } from "./paths.js";
 import { resolvePluginRuntimeFeatures } from "./plugin-runtime-features.js";
-
 import { resolveBundledSkillRoots } from "./bundled-skills.js";
-
 import { resolveBuiltInNodeReplMcpServers } from "./built-in-node-repl.js";
-
-import {
-  loadPluginAgentTemplates,
-  loadZCodeAgentProfiles,
-  resolvePluginAgentProfiles,
-} from "../subagents.js";
-
+import { loadPluginAgentTemplates } from "../subagents.js";
+import { loadZCodeAgentProfiles } from "../subagents.js";
+import { resolvePluginAgentProfiles } from "../subagents.js";
 import { resolveStartupPlugins } from "./startup-marks.js";
 
 export async function resolveAppStartupSources(
@@ -60,7 +50,12 @@ export async function resolveAppStartupSources(
   });
   const zcodeSubagentProfileOutcome = hostSubagentSnapshot
     ? subagentProfilesFromSnapshot(hostSubagentSnapshot)
-    : await loadZCodeAgentProfiles({ logger, storageRoot, workingDirectory });
+    : await loadZCodeAgentProfiles({
+        logger,
+        storageRoot,
+        workingDirectory,
+        additionalDirectories: options.additionalDirectories,
+      });
   const zcodeSubagentProfiles = zcodeSubagentProfileOutcome.profiles;
   const pluginOutcome = resolveStartupPlugins({
     cliStorageRoot,

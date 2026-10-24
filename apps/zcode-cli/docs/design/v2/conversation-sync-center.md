@@ -220,3 +220,15 @@ sequenceDiagram
   N->>N: runtime-role RLS and native history projection
   N-->>B: saved history, no admission grant
 ```
+
+## Upstream CLI fact admission during cold index reconstruction
+
+After the task-index handoff to CLI facts, a cold native capture returns optional
+`indexProjection.cliFacts` from the same qualified idle source: normalized title
+source, stored last outcome when present, and soft deletion. The producer checks
+the exported title/time/workspace against the stored source again; changed data
+rejects. This is read evidence, never an execution grant. Old index projections
+without these facts remain readable but cannot authorize reconstruction. The
+Host create-only transaction reuses the task index's CLI-fact writer, then stores
+the native derived search cache and existing management capsule together. It
+neither invents a successful outcome nor rewrites an existing row.

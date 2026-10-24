@@ -1,9 +1,21 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PassThrough, Writable } from "node:stream";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { PassThrough } from "node:stream";
+import { Writable } from "node:stream";
+import { afterEach } from "vitest";
+import { describe } from "vitest";
+import { expect } from "vitest";
+import { it } from "vitest";
+import { vi } from "vitest";
 import { createNodeProviderRuntimePathEnv } from "@zcode/provider-node";
+import { runZCodeProtocolAgent } from "../src/zcode-protocol-entrypoint.js";
+import { encodeProviderConfigFile } from "@zcode/provider-node";
+import { ModelConfigRules } from "@zcode/provider";
+import { ProviderConfigMap } from "@zcode/provider";
+import { createRegistryBackedTestApp as createZCodeApp } from "./helpers/registry-backed-test-app.js";
 
 const telemetryMocks = vi.hoisted(() => ({
   closeMcp: vi.fn(async () => {}),
@@ -128,8 +140,6 @@ vi.mock("@zcode/telemetry", async (importOriginal) => ({
   prepareModelTelemetryEnv: telemetryMocks.prepareModelTelemetryEnv,
   shutdownPreparedModelTelemetry: telemetryMocks.shutdownPreparedModelTelemetry,
 }));
-
-import { runZCodeProtocolAgent } from "../src/zcode-protocol-entrypoint.js";
 
 describe("ZCode Protocol telemetry lifecycle", () => {
   afterEach(() => {
@@ -308,11 +318,12 @@ async function createProtocolProviderEnv(root: string): Promise<Record<string, s
       },
     },
   });
-  const emptyPersonalConfig = JSON.stringify({
-    schemaVersion: 1,
-    providers: {},
-    modelConfigRules: [],
-  });
+  const emptyPersonalConfig = JSON.stringify(
+    encodeProviderConfigFile({
+      providers: ProviderConfigMap.empty(),
+      models: ModelConfigRules.empty(),
+    }),
+  );
   await Promise.all([
     writeFile(zcodeBuiltinFilePath, emptyBuiltinRelease),
     writeFile(personalFilePath, emptyPersonalConfig),

@@ -29,6 +29,7 @@ function createHarness() {
     // fixture 实现现行 Runtime 的执行状态读取合同。
     getPlanEnabled: () => false,
     getTools: () => [],
+    getPlanEnabled: () => false,
     async persistMessage(input: MessageInfo) {
       saved.push(input);
     },

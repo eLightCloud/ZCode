@@ -352,6 +352,17 @@ class NodeMcpAdapter implements McpPort {
   >;
 
   declare private createStatus: OmitThisParameter<typeof implementation3.createStatus>;
+
+  async waitForAppConnection(
+    name: string,
+  ): Promise<{ identity: string; generation: number } | null> {
+    const record = this.records.get(name);
+    if (!record) return null;
+    const generation = this.connectionGenerations.get(name) ?? 0;
+    // 会话恢复先于 MCP 握手完成；复用已有连接任务，避免首次打开把 connecting 误判为失败。
+    await record.connecting;
+    return this.isCurrentConnection(name, generation) ? this.appConnectionSnapshot(name) : null;
+  }
 }
 
 export type InternalNodeMcpAdapter = NodeMcpAdapter;

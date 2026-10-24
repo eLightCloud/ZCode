@@ -1,3 +1,4 @@
+import type { createAdmittedTurnModel } from "./turn-model-initialization.js";
 import { TurnMachineImpl } from "../deps.js";
 
 import type {
@@ -31,12 +32,17 @@ export function createRegularTurnLoopState(
   machineState: { turnMachine: TurnMachineImpl },
   admittedOutputStyle: OutputStylePromptConfig | undefined,
   turnTraceContext: TraceContext,
+  modelPreparation: Awaited<ReturnType<typeof createAdmittedTurnModel>>,
+  highspeedFallbackSelection: ReturnType<AgentRuntimeInternal["getSessionModelSelection"]>,
 ) {
+  const { creationFallback, effectiveExecutionSelection, effectiveRequestDependencies } =
+    modelPreparation;
   loopState = {
     activeTurn,
     ...(options?.automationId ? { automationId: options.automationId } : {}),
     // 闲时派发轮的身份进入 loop state，供工具执行边界 deny OffPeakCreate。
     ...(options?.offPeakTaskId ? { offPeakTaskId: options.offPeakTaskId } : {}),
+    ...(options?.offPeakExecutionId ? { offPeakExecutionId: options.offPeakExecutionId } : {}),
     anomalyWarningsInjected: 0,
     backgroundSubagentResultConsumed: options?.backgroundSubagentResultConsumed === true,
     workflowResultConsumed: options?.workflowResultConsumed === true,
@@ -50,15 +56,18 @@ export function createRegularTurnLoopState(
     ...(options?.modelExecution?.selectionScope === "execution"
       ? { modelSelectionScope: "execution" as const }
       : {}),
-    // 加速卡在工具执行期间过期时，本轮不整体失败，改为退回 Session Selection 跑完。
-    ...(options?.modelExecution?.selectionFallback
-      ? { selectionFallback: options.modelExecution.selectionFallback }
+    // 加速卡回退仅使用启动时快照，不随随后接纳的用户选择变化。
+    ...(!creationFallback && options?.modelExecution?.selectionFallback
+      ? {
+          selectionFallback: options.modelExecution.selectionFallback,
+          highspeedFallbackSelection,
+        }
       : {}),
-    ...(options?.modelExecution?.subagents && options.intent?.modelSelection
+    ...(options?.modelExecution?.subagents && effectiveExecutionSelection
       ? {
           subagentModelOverride: {
-            selection: options.intent.modelSelection,
-            requestDependencies: options.modelExecution.requestDependencies,
+            selection: effectiveExecutionSelection,
+            requestDependencies: effectiveRequestDependencies,
             background: options.modelExecution.subagents.background,
           },
         }

@@ -1,46 +1,34 @@
+import { CliDefaultSelection } from "./cli-default-selection.js";
 import type { RuntimeModelFactory } from "./provider-registry-model-runtime.js";
-
 import { ConfigResult } from "@zcode/adapters/config";
-
-import { AgentRuntime, AgentRuntimeConfig, PermissionService } from "@zcode/core";
-
+import { AgentRuntime } from "@zcode/core";
+import { AgentRuntimeConfig } from "@zcode/core";
+import { PermissionService } from "@zcode/core";
 import { ModelTelemetryBootstrap } from "@zcode/telemetry";
-
-import {
-  ExecutionPort,
-  ImageProcessorPort,
-  InputHistoryStorePort,
-  LocalSettingStorePort,
-  Logger,
-  LoggerFactory,
-  McpPort,
-  McpServerConfig,
-  PdfDocumentPort,
-  ProjectId,
-  SessionId,
-  SessionStorePort,
-  ToolArtifactStorePort,
-  type TraceContext,
-} from "@zcode/contracts";
-
-import type { PrepareUserExecutionBoundary, ZCodeAppOptions } from "./types.js";
-
+import { ExecutionPort } from "@zcode/contracts";
+import { ImageProcessorPort } from "@zcode/contracts";
+import { InputHistoryStorePort } from "@zcode/contracts";
+import { LocalSettingStorePort } from "@zcode/contracts";
+import { Logger } from "@zcode/contracts";
+import { LoggerFactory } from "@zcode/contracts";
+import { McpPort } from "@zcode/contracts";
+import { McpServerConfig } from "@zcode/contracts";
+import { PdfDocumentPort } from "@zcode/contracts";
+import { ProjectId } from "@zcode/contracts";
+import { SessionId } from "@zcode/contracts";
+import { SessionStorePort } from "@zcode/contracts";
+import { ToolArtifactStorePort } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
+import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { ZCodeAppOptions } from "./types.js";
 import { resolveEffectiveLocale } from "./app-config-options.js";
-
 import { createWorkflowFacade } from "./workflow-facade.js";
-
 import { createInputFacade } from "./input-facade.js";
-
 import { createSessionFacade } from "./session-facade.js";
-
 import { createDynamicWorkflowRunService } from "./dynamic-workflow-run-service.js";
-
-import { type NodeReplBrowserBroker } from "./node-repl-browser-broker.js";
-
+import type { NodeReplBrowserBroker } from "./node-repl-browser-broker.js";
 import { resolveZCodeCustomCommandPrompt } from "../custom-command-prompt.js";
-
 import { resolveZCodeBuiltinPromptCommandInvocation } from "../builtin-prompt-command.js";
-
 import { BUILTIN_WORKFLOW_COMMAND_NAME } from "../builtin-workflow-command.js";
 
 export function createAppFacades(
@@ -77,8 +65,10 @@ export function createAppFacades(
   prepareResume: (submitTraceContext?: TraceContext, abortSignal?: AbortSignal) => Promise<void>,
   projectID: ProjectId,
   untrustedProjectMcpServers: Set<string>,
+  cliDefaultSelection?: CliDefaultSelection,
 ) {
   const inputFacade = createInputFacade({
+    cliDefaultSelection,
     artifactStore,
     customCommandPromptResolver: async (text, resolverOptions) => {
       const builtin = resolveZCodeBuiltinPromptCommandInvocation(text, {
@@ -101,6 +91,7 @@ export function createAppFacades(
         return builtin.prompt;
       }
       return await resolveZCodeCustomCommandPrompt(text, {
+        additionalDirectories: options.additionalDirectories,
         env: options.env,
         executionPort,
         logger,
@@ -144,6 +135,7 @@ export function createAppFacades(
     workingDirectory,
   });
   const sessionFacade = createSessionFacade({
+    cliDefaultSelection,
     // App 关闭时停下本会话拥有的 dwf run：
     // 引擎活在本 App 的闭包里，关掉 App 而不停它，journal 行会停在 running 等下一次孤儿收敛。
     ...(dynamicWorkflowRunPort === undefined

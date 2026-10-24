@@ -1,4 +1,5 @@
 import {
+  type ConversationIndexProjection,
   buildZCodeTaskSearchText,
   conversationIndexProjectionSchema,
   formatModelPickerValue,
@@ -17,7 +18,11 @@ import type {
 import { mapMessageWithParts } from "./message-mapper.js";
 
 /** Read projection of the same immutable text package; never creates/resumes an App. */
-export function checkpointIndexProjection(checkpoint: TextCheckpoint, directory: string) {
+export function checkpointIndexProjection(
+  checkpoint: TextCheckpoint,
+  directory: string,
+  cliFacts?: NonNullable<ConversationIndexProjection["cliFacts"]>,
+) {
   const sessionID = checkpoint.session.id as SessionId;
   const messages = checkpoint.messages.map((message) => {
     // The existing product mapper does not consume ledger anchors; avoid recasting
@@ -50,6 +55,7 @@ export function checkpointIndexProjection(checkpoint: TextCheckpoint, directory:
     messages.findLast((message) => message.info.model)?.info.model ?? checkpoint.modelSelection;
   const last = checkpoint.messages.at(-1)!.info;
   const projected = conversationIndexProjectionSchema.safeParse({
+    ...(cliFacts ? { cliFacts } : {}),
     meta: {
       taskId: checkpoint.session.id,
       traceId: checkpoint.session.traceID ?? generateTraceId(checkpoint.session.id),

@@ -170,6 +170,7 @@ export interface ValidateZCodePluginOptions extends ResolveZCodePluginsOptions {
 export interface DescribeZCodePluginOptions extends ResolveZCodePluginsOptions {
   marketplace: string;
   pluginName: string;
+  withWriteLock?: <T>(write: () => Promise<T>) => Promise<T>;
 }
 
 export interface ZCodePluginInstallData {

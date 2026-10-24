@@ -137,7 +137,7 @@ export function applicationModelBrokerEnvironment(logger?: {
       const result = await fetch(target, {
         method: request.method,
         headers,
-        body,
+        body: body === undefined ? undefined : new Uint8Array(body),
         redirect: "error",
         signal: controller.signal,
       });

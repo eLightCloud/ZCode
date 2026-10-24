@@ -91,7 +91,17 @@ describe("Published MCS and search final Anthropic wire", () => {
       });
     });
     try {
-      const adapter = new AiSdkModelAdapter({ env: {}, retry: { maxAttempts: 1 } });
+      const adapter = new AiSdkModelAdapter({
+        env: {},
+        retry: { maxAttempts: 1 },
+        // 本用例验证模型配置与 wire；安全端口注入离线透传，独立安全契约用例覆盖官方版本校验。
+        requestSecurityState: {
+          createExecution: () => ({
+            protectTransport: ({ transport }) => transport,
+            take: () => [],
+          }),
+        },
+      });
       const model = adapter.createModel({
         providerId: createModelProviderId(providerId),
         modelId: createModelId(modelId),

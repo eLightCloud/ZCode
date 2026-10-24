@@ -3,6 +3,15 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.2.0",
     id: "0001_base_session_store",
+    touchedTables: [
+      "input_history",
+      "message",
+      "part",
+      "permission",
+      "session",
+      "session_entry",
+      "todo",
+    ],
     sql: `
       create table if not exists session (
         id text primary key,
@@ -106,6 +115,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.2.0",
     id: "0002_local_setting",
+    touchedTables: ["local_setting"],
     sql: `
       create table if not exists local_setting (
         scope text not null,
@@ -130,6 +140,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.2.0",
     id: "0003_backfill_permission_local_setting",
+    touchedTables: ["local_setting"],
     sql: `
       insert or ignore into local_setting (
         scope,
@@ -158,6 +169,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.7.0",
     id: "0004_session_target",
+    touchedTables: ["session_target"],
     sql: `
       create table if not exists session_target (
         session_id text primary key references session(id) on delete cascade,
@@ -173,6 +185,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.7.0",
     id: "0005_session_target_accounting",
+    touchedTables: ["session_target", "session_target_next"],
     sql: `
       create table if not exists session_target_next (
         session_id text primary key references session(id) on delete cascade,
@@ -217,6 +230,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.11.0",
     id: "0006_input_history_attachments",
+    touchedTables: ["input_history"],
     sql: `
       alter table input_history add column attachments text;
     `,

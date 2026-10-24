@@ -1,16 +1,19 @@
-import { createModelId, createModelProviderId } from "@zcode/contracts";
-
-import { createMessageId, createPartId, traceContextToLogContext } from "../deps.js";
-
-import type { CompactBoundaryPayload, MessageId, Model, TraceContext } from "../deps.js";
-
+import { createModelId } from "@zcode/contracts";
+import { createModelProviderId } from "@zcode/contracts";
+import { createMessageId } from "../deps.js";
+import { createPartId } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import type { CompactBoundaryPayload } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { Model } from "../deps.js";
+import type { TraceContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
-import {
-  isRuntimeAttachmentEntry,
-  type RuntimeMessageEntry,
-  type RuntimeMessageMetadata,
-} from "../../agent/message-history.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import { isRuntimeAttachmentEntry } from "../../agent/message-history.js";
+import type { RuntimeMessageMetadata } from "../../agent/message-history.js";
+import { persistRuntimeReminderMessage } from "./runtime-reminder-persistence.js";
+import { removeRuntimePersistenceMessagesBestEffort } from "./runtime-reminder-persistence.js";
+import { resolvePersistedReminderModel } from "./runtime-reminder-persistence.js";
 
 export async function persistCompactSummary(
   this: AgentRuntimeInternal,
@@ -28,7 +31,7 @@ export async function persistCompactSummary(
   if (!this.sessionStore) return;
 
   const created = Date.now();
-  const persistedModel = resolvePersistedModel(this, options?.model);
+  const persistedModel = resolvePersistedReminderModel(this, options?.model);
   // compact summary 和后续 reminder 是同一次历史替换；任一步失败都要一起回滚。
   const persistedMessageIds: MessageId[] = [messageID];
   try {
@@ -91,79 +94,19 @@ export async function persistCompactSummary(
       traceContext,
     );
     for (const entry of options?.postCompactReminderEntries ?? []) {
-      if (!isRuntimeAttachmentEntry(entry)) continue;
-      const reminderMessageId = await persistCompactReminderMessage.call(
+      const reminderMessageId = await persistRuntimeReminderMessage.call(
         this,
         entry,
-        created,
         traceContext,
-        options?.model,
+        {
+          created,
+          model: options?.model,
+        },
       );
       if (reminderMessageId) persistedMessageIds.push(reminderMessageId);
     }
   } catch (error) {
-    await removeCompactPersistenceMessagesBestEffort.call(this, persistedMessageIds, traceContext);
-    throw error;
-  }
-}
-
-export async function persistCompactReminderMessage(
-  this: AgentRuntimeInternal,
-  entry: RuntimeMessageEntry,
-  created: number,
-  traceContext: TraceContext,
-  model?: Model,
-): Promise<MessageId | undefined> {
-  if (!this.sessionStore || !isRuntimeAttachmentEntry(entry)) return;
-
-  const messageID = createMessageId();
-  const currentModel = resolvePersistedModel(this, model);
-  try {
-    await this.persistMessage(
-      {
-        id: messageID,
-        sessionID: this.sessionId,
-        role: "user",
-        time: {
-          created,
-        },
-        agent: this.config.agentName ?? "zcode-agent",
-        metadata: compactReminderPartMetadata(entry.metadata),
-        modelSelection: currentModel,
-        semantics: {
-          origin: "agent_runtime",
-          kind: "system_reminder",
-          source: String(entry.metadata.source ?? "compact_reminder"),
-          uiVisibility: "hidden",
-          providerVisibility: "visible",
-          transcriptVisibility: "hidden",
-        },
-        system: this.config.systemPrompt,
-        synthetic: true,
-        tools: Object.fromEntries(this.getTools().map((tool) => [tool.name, true])),
-        visibility: "model-only",
-      },
-      traceContext,
-    );
-    await this.persistPart(
-      {
-        id: createPartId(),
-        sessionID: this.sessionId,
-        messageID,
-        type: "text",
-        text: entry.content,
-        synthetic: true,
-        time: {
-          start: created,
-          end: created,
-        },
-        metadata: compactReminderPartMetadata(entry.metadata),
-      },
-      traceContext,
-    );
-    return messageID;
-  } catch (error) {
-    await removeCompactPersistenceMessagesBestEffort.call(this, [messageID], traceContext);
+    await removeRuntimePersistenceMessagesBestEffort.call(this, persistedMessageIds, traceContext);
     throw error;
   }
 }

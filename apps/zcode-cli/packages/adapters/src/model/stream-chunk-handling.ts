@@ -9,6 +9,7 @@ import {
   logIgnoredStreamChunk,
   recordStreamChunkDiagnostic,
 } from "./runner-diagnostics.js";
+import { AiSdkModelAdapterError } from "./errors.js";
 
 import { type AttemptAdmission } from "./request-admission.js";
 

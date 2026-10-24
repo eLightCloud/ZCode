@@ -58,7 +58,7 @@ export async function handleCommand(
     const parsed = parseCommandEnvelope(rawParams);
     const sessionId = parsed.ok ? parsed.envelope.sessionId : null;
     const ready = sessionId === null ? undefined : this.readyFlights.get(sessionId);
-    if (ready) await ready;
+    if (ready && sessionId !== null && !this.historyOpenings.has(sessionId)) await ready;
   }
 
   const outcome = await this.inbox.handle(rawParams);
@@ -148,6 +148,11 @@ export async function handleCommand(
       this.inbox.pinLiveInput(outcome.envelope.sessionId, durableInputIntent);
     }
     const result = await this.host.executeCommand(outcome.envelope, admission);
+    // Bug 根因：首输入标题先于 deferred 提升发出，列表会过滤它；ACK 后若初始化/Hook
+    // 尚未结束便没有下一事件。沿用成功执行边界补发当前摘要，不等待 TurnStarted。
+    const admittedSessionId =
+      result?.type === "createSession" ? result.sessionId : outcome.envelope.sessionId;
+    if (admittedSessionId) this.publishCurrentSummaryToIndex(admittedSessionId);
     // 新建/侧聊命令采用结果会话的开关，避免把父会话或当前 App 设置误记到新会话。
     const telemetrySessionId =
       result?.type === "createSession" || result?.type === "createSelectionSideSession"

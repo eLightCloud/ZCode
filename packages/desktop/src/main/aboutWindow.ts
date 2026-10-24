@@ -1,7 +1,9 @@
 interface CustomAboutDialogHtmlInput {
   applicationName: string;
   iconDataUrl?: string;
+  /** Source attribution belongs only to the independent legal region. */
   attribution?: string;
+  legalLabel?: string;
   appVersion: string;
   copyright: string;
   optimizationLine: string;
@@ -203,9 +205,11 @@ export function createCustomAboutDialogHtml(input: CustomAboutDialogHtmlInput): 
           </h1>
           <div class="meta">
             ${input.optimizationLine ? `<div>${escapeHtml(input.optimizationLine)}</div>` : ""}
+          </div>
+          <section class="meta legal" aria-label="${escapeHtml(input.legalLabel ?? "Legal and open source")}">
             ${input.attribution ? `<div>${escapeHtml(input.attribution)}</div>` : ""}
             <div>${escapeHtml(input.copyright)}</div>
-          </div>
+          </section>
         </div>
         <div class="spacer"></div>
         <button class="ok-button" type="button" autofocus>${escapeHtml(input.okButtonLabel)}</button>

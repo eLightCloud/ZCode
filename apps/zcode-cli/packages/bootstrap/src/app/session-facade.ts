@@ -1,3 +1,4 @@
+import { readUserModelSelection } from "./session-model-selection.js";
 import type { SupportedLocale } from "@zcode/contracts";
 
 import { type GoalStatus, type TurnInputIntentMetadata } from "@zcode/contracts";
@@ -50,7 +51,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
         selection?: ResolvedRegistrySelection;
       } => {
     const registry = deps.providerRegistry;
-    const selection = deps.runtime.getSessionModelSelection();
+    const selection = readUserModelSelection(deps);
     if (!selection) return { owned: false };
     const { providerId } = selection;
     if (!registry.getProvider(providerId)) return { owned: false };

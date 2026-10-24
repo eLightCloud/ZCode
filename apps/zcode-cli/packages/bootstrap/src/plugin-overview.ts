@@ -181,6 +181,8 @@ export function getZCodePluginsOverview(
       marketplace: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
       version: def.version,
       installed: false,
+      // Bugfix：可恢复条目只带 listing 时丢了 "ui"，卸载后的文档插件从「UI 插件」掉进分类分组。
+      ...(def.componentTypes ? { componentTypes: [...def.componentTypes] } : {}),
       ...(listing ? { listing } : {}),
     };
   });
@@ -345,6 +347,7 @@ export function inferComponentTypes(raw: Record<string, unknown>): string[] {
   if ("hooks" in raw) types.push("hook");
   if ("mcpServers" in raw) types.push("mcp");
   if ("lspServers" in raw) types.push("lsp");
+  if (Array.isArray(raw.componentTypes) && raw.componentTypes.includes("ui")) types.push("ui");
   return types;
 }
 
@@ -360,5 +363,6 @@ export function inferComponentTypesFromMetadata(plugin: PluginMetadata): string[
     types.push("mcp");
   }
   if (plugin.hookDetails.length > 0) types.push("hook");
+  if (plugin.uiSurfaces?.length) types.push("ui");
   return types;
 }

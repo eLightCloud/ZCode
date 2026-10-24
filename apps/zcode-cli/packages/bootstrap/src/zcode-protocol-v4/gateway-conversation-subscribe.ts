@@ -1,3 +1,14 @@
+import type { ConversationTopicFrame } from "@zcode/shared/zcode-protocol-v4";
+import { DELIVERY_PROFILES } from "@zcode/shared/zcode-protocol-v4";
+import { parseConversationTopic } from "@zcode/shared/zcode-protocol-v4";
+import { parseSessionsIndexTopic } from "@zcode/shared/zcode-protocol-v4";
+import { parseWorkspaceConfigTopic } from "@zcode/shared/zcode-protocol-v4";
+import { v4ConversationSubscribeParamsSchema } from "@zcode/shared/zcode-protocol-v4";
+import { v4ConversationUnsubscribeParamsSchema } from "@zcode/shared/zcode-protocol-v4";
+import { subscriptionRouteKey } from "./gateway-support.js";
+import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
+import type { V4SubscribeDispatchResult } from "./gateway-support.js";
+import { V4SubscribeSessionUnavailableError } from "./cold-session-resume.js";
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
 // + v4/command → CommandInbox → 宿主 executor 的收口。
@@ -8,21 +19,6 @@
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
 
-import type { ConversationTopicFrame } from "@zcode/shared/zcode-protocol-v4";
-
-import {
-  DELIVERY_PROFILES,
-  parseConversationTopic,
-  parseSessionsIndexTopic,
-  parseWorkspaceConfigTopic,
-  v4ConversationSubscribeParamsSchema,
-  v4ConversationUnsubscribeParamsSchema,
-} from "@zcode/shared/zcode-protocol-v4";
-
-import { subscriptionRouteKey } from "./gateway-support.js";
-
-import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
-import type { V4SubscribeDispatchResult } from "./gateway-support.js";
 /** v4/conversation/subscribe：裁决 + server 内部 initial frame，公共响应由 server 只取 ACK。 */
 
 export async function subscribe(
@@ -54,11 +50,37 @@ export async function subscribeReserved(
   // - 有 publisher 且事件日志完整（流式 live）→ 保留，重放会双计且打断流。
   const restoreStartedAt = performance.now();
   const existingReady = this.readyFlights.get(sessionId);
-  const publisher = existingReady
-    ? await existingReady
-    : !isLiveConversation
-      ? await this.ensureColdReadyPublisher(sessionId, params.resumeThoughtLevel, params.workspace)
-      : await this.hydratePublisher(sessionId);
+  const historyFirst = params.historyFirst === true && Boolean(this.host.loadPersistedMessages);
+  const initialState = this.publishers.get(sessionId)?.getSnapshot().runtimeInitialization;
+  if (!historyFirst && initialState?.status === "failed") {
+    throw new V4SubscribeSessionUnavailableError(
+      sessionId,
+      "fault.subscribe.resumeFailed",
+      initialState.message,
+    );
+  }
+  const publisher =
+    historyFirst &&
+    (this.historyOpenings.has(sessionId) ||
+      initialState?.status === "failed" ||
+      (!isLiveConversation && !existingReady))
+      ? await this.ensureHistoryReadyPublisher(
+          sessionId,
+          params.resumeThoughtLevel,
+          params.workspace,
+          params.additionalDirectories,
+          params.retryInitialization,
+        )
+      : existingReady
+        ? await existingReady
+        : !isLiveConversation
+          ? await this.ensureColdReadyPublisher(
+              sessionId,
+              params.resumeThoughtLevel,
+              params.workspace,
+              params.additionalDirectories,
+            )
+          : await this.hydratePublisher(sessionId);
   const cliSessionRestoreMs = !isLiveConversation
     ? Math.max(0, Math.round(performance.now() - restoreStartedAt))
     : undefined;
@@ -86,12 +108,17 @@ export async function subscribeReserved(
     dispatch = this.subscribeDispatch(result.ack, result.reservation, () => {
       const state = this.flushStates.get(routeKey);
       if (state) this.scheduleFlush(routeKey, state, publisher);
+      this.historyOpenings.get(sessionId)?.start();
     });
     dispatch.ack = {
       ...dispatch.ack,
       openTiming: {
         version: 1,
-        ...(cliSessionRestoreMs !== undefined ? { cliSessionRestoreMs } : {}),
+        ...(cliSessionRestoreMs !== undefined
+          ? historyFirst
+            ? { historyReadyMs: cliSessionRestoreMs }
+            : { cliSessionRestoreMs }
+          : {}),
         initialFrameEncodeMs: Math.max(
           0,
           Math.round(performance.now() - initialFrameEncodeStartedAt),

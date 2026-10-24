@@ -39,6 +39,7 @@ export async function completeFailedToolCall(
     failureStage: "handler" | "serialize" | "post_hook";
   },
   telemetry: ToolExecutionSpanWriter | undefined,
+  pluginId: string | undefined,
 ) {
   const durationMs = Date.now() - startTime;
   const failureHookResult = await runPostToolUseFailureHooks(
@@ -87,6 +88,7 @@ export async function completeFailedToolCall(
     turnId,
     result.error,
     handlerState.skillTelemetryMetadata,
+    pluginId,
   );
 
   deps.logger?.error(

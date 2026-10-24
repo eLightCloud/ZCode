@@ -115,7 +115,7 @@ export function appendStreamingToolInput(
 ): ConversationDelta[] {
   const toolCallId = String(payload.toolCallId ?? "");
   const rowId = this.toolRowIdByCallId.get(toolCallId);
-  if (rowId === undefined) return [];
+  if (rowId === undefined || this.findToolRow(toolCallId)?.input !== undefined) return [];
   const state = this.fileToolInputPreviewByCallId.get(toolCallId);
   if (!state) {
     return [{ op: "row.delta", rowId, path: "inputText", append: payload.delta }];
@@ -166,6 +166,8 @@ export function finalizeStreamingToolInput(
   if (shouldHideInvalidToolCallFromProduct(payload.toolName)) return [];
   const inputText = stringifyToolInput(payload.input);
   const existing = this.findToolRow(toolCallId);
+  // scheduled 或完整 tool_call 已定稿输入；迟到原始流不能覆盖执行身份。
+  if (existing?.input !== undefined) return [];
   if (existing) {
     return [
       {
@@ -229,6 +231,7 @@ export function onToolCallScheduled(
         op: "row.upserted",
         row: {
           ...existing,
+          toolName: payload.toolName,
           ...(payload.assistantMessageId
             ? { assistantResponseId: String(payload.assistantMessageId) }
             : {}),

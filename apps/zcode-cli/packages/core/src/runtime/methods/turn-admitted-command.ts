@@ -51,7 +51,11 @@ export async function executeAdmittedTurnCommand(
   // 普通 Turn 过去在异步初始化完成后才读取 Session Selection/输出样式，
   // 初始化期间发生的切模会越过 admission 边界，错误影响已经开始的 Turn。
   // 这里在任何 await 之前冻结本轮事实；后续配置变化只作用于下一轮。
+  const scope = beginRegularTurnScope.call(this, input, options, startReservation);
+  options = scope.options;
   const {
+    offPeakTurn,
+    highspeedFallbackSelection,
     admittedModelSelection,
     admittedOutputStyle,
     compactInstructions,
@@ -67,7 +71,7 @@ export async function executeAdmittedTurnCommand(
     machineState,
     turnAbortScope,
     turnAbortSignal,
-  } = beginRegularTurnScope.call(this, input, options, startReservation);
+  } = scope;
   let activeTurn: ActiveTurnSteeringState | undefined;
   const targetState: { startedTarget: SessionGoal | null } = { startedTarget: null };
   let targetRunHeartbeat: ReturnType<typeof setInterval> | undefined;
@@ -94,7 +98,7 @@ export async function executeAdmittedTurnCommand(
       const executionStartedAt = performance.timeOrigin + performance.now();
       beginLocalTurnPreparation(turnTraceContext, "execution")();
       throwIfTurnAborted(turnAbortSignal);
-      let admittedModel = await createAdmittedTurnModel.call(
+      const modelPreparation = await createAdmittedTurnModel.call(
         this,
         rewindCommand,
         options,
@@ -104,18 +108,23 @@ export async function executeAdmittedTurnCommand(
         events,
         turnStartedAtMs,
         turnTraceContext,
+        compactInstructions,
+        highspeedFallbackSelection,
       );
-      let phaseStartedAt = startTurnPhase("context_initialization");
-      phaseStartedAt = await prepareRegularTurnContext.call(
-        this,
-        admittedModel,
-        turnTraceContext,
-        completeTurnPhase,
-        phaseStartedAt,
-        turnAbortSignal,
-        startTurnPhase,
-      );
-
+      const { admittedModel, creationFailure } = modelPreparation;
+      let phaseStartedAt: number;
+      if (!creationFailure) {
+        phaseStartedAt = startTurnPhase("context_initialization");
+        phaseStartedAt = await prepareRegularTurnContext.call(
+          this,
+          admittedModel,
+          turnTraceContext,
+          completeTurnPhase,
+          phaseStartedAt,
+          turnAbortSignal,
+          startTurnPhase,
+        );
+      }
       if (compactInstructions !== null) {
         const compactModel = await applySubmissionExecutionState(
           this,
@@ -144,9 +153,16 @@ export async function executeAdmittedTurnCommand(
           options?.inputId,
         );
       }
-      activeTurn = this.beginActiveTurn(turnId, turnTraceContext, "regular", true, {
-        ...(options?.inputId === undefined ? {} : { inputId: options.inputId }),
-      });
+      // 创建失败轮不会进入 model step，guide 无法被消费；不可 steer 时调用方会改走队列。
+      activeTurn = this.beginActiveTurn(
+        turnId,
+        turnTraceContext,
+        "regular",
+        creationFailure === undefined,
+        {
+          ...(options?.inputId === undefined ? {} : { inputId: options.inputId }),
+        },
+      );
       this.logger?.info("Turn started", {
         ...traceContextToLogContext(turnTraceContext),
         event: "turn.started",
@@ -161,14 +177,20 @@ export async function executeAdmittedTurnCommand(
       await ensureGroupTaskPermissionScope(this.sessionStore, this.sessionId, options?.intent);
       // execution-scoped 临时 Provider（例如闲时任务）拥有本轮自己的模型，不改写
       // Session Selection；普通 Submission 才在真正开跑时应用其原子选择。
-      const submissionModel = await applySubmissionExecutionState(
-        this,
-        options?.intent,
-        turnTraceContext,
-        options?.modelExecution,
-        admittedModel,
-      );
-      targetState.startedTarget = await this.readSessionTargetForContext(turnTraceContext);
+      // 创建失败轮不再应用：重复建模会在主 try 之外再次抛错；也不改写选择、mode、plan，
+      // 不占用目标轮次。
+      const submissionModel = creationFailure
+        ? undefined
+        : await applySubmissionExecutionState(
+            this,
+            options?.intent,
+            turnTraceContext,
+            options?.modelExecution,
+            admittedModel,
+          );
+      targetState.startedTarget = creationFailure
+        ? null
+        : await this.readSessionTargetForContext(turnTraceContext);
       completeTurnPhase("target_read", phaseStartedAt);
       if (targetState.startedTarget?.status !== "active") {
         targetState.startedTarget = null;
@@ -270,6 +292,8 @@ export async function executeAdmittedTurnCommand(
           displayInput,
           turnAbortSignal,
           shouldRetryTitleGenerationAfterTurn,
+          modelPreparation,
+          events,
         );
 
         this.messageHistory.setCacheMiss();
@@ -301,6 +325,8 @@ export async function executeAdmittedTurnCommand(
           machineState,
           admittedOutputStyle,
           turnTraceContext,
+          modelPreparation,
+          highspeedFallbackSelection,
         );
 
         openGoalStateChangeReminderDeferral(activeTurn);
@@ -347,6 +373,7 @@ export async function executeAdmittedTurnCommand(
           turnStartedAtMs,
           turnId,
           userMessageId,
+          modelPreparation,
         );
       }
     }).then(
@@ -383,6 +410,9 @@ export async function executeAdmittedTurnCommand(
       activeTurn,
       turnAbortScope,
       turnTraceContext,
+      offPeakTurn,
+      turnAbortSignal,
+      events,
     );
   });
 }

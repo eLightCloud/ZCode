@@ -3,8 +3,9 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.2",
     id: "0016_session_input_ledger",
-    // session_input 账本：输入的 durable 生命周期
-    // admitted -> promoted / cancelled / discarded。队列/唤醒的存在性若只在
+    touchedTables: ["session_input"],
+    // session_input 账本（16-timeline-authority-plan P3）：输入的 durable 生命周期
+    // admitted -> promoted / cancelled / discarded。旧实现里队列/唤醒的存在性只在
     // 进程内存（事件日志也是内存的），崩溃即静默丢；账本让「queue 消失但不进
     // history」不可能静默发生，并为输入类 command 提供 durable 幂等。
     sql: `
@@ -33,7 +34,8 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.2",
     id: "0017_session_input_start_now_delivery",
-    // 所有 input command 都在执行前落 durable admission，startNow 也需要独立
+    touchedTables: ["session_input", "session_input_before_start_now"],
+    // 05C：所有 input command 都在执行前落 durable admission，startNow 也需要独立
     // delivery，不能伪装成 queue。SQLite 不能原地修改 CHECK，必须重建表并保全账本。
     sql: `
       alter table session_input rename to session_input_before_start_now;
@@ -76,7 +78,8 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.2",
     id: "0018_session_input_failed_status",
-    // fork bundle 提交后 child runtime 仍可能同步启动失败。该输入已经被 parent
+    touchedTables: ["session_input", "session_input_before_failed_status"],
+    // Bugfix：fork bundle 提交后 child runtime 仍可能同步启动失败。该输入已经被 parent
     // accepted fact 接受，不能伪装成 cancelled/discarded；新增 durable failed 终态，并通过
     // 重建 CHECK 保证旧库升级后也能写入，重启不会再次消费或改写它。
     sql: `

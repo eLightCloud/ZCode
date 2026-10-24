@@ -1,12 +1,11 @@
-import { SESSION_ENTRY_MODEL_SELECTION, traceContextToLogContext } from "@zcode/contracts";
-
-import { type ModelSelection } from "@zcode/provider";
-
 import type { CreateSessionFacadeDeps } from "./session-facade-contract.js";
+import { SESSION_ENTRY_MODEL_SELECTION } from "@zcode/contracts";
+import { traceContextToLogContext } from "@zcode/contracts";
+import type { ModelSelection } from "@zcode/provider";
 
 export async function persistSessionModelSelection(deps: CreateSessionFacadeDeps): Promise<void> {
   if (!deps.sessionStore.saveSessionEntry) return;
-  const selection = deps.runtime.getSessionModelSelection();
+  const selection = readUserModelSelection(deps);
   if (!selection) return;
   const timestamp = Date.now();
   try {
@@ -43,4 +42,10 @@ export async function persistSessionModelSelection(deps: CreateSessionFacadeDeps
 /** 仅供仍以 provider/model 字符串工作的内部 App facade；不是 ModelSelection 序列化。 */
 export function formatLegacyRuntimeModelValue(selection: ModelSelection | undefined): string {
   return selection ? `${selection.providerId}/${selection.modelId}` : "";
+}
+
+export function readUserModelSelection(deps: CreateSessionFacadeDeps): ModelSelection | undefined {
+  return deps.cliDefaultSelection
+    ? deps.cliDefaultSelection.get()
+    : deps.runtime.getSessionModelSelection();
 }

@@ -1,17 +1,20 @@
-import { createChildTraceContext, createQueryId, createTurnId } from "../deps.js";
-import type { QueryId, TurnInputIntentMetadata } from "../deps.js";
+import { createChildTraceContext } from "../deps.js";
+import { createQueryId } from "../deps.js";
+import { createTurnId } from "../deps.js";
+import type { QueryId } from "../deps.js";
+import type { TurnInputIntentMetadata } from "../deps.js";
 import type { PromptRuntimeCommand } from "../command-queue.js";
 import { createRuntimeCommandId } from "../command-queue.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { enqueueCancellableRuntimeCommand } from "./runtime-command-submit.js";
 import { requiredPluginSelection } from "./required-plugin.js";
-import type {
-  ActiveTurnStartReservation,
-  ExecuteTurnOptions,
-  PromptAdmissionOptions,
-  PromptAdmissionReceipt,
-  TurnResult,
-} from "../types.js";
+import type { ActiveTurnStartReservation } from "../types.js";
+import type { ExecuteTurnOptions } from "../types.js";
+import type { PromptAdmissionOptions } from "../types.js";
+import type { PromptAdmissionReceipt } from "../types.js";
+import type { TurnResult } from "../types.js";
+import { acceptSubmissionModelSelection } from "./turn-model.js";
+import { captureHighspeedFallbackSelection } from "./turn-model.js";
 
 /**
  * 每个 AgentRuntime 自己完成 prompt 的 admission：检查 busy 边界、建立 reservation、
@@ -34,6 +37,8 @@ export async function admitPrompt(
       input,
       inputId: options.inputId,
       intent: admissionIntent(options.intent, "queue"),
+      modelSelectionScope: options.modelExecution?.selectionScope,
+      highspeedFallbackSelection: options.modelExecution?.selectionFallback?.target,
       queryId: options.queryId,
       toolDisallowlist: options.toolDisallowlist,
       traceContext: options.traceContext,
@@ -114,11 +119,26 @@ export async function admitPrompt(
     turnId,
   };
   this.reserveTurnStart(turnId, turnTraceContext, "regular");
+  let selectionAccepted = Promise.resolve();
 
+  if (options?.modelExecution) {
+    options = {
+      ...options,
+      modelExecution: captureHighspeedFallbackSelection(this, options.modelExecution),
+    };
+  }
   const executeOptions = options as ExecuteTurnOptions | undefined;
   const completion = enqueueCancellableRuntimeCommand<TurnResult, PromptRuntimeCommand>(this, {
     abortSignal: options?.abortSignal,
     onCommandCancelled: () => this.releaseTurnStart(turnId),
+    onCommandAccepted: () => {
+      selectionAccepted = acceptSubmissionModelSelection(
+        this,
+        options?.intent,
+        turnTraceContext,
+        options?.modelExecution,
+      );
+    },
     createCommand: ({ reject, resolve }) => ({
       attachments,
       createdAt: new Date(),
@@ -139,6 +159,7 @@ export async function admitPrompt(
   });
   // admission 已经完成；执行失败由现有 turn 事件/调用方消费，不制造 unhandled rejection。
   void completion.catch(() => undefined);
+  await selectionAccepted;
   return { completion, kind: "started", turnId };
 }
 

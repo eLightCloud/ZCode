@@ -1,3 +1,16 @@
+import { normalizeStoredTitleSource } from "./v4-bridge-session-facts.js";
+import type { ZCodeWorkspaceRef } from "@zcode/shared";
+import { V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
+import type { V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
+import type { Logger } from "@zcode/contracts";
+import type { SessionId } from "@zcode/contracts";
+import { activateSessionForResume } from "./server-operations.js";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+import type { ZCodeProtocolSessionRecord } from "./server-types.js";
+import { persistHighspeedTimingOnTurnTerminal } from "./v4-bridge-highspeed-timing.js";
+import { parseRemoteWorkspaceIdentity } from "@zcode/shared";
+import type { MessageWithParts } from "@zcode/contracts";
+import { discardFailedSessionResume } from "./server-operations.js";
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
@@ -8,22 +21,6 @@
 //
 // 不做桥接：依赖方向只允许 旧目录 → v4 目录。
 // 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
-import { type ZCodeWorkspaceRef } from "@zcode/shared";
-
-import { V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
-
-import { type V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
-
-import type { Logger, SessionId } from "@zcode/contracts";
-
-import { activateSessionForResume } from "./server-operations.js";
-
-import type {
-  ZCodeProtocolAgentServerContext,
-  ZCodeProtocolSessionRecord,
-} from "./server-types.js";
-
-import { persistHighspeedTimingOnTurnTerminal } from "./v4-bridge-highspeed-timing.js";
 
 export function createV4GatewayLifecycleHost(
   context: ZCodeProtocolAgentServerContext,
@@ -33,6 +30,35 @@ export function createV4GatewayLifecycleHost(
   return {
     cliVersion: context.deps.version,
     sessionExists: (sessionId) => context.sessions.has(sessionId),
+    reconcileSessions: async ({ workspaceId, sessionIds }) => {
+      const store = context.deps.sessionStore;
+      if (!store) throw new Error("Session store is unavailable");
+      const remote = parseRemoteWorkspaceIdentity(workspaceId);
+      const directory = remote?.workspacePath ?? workspaceId;
+      const sessions = await Promise.all(
+        [...new Set(sessionIds)].map(async (sessionId) => {
+          const session = await store.getSession(sessionId as SessionId);
+          const sameWorkspace =
+            session &&
+            session.directory === directory &&
+            (remote
+              ? session.workspaceID === workspaceId
+              : !session.workspaceID || session.workspaceID === workspaceId);
+          if (!sameWorkspace) return { sessionId, exists: false as const, deleted: false as const };
+          return {
+            sessionId,
+            exists: true as const,
+            deleted: session.time.deleted !== undefined,
+            title: session.title,
+            titleSource: normalizeStoredTitleSource(session.titleSource),
+            createdAt: session.time.created,
+            updatedAt: session.time.updated,
+            ...(session.lastOutcome ? { lastOutcome: session.lastOutcome } : {}),
+          };
+        }),
+      );
+      return { sessions };
+    },
     onDebug: (message) => log?.debug(message),
     onTargetCompleted: (sessionId) => {
       const record = context.sessions.get(sessionId);
@@ -53,13 +79,23 @@ export function createV4GatewayLifecycleHost(
       persistHighspeedTimingOnTurnTerminal(context, sessionId, event, snapshot);
     },
     // Gateway 的单一 READY promise 负责并发与水位；binder 只恢复 runtime 并返回 M0/M1。
+    retainSessionRuntime: async (sessionId) =>
+      (await context.sessionResidentPool?.acquireOperation(sessionId)) ?? (() => undefined),
+    loadPersistedMessages: async (sessionId) => {
+      const store = context.deps.sessionStore;
+      if (!store || !(await store.getSession(sessionId as SessionId)))
+        throw new Error("fault.subscribe.sessionNotFound");
+      return store.messages({ sessionID: sessionId as SessionId });
+    },
     resumePersistedSession: async (
       sessionId,
       resumeThoughtLevel,
       workspace?: ZCodeWorkspaceRef,
+      additionalDirectories?: string[],
+      persistedMessages?: MessageWithParts[],
     ) => {
       const persisted = await context.deps.sessionStore?.getSession(sessionId as SessionId);
-      if (!persisted) {
+      if (!persisted || persisted.time.deleted !== undefined) {
         context.logger?.warn("ZCode Protocol v4 cold resume has no persisted session", {
           activeSessionCount: context.sessions.size,
           event: "zcode_protocol.v4.resume_persisted_missing",
@@ -68,6 +104,7 @@ export function createV4GatewayLifecycleHost(
         });
         return { status: "notFound" };
       }
+      const existingRecord = context.sessions.get(sessionId);
       const activated = await activateSessionForResume(
         context,
         {
@@ -75,13 +112,20 @@ export function createV4GatewayLifecycleHost(
           // session.path 可能是规范化后的执行 cwd，不能覆盖当前 attachment
           // 已知的 workspace 身份。旧 session 没有 attachment 上下文时仍走原有持久化回退。
           ...(workspace ? { workspace } : {}),
+          ...(additionalDirectories !== undefined ? { additionalDirectories } : {}),
           ...(resumeThoughtLevel ? { thoughtLevel: resumeThoughtLevel } : {}),
         },
-        { reusePersistedMessages: true },
+        { reusePersistedMessages: true, persistedMessages },
       );
       return {
         status: "resumed",
         persistedMessages: activated.persistedMessages,
+        ...(!existingRecord
+          ? {
+              disposeOnFailure: () =>
+                discardFailedSessionResume(context, sessionId, activated.record),
+            }
+          : {}),
       };
     },
     emitWireFrame: (wire) =>
@@ -96,6 +140,8 @@ export function createV4GatewayLifecycleHost(
         method: V4_NOTIFICATIONS.conversationTelemetryFact,
         params: fact,
       }),
+    emitPluginUiToolResult: (result) =>
+      context.notify({ method: V4_NOTIFICATIONS.pluginUiToolResult, params: result }),
     emitCuaPermissionObservation: (observation) =>
       context.notify({
         method: V4_NOTIFICATIONS.cuaPermissionObservation,

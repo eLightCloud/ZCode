@@ -1,25 +1,43 @@
-/* oxlint-disable eslint(max-lines) -- Supervisor 集中维护生命周期、Core 代际和更新回滚状态机，启动恢复锁边界修复不应拆散其原子流程。 */
-
-import { type ChildProcess } from "node:child_process";
+import { Console } from "node:console";
+import type { SourceServerRunningTask } from "@zcode/shared";
+import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServiceLogger } from "@zcode/services/node";
-import { CRASH_BACKOFF_MS, coreMessageSchema, SERVER_CLI_PROTOCOL_VERSION, type ControlRequest, type LifecycleState, type ReleaseManifest, type ServerStatus } from "../contracts.js";
-import { createControlServer, type ControlHandler } from "../ipc/controlServer.js";
+import { CRASH_BACKOFF_MS } from "../contracts.js";
+import { coreMessageSchema } from "../contracts.js";
+import { SERVER_CLI_PROTOCOL_VERSION } from "../contracts.js";
+import type { ControlRequest } from "../contracts.js";
+import type { LifecycleState } from "../contracts.js";
+import type { ReleaseManifest } from "../contracts.js";
+import type { ServerStatus } from "../contracts.js";
+import { createControlServer } from "../ipc/controlServer.js";
+import type { ControlHandler } from "../ipc/controlServer.js";
 import { ControlRequestError } from "../ipc/controlError.js";
 import { DataRootLock } from "../runtime/lock.js";
-import { resolveServerLayout, type ServerLayout } from "../runtime/paths.js";
+import { resolveServerLayout } from "../runtime/paths.js";
+import type { ServerLayout } from "../runtime/paths.js";
 import { ReleaseManager } from "../runtime/releaseManager.js";
 import { createStatusPersister } from "../runtime/statusSnapshot.js";
 import { recoverSupervisorStartup } from "../runtime/startupRecovery.js";
 import { waitForUpdateReady } from "../runtime/updateReadiness.js";
-import { createRollbackFailure, updateErrorMessage } from "../runtime/updateErrors.js";
+import { createRollbackFailure } from "../runtime/updateErrors.js";
+import { updateErrorMessage } from "../runtime/updateErrors.js";
 import { CrashBudget } from "./crashBudget.js";
 import { requestCoreMaintenance } from "./coreMaintenanceRequest.js";
+import { SOURCE_SERVER_UPDATE_RUNNING_TASKS_ERROR_CODE } from "@zcode/shared";
+import { CORE_KILL_TIMEOUT_MS } from "../contracts.js";
+import { CORE_READY_TIMEOUT_MS } from "../contracts.js";
+import { CORE_STOP_GRACE_TIMEOUT_MS } from "../contracts.js";
+import type { RuntimeIdentity } from "../contracts.js";
+
+/* oxlint-disable eslint(max-lines) -- Supervisor 集中维护生命周期、Core 代际和更新回滚状态机，启动恢复锁边界修复不应拆散其原子流程。 */
 
 // 生命周期事件按运维排障判据用 info/warn/error（出问题时运维要能在日志里看到）；
 // 高频 heartbeat/task-activity 明细走 debug，避免生产日志膨胀。
-const log = createServiceLogger("server-supervisor");
+const log = createServiceLogger("server-supervisor", {
+  sink: new Console({ stdout: process.stderr, stderr: process.stderr }),
+});
 
 export interface CoreLauncher {
   launch(generation: number, release?: ReleaseManifest | null): ChildProcess;
@@ -29,17 +47,25 @@ export interface SupervisorOptions {
   layout?: ServerLayout;
   launcher: CoreLauncher;
   version: string;
+  /** 当前 Supervisor bundle 所属 immutable release；开发态入口允许缺失。 */
+  supervisorReleaseId?: string;
   serviceRegistered?: boolean;
-  /** 测试和诊断可缩短 ready 等待；生产默认保持 15 秒。 */
+  /** 测试和诊断可缩短 ready 等待；生产默认使用 CORE_READY_TIMEOUT_MS。 */
   coreReadyTimeoutMs?: number;
-  /** 测试可缩短 Core 优雅退出和强杀后的终态等待；生产分别默认 5 秒和 2 秒。 */
+  /** 测试可缩短 Core 优雅退出和强杀后的终态等待；生产默认使用 contracts 中的停止预算。 */
   coreStopGraceTimeoutMs?: number;
   coreKillTimeoutMs?: number;
   now?: () => number;
   onStopped?: () => void;
 }
 
-type LifecycleOperationKind = "stop" | "idle-stop" | "restart" | "update" | "uninstall" | "maintenance";
+type LifecycleOperationKind =
+  | "stop"
+  | "idle-stop"
+  | "restart"
+  | "update"
+  | "uninstall"
+  | "maintenance";
 class IdleStopBlocked extends Error {}
 
 export class Supervisor {
@@ -56,10 +82,15 @@ export class Supervisor {
   private port: number | null = null;
   private startedAt: number | null = null;
   private runningTaskCount = 0;
+  private runningTasks: SourceServerRunningTask[] | undefined;
   private lastExitReason: string | null = null;
   private readonly persistStatusSnapshot: () => Promise<void>;
-  private lifecycleOperation: { kind: LifecycleOperationKind; promise: Promise<unknown> } | undefined;
+  private lifecycleOperation:
+    | { kind: LifecycleOperationKind; promise: Promise<unknown> }
+    | undefined;
   private activeRelease: ReleaseManifest | null = null;
+  private coreVersion: string | undefined;
+  private coreReleaseId: string | undefined;
 
   public constructor(private readonly options: SupervisorOptions) {
     this.layout = options.layout ?? resolveServerLayout();
@@ -81,18 +112,26 @@ export class Supervisor {
       // 启动恢复会回写 current.json 并删除 update-transaction.json，必须先取得
       // data-root 单实例锁；否则存活 Supervisor 的 apply-update 会与第二个启动者竞态，
       // 造成内存继续运行新 release、磁盘 current pointer 却被回滚到旧 release。
-      await recoverSupervisorStartup(this.releaseManager, this.layout.uninstalledFile, this.layout.serverRoot, async (error) => {
-        this.state = "stop-failed";
-        this.lastExitReason = `update rollback recovery failed: ${updateErrorMessage(error)}`;
-        await this.persistStatusSnapshot();
-      });
+      await recoverSupervisorStartup(
+        this.releaseManager,
+        this.layout.uninstalledFile,
+        this.layout.serverRoot,
+        async (error) => {
+          this.state = "stop-failed";
+          this.lastExitReason = `update rollback recovery failed: ${updateErrorMessage(error)}`;
+          await this.persistStatusSnapshot();
+        },
+      );
       // recovery 可能已经恢复 current pointer；必须在恢复后读取，避免启动已回滚的 candidate。
       this.activeRelease = await this.releaseManager.readCurrentForExecution();
       await mkdir(this.layout.runDir, { recursive: true, mode: 0o700 });
       const handler: ControlHandler = (request) => this.handleControl(request);
       this.control = await createControlServer(this.layout.controlEndpoint, handler);
       this.state = "starting";
-      log.info("supervisor started", { serverRoot: this.layout.serverRoot, version: this.options.version });
+      log.info("supervisor started", {
+        serverRoot: this.layout.serverRoot,
+        version: this.options.version,
+      });
       this.launchCore();
       await this.persistStatusSnapshot();
       return this.status();
@@ -127,13 +166,19 @@ export class Supervisor {
         // 状态，让 status 继续暴露待人工处理的事务，同时释放锁允许同实例稍后重试。
         this.state = recoveryFailed ? "stop-failed" : "stopped";
         await this.persistStatusSnapshot().catch((snapshotError) => {
-          log.warn("failed to persist stopped state after supervisor startup failure", snapshotError);
+          log.warn(
+            "failed to persist stopped state after supervisor startup failure",
+            snapshotError,
+          );
         });
         await this.lock.release();
       } else {
         this.state = "stop-failed";
         await this.persistStatusSnapshot().catch((snapshotError) => {
-          log.warn("failed to persist stop-failed state after supervisor startup failure", snapshotError);
+          log.warn(
+            "failed to persist stop-failed state after supervisor startup failure",
+            snapshotError,
+          );
         });
       }
       throw error;
@@ -160,7 +205,11 @@ export class Supervisor {
     } catch (error) {
       if (!(error instanceof IdleStopBlocked)) throw error;
       // 拒绝状态已在同代 Core 的回执处同步恢复；不能在 await 后覆盖已到达的 exit。
-      log.info("server.idle_stop", { correlationId: randomUUID(), outcome: "blocked", reasonCode: "native_activity" });
+      log.info("server.idle_stop", {
+        correlationId: randomUUID(),
+        outcome: "blocked",
+        reasonCode: "native_activity",
+      });
       return this.status();
     }
     this.state = "stopped";
@@ -211,26 +260,46 @@ export class Supervisor {
           if (settled) return;
           settled = true;
           cleanup();
-          reject(new Error(idleOnly ? "Idle stop was not confirmed; instance retained" : `Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`));
+          reject(
+            new Error(
+              idleOnly
+                ? "Idle stop was not confirmed; instance retained"
+                : `Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`,
+            ),
+          );
         };
         const handleError = (error: Error): void => {
           log.warn("server core emitted an error while stopping; awaiting exit or close", error);
         };
         const forceKill = (): void => {
-          if (idleOnly) { fail(); return; }
-          log.warn("server core did not exit within grace period, sending SIGKILL", { pid: core.pid });
+          if (idleOnly) {
+            fail();
+            return;
+          }
+          log.warn("server core did not exit within grace period, sending SIGKILL", {
+            pid: core.pid,
+          });
           core.kill("SIGKILL");
-          if (!settled) killTimer = setTimeout(fail, this.options.coreKillTimeoutMs ?? 2_000);
+          if (!settled) {
+            killTimer = setTimeout(fail, this.options.coreKillTimeoutMs ?? CORE_KILL_TIMEOUT_MS);
+          }
         };
         const graceTimer = setTimeout(() => {
           forceKill();
-        }, this.options.coreStopGraceTimeoutMs ?? 5_000);
+        }, this.options.coreStopGraceTimeoutMs ?? CORE_STOP_GRACE_TIMEOUT_MS);
         core.once("exit", finish);
         core.once("close", finish);
         core.once("error", handleError);
         const idleResult = (message: unknown): void => {
-          if (!idleOnly || typeof message !== "object" || message === null
-            || !("type" in message) || message.type !== "idle-stop-blocked" || settled) return;
+          if (
+            !idleOnly ||
+            typeof message !== "object" ||
+            message === null ||
+            !("type" in message) ||
+            message.type !== "idle-stop-blocked" ||
+            settled
+          )
+            return;
           settled = true;
           // 回执与 exit 在同一事件循环仲裁。先恢复 ready，使紧随其后的 exit
           // 走正常恢复；异步 catch 不得再把 crashed 覆盖成无 Core 的 ready。
@@ -270,7 +339,11 @@ export class Supervisor {
     const pending = await this.releaseManager.readPending();
     if (!pending) throw new Error("No pending release is prepared");
     if (this.runningTaskCount > 0 && !force) {
-      throw new Error("Running tasks require --force for update");
+      throw new ControlRequestError(
+        SOURCE_SERVER_UPDATE_RUNNING_TASKS_ERROR_CODE,
+        "Running tasks require --force for update",
+        false,
+      );
     }
     const previous = await this.releaseManager.readCurrent();
     log.info("applying pending release", { version: pending.version, force });
@@ -282,7 +355,10 @@ export class Supervisor {
       this.activeRelease = pending;
       this.state = "starting";
       this.launchCore();
-      await waitForUpdateReady(() => this.state, this.options.coreReadyTimeoutMs ?? 15_000);
+      await waitForUpdateReady(
+        () => this.state,
+        this.options.coreReadyTimeoutMs ?? CORE_READY_TIMEOUT_MS,
+      );
       await this.releaseManager.completeUpdate();
       log.info("release applied", { version: pending.version });
       return { applied: true, version: pending.version };
@@ -317,7 +393,12 @@ export class Supervisor {
       if (previous) {
         this.state = "starting";
         this.launchCore();
-        try { await waitForUpdateReady(() => this.state, this.options.coreReadyTimeoutMs ?? 15_000); } catch (rollbackError) {
+        try {
+          await waitForUpdateReady(
+            () => this.state,
+            this.options.coreReadyTimeoutMs ?? CORE_READY_TIMEOUT_MS,
+          );
+        } catch (rollbackError) {
           log.error("previous release rollback failed", rollbackError);
           // 旧 release ready 超时只改状态会让仍存活的 Core、PID 和 lock 与 stopped 脱节；复用 stopCore 等待 exit/close，失败则保持 stop-failed。
           if (this.core) await this.stopCore("update-rollback");
@@ -333,15 +414,23 @@ export class Supervisor {
     return {
       protocolVersion: SERVER_CLI_PROTOCOL_VERSION,
       // 默认响应和快照维持旧严格 reader 的字段集合，能力必须显式协商。
-      ...(includeCapabilities ? { capabilities: { idleStop: true as const,
-        dataRootLock: "kernel-sqlite-v1" as const, liveStatus: true as const,
-        ...(process.platform === "win32" ? {} : { idleMaintenance: true as const }),
-      } } : {}),
+      ...(includeCapabilities
+        ? {
+            capabilities: {
+              idleStop: true as const,
+              dataRootLock: "kernel-sqlite-v1" as const,
+              liveStatus: true as const,
+              ...(process.platform === "win32" ? {} : { idleMaintenance: true as const }),
+            },
+          }
+        : {}),
       state: this.state,
       pid: this.core?.pid ?? null,
       port: this.port,
       host: this.host,
-      version: this.options.version,
+      // status.version 保持 Core/current release 的兼容语义；Supervisor 自身版本与 release
+      // 由独立 runtime-identity control 返回，避免向严格持久化 schema 增加字段击穿旧版回滚。
+      version: this.activeRelease?.version ?? this.options.version,
       generation: this.generation,
       startedAt: this.startedAt,
       lastExitReason: this.lastExitReason,
@@ -349,6 +438,19 @@ export class Supervisor {
       runningTaskCount: this.runningTaskCount,
       crashBudget: this.crashBudget.snapshot(),
       updatedAt: Date.now(),
+    };
+  }
+
+  private runtimeIdentity(): RuntimeIdentity {
+    return {
+      supervisorVersion: this.options.version,
+      ...(this.options.supervisorReleaseId
+        ? { supervisorReleaseId: this.options.supervisorReleaseId }
+        : {}),
+      ...(this.activeRelease?.version ? { activeReleaseVersion: this.activeRelease.version } : {}),
+      ...(this.activeRelease?.releaseId ? { activeReleaseId: this.activeRelease.releaseId } : {}),
+      ...(this.coreVersion ? { coreVersion: this.coreVersion } : {}),
+      ...(this.coreReleaseId ? { coreReleaseId: this.coreReleaseId } : {}),
     };
   }
 
@@ -391,10 +493,15 @@ export class Supervisor {
         void this.persistStatusSnapshot();
         return;
       }
-      log.warn(writerWaitTimedOut ? "server core writer wait expired, scheduling retry" : "server core crashed, scheduling restart", {
-        lastExitReason: this.lastExitReason,
-        delayMs: decision.delayMs,
-      });
+      log.warn(
+        writerWaitTimedOut
+          ? "server core writer wait expired, scheduling retry"
+          : "server core crashed, scheduling restart",
+        {
+          lastExitReason: this.lastExitReason,
+          delayMs: decision.delayMs,
+        },
+      );
       void this.persistStatusSnapshot();
       setTimeout(() => {
         if (this.state !== "crashed") return;
@@ -412,10 +519,14 @@ export class Supervisor {
       void this.persistStatusSnapshot();
     });
     child.once("exit", (code, signal) => {
-      handleTerminal(spawnErrorReason ?? `core exited code=${code ?? "null"} signal=${signal ?? "none"}`);
+      handleTerminal(
+        spawnErrorReason ?? `core exited code=${code ?? "null"} signal=${signal ?? "none"}`,
+      );
     });
     child.once("close", (code, signal) => {
-      handleTerminal(spawnErrorReason ?? `core closed code=${code ?? "null"} signal=${signal ?? "none"}`);
+      handleTerminal(
+        spawnErrorReason ?? `core closed code=${code ?? "null"} signal=${signal ?? "none"}`,
+      );
     });
   }
 
@@ -438,18 +549,36 @@ export class Supervisor {
       this.generation = message.generation;
       this.startedAt = Date.now();
       if (this.lastExitReason === "writer-lock-busy") this.lastExitReason = null;
-      log.info("server core ready", { host: this.host, port: this.port, generation: this.generation });
+      this.coreVersion = message.version;
+      this.coreReleaseId = message.releaseId;
+      log.info("server core ready", {
+        host: this.host,
+        port: this.port,
+        generation: this.generation,
+      });
     } else if (message.type === "startup-wait") {
       if (this.state !== "starting") return;
       this.lastExitReason = message.reason;
-      log.warn("server.core.startup", { correlationId: randomUUID(), outcome: "blocked", reasonCode: message.reason, generation: expectedGeneration });
+      log.warn("server.core.startup", {
+        correlationId: randomUUID(),
+        outcome: "blocked",
+        reasonCode: message.reason,
+        generation: expectedGeneration,
+      });
     } else if (message.type === "heartbeat" || message.type === "task-activity") {
       this.runningTaskCount = message.runningTaskCount;
-      log.debug("core activity snapshot", { type: message.type, runningTaskCount: message.runningTaskCount });
+      this.runningTasks = message.runningTasks;
+      log.debug("core activity snapshot", {
+        type: message.type,
+        runningTaskCount: message.runningTaskCount,
+      });
     } else if (message.type === "fatal") {
       if (message.reason === "writer-lock-timeout" && this.state === "starting") {
         this.writerWaitTimedOutCore = child;
-        log.warn("server.core.writer_wait", { reasonCode: message.reason, generation: expectedGeneration });
+        log.warn("server.core.writer_wait", {
+          reasonCode: message.reason,
+          generation: expectedGeneration,
+        });
       } else log.error("server core reported fatal error", { message: message.message });
       this.lastExitReason = message.message;
     } else if (message.type === "exit") {
@@ -471,34 +600,68 @@ export class Supervisor {
     this.port = null;
     this.startedAt = null;
     this.runningTaskCount = 0;
+    this.runningTasks = undefined;
+    this.coreVersion = undefined;
+    this.coreReleaseId = undefined;
   }
 
   private async handleControl(request: ControlRequest): Promise<unknown> {
     switch (request.command) {
-      case "ping": return { protocolVersion: SERVER_CLI_PROTOCOL_VERSION };
-      case "status": return this.status(request.includeCapabilities === true);
-      case "maintenance": return await this.runLifecycleOperation("maintenance", async () => {
-        // 当前持久维护记录依赖 POSIX 目录 fsync；Windows 未验证前不能报告可用能力。
-        if (process.platform === "win32") throw new Error("Core maintenance unavailable on this platform");
-        const core = this.core;
-        if (this.state !== "ready" || !core) throw new Error("Core maintenance unavailable");
-        const result = await requestCoreMaintenance(core, request.input).catch(error => {
-          log.warn("server.maintenance", { operationId: request.input.operationId,
-            action: request.input.action, outcome: "blocked", reasonCode: "unconfirmed" });
-          throw error;
+      case "ping":
+        return { protocolVersion: SERVER_CLI_PROTOCOL_VERSION };
+      case "status":
+        return this.status(request.includeCapabilities === true);
+      case "running-tasks":
+        return this.runningTasks ?? null;
+      case "runtime-identity":
+        return this.runtimeIdentity();
+      case "maintenance":
+        return await this.runLifecycleOperation("maintenance", async () => {
+          // 当前持久维护记录依赖 POSIX 目录 fsync；Windows 未验证前不能报告可用能力。
+          if (process.platform === "win32")
+            throw new Error("Core maintenance unavailable on this platform");
+          const core = this.core;
+          if (this.state !== "ready" || !core) throw new Error("Core maintenance unavailable");
+          const result = await requestCoreMaintenance(core, request.input).catch((error) => {
+            log.warn("server.maintenance", {
+              operationId: request.input.operationId,
+              action: request.input.action,
+              outcome: "blocked",
+              reasonCode: "unconfirmed",
+            });
+            throw error;
+          });
+          if (this.core !== core || this.state !== "ready")
+            throw new Error("Core maintenance generation changed");
+          log.info("server.maintenance", {
+            operationId: request.input.operationId,
+            action: request.input.action,
+            outcome: result.state,
+            reasonCode: result.reasonCode,
+          });
+          return result;
         });
-        if (this.core !== core || this.state !== "ready") throw new Error("Core maintenance generation changed");
-        log.info("server.maintenance", { operationId: request.input.operationId, action: request.input.action,
-          outcome: result.state, reasonCode: result.reasonCode });
-        return result;
-      });
       case "stop":
       case "stop-if-idle":
-        if (request.command === "stop-if-idle" && (this.state !== "ready" || this.runningTaskCount > 0)) {
-          log.info("server.idle_stop", { correlationId: randomUUID(), outcome: "blocked", reasonCode: "native_activity_unknown_or_busy" });
+        if (
+          request.command === "stop-if-idle" &&
+          (this.state !== "ready" || this.runningTaskCount > 0)
+        ) {
+          log.info("server.idle_stop", {
+            correlationId: randomUUID(),
+            outcome: "blocked",
+            reasonCode: "native_activity_unknown_or_busy",
+          });
           return { stopping: false, reason: "native_activity_unknown_or_busy" };
         }
-        this.startAcknowledgedLifecycleOperation(request.command === "stop-if-idle" ? "idle-stop" : "stop", () => this.stopInternal(request.command === "stop-if-idle" ? "idle" : "control request", request.command === "stop-if-idle"));
+        this.startAcknowledgedLifecycleOperation(
+          request.command === "stop-if-idle" ? "idle-stop" : "stop",
+          () =>
+            this.stopInternal(
+              request.command === "stop-if-idle" ? "idle" : "control request",
+              request.command === "stop-if-idle",
+            ),
+        );
         return { stopping: true };
       case "restart":
         this.startAcknowledgedLifecycleOperation("restart", async () => {
@@ -506,20 +669,31 @@ export class Supervisor {
           await this.start();
         });
         return { restarting: true };
-      case "prepare-update": return { status: this.runningTaskCount ? "blocked" : "ready", runningTaskCount: this.runningTaskCount };
-      case "apply-update": return await this.runLifecycleOperation(
-        "update",
-        () => this.applyUpdate(request.force === true),
-      );
-      case "prepare-uninstall": return { status: this.runningTaskCount ? "blocked" : "ready", runningTaskCount: this.runningTaskCount };
+      case "prepare-update":
+        return {
+          status: this.runningTaskCount ? "blocked" : "ready",
+          runningTaskCount: this.runningTaskCount,
+        };
+      case "apply-update":
+        return await this.runLifecycleOperation("update", () =>
+          this.applyUpdate(request.force === true),
+        );
+      case "prepare-uninstall":
+        return {
+          status: this.runningTaskCount ? "blocked" : "ready",
+          runningTaskCount: this.runningTaskCount,
+        };
       case "confirm-uninstall":
-        if (request.confirmation !== "DELETE") throw new Error("Uninstall confirmation must be DELETE");
+        if (request.confirmation !== "DELETE")
+          throw new Error("Uninstall confirmation must be DELETE");
         // Bug 修复：spec 要求 uninstall 前检查运行任务（R2-CLI-10）。旧实现只有
         // prepare-uninstall 会返回 blocked 却没有任何调用方消费它，confirm-uninstall
         // 直接停 Core 删数据，运行中的任务会被无提示中断。这里在最后防线上强制 guard，
         // 有运行任务时返回结构化错误并保持原状态。
         if (this.runningTaskCount > 0) {
-          throw new Error(`Cannot uninstall while ${this.runningTaskCount} task(s) are running; stop the server first`);
+          throw new Error(
+            `Cannot uninstall while ${this.runningTaskCount} task(s) are running; stop the server first`,
+          );
         }
         log.info("uninstall confirmed, stopping server");
         this.startAcknowledgedLifecycleOperation("uninstall", () => this.stopInternal("uninstall"));
@@ -537,8 +711,10 @@ export class Supervisor {
       return active.promise as Promise<T>;
     }
     // 普通停止不能复用条件停止结果；无论条件被拒还是超时，都继续其自身语义。
-    const previous = active?.kind === "idle-stop" && kind === "stop"
-      ? active.promise.catch(() => undefined) : Promise.resolve();
+    const previous =
+      active?.kind === "idle-stop" && kind === "stop"
+        ? active.promise.catch(() => undefined)
+        : Promise.resolve();
     const promise = previous.then(operation);
     this.lifecycleOperation = { kind, promise };
     void promise.then(
@@ -571,8 +747,16 @@ export class Supervisor {
 
   private assertLifecycleOperationCanStart(kind: LifecycleOperationKind): void {
     const active = this.lifecycleOperation;
-    if (!active || (kind === active.kind && (kind === "stop" || kind === "idle-stop"))
-      || (kind === "stop" && active.kind === "idle-stop")) return;
-    throw new ControlRequestError("operation-in-progress", `Lifecycle operation ${active.kind} is already in progress`, true);
+    if (
+      !active ||
+      (kind === active.kind && (kind === "stop" || kind === "idle-stop")) ||
+      (kind === "stop" && active.kind === "idle-stop")
+    )
+      return;
+    throw new ControlRequestError(
+      "operation-in-progress",
+      `Lifecycle operation ${active.kind} is already in progress`,
+      true,
+    );
   }
 }

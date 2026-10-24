@@ -38,6 +38,7 @@ export function createConversationSyncHost(options: {
       )
         throw new Error("conversation_sync_checkpoint_changed");
       const projection = conversationIndexProjectionSchema.parse(captured.indexProjection);
+      if (!projection.cliFacts) throw new Error("conversation_sync_rebuild_unsupported");
       if (projection.meta.taskId !== input.session)
         throw new Error("conversation_sync_rebuild_identity");
       await options.index.rebuildConversationIndex({
@@ -49,6 +50,7 @@ export function createConversationSyncHost(options: {
         },
         management: facts,
         searchableText: projection.searchableText,
+        cliFacts: projection.cliFacts,
         isCurrent: input.isCurrent,
       });
     },

@@ -23,7 +23,7 @@ const logger = {
     return this;
   },
 };
-const store = createSqliteSessionStore({ dbPath: join(root, "sessions.sqlite"), logger });
+const store = await createSqliteSessionStore({ dbPath: join(root, "sessions.sqlite"), logger });
 const checkpoint =
   action === "target"
     ? textCheckpointSchema.parse(JSON.parse(await readFile(transfer, "utf8")))

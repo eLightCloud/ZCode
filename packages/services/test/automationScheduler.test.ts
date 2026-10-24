@@ -52,12 +52,25 @@ function request(messages: SchedulerToMainMessage[]) {
 describe("native scheduler through its public node facade", () => {
   it("claims real persisted rules and settles admission without Electron", async () => {
     const f = await fixture();
-    const created = await f.repo.create(params(), { nextRunAt: Date.now() - 1000 });
+    const created = await f.repo.create(
+      {
+        ...params(),
+        projectId: "project-proof",
+        hostId: "host-proof",
+        additionalDirectories: ["/additional-proof"],
+      },
+      { nextRunAt: Date.now() - 1000 },
+    );
     const scheduler = f.start();
     await scheduler.ready;
     await vi.waitFor(() => expect(request(f.messages)).toBeDefined());
     const dispatched = request(f.messages)!;
     expect(dispatched.automationId).toBe(created.automationId);
+    expect(dispatched).toMatchObject({
+      projectId: "project-proof",
+      hostId: "host-proof",
+      additionalDirectories: ["/additional-proof"],
+    });
     scheduler.acceptMessage({
       type: "cron-dispatch-result",
       runId: dispatched.runId,

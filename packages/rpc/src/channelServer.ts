@@ -24,7 +24,7 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
   /** Cancellation/disconnect does not prove an admitted asynchronous service call settled. */
   whenCallsSettled(): Promise<void> {
     if (this.pendingCalls === 0) return Promise.resolve();
-    return new Promise(resolve => this.callWaiters.add(resolve));
+    return new Promise((resolve) => this.callWaiters.add(resolve));
   }
 
   constructor(
@@ -155,6 +155,7 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
               details?: unknown;
               taskId?: unknown;
               traceId?: unknown;
+              retryable?: unknown;
             } = {
               message: error.message,
               name: error.name,
@@ -171,6 +172,7 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
               "details",
               "taskId",
               "traceId",
+              "retryable",
             ] as const;
             for (const key of passthroughKeys) {
               const value = errorRecord[key];

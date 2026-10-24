@@ -60,6 +60,7 @@ export async function completeSuccessfulToolCall(
   turnId: TurnId | undefined,
   backgroundTasks: BackgroundTaskTracker,
   telemetry: ToolExecutionSpanWriter | undefined,
+  pluginId: string | undefined,
 ) {
   const modelOutputEntry = resolveModelOutputEntry(entry, output);
   handlerState.failureStage = "serialize";
@@ -144,6 +145,7 @@ export async function completeSuccessfulToolCall(
     display,
     perf,
     handlerState.skillTelemetryMetadata,
+    pluginId,
   );
 
   await backgroundTasks.trackBackgroundTask(canonicalToolCall, output, traceContext, turnId);

@@ -1,3 +1,12 @@
+import type { SessionEvent } from "@zcode/contracts";
+import { SessionEventType } from "@zcode/contracts";
+import type { SessionsIndexTopicFrame } from "@zcode/shared/zcode-protocol-v4";
+import { parseSessionsIndexTopic } from "@zcode/shared/zcode-protocol-v4";
+import { v4ConversationSubscribeParamsSchema } from "@zcode/shared/zcode-protocol-v4";
+import { SessionsIndexPublisher } from "./sessions-index-publisher.js";
+import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
+import type { V4SubscribeDispatchResult } from "./gateway-support.js";
+import type { SessionSummary } from "@zcode/shared/zcode-protocol-v4";
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
 // + v4/command → CommandInbox → 宿主 executor 的收口。
@@ -7,21 +16,7 @@
 // - 命令副作用不在本类实现：inbox 裁决通过后经 host.executeCommand 调宿主操作
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
-import type { SessionEvent } from "@zcode/contracts";
 
-import { SessionEventType } from "@zcode/contracts";
-
-import type { SessionsIndexTopicFrame } from "@zcode/shared/zcode-protocol-v4";
-
-import {
-  parseSessionsIndexTopic,
-  v4ConversationSubscribeParamsSchema,
-} from "@zcode/shared/zcode-protocol-v4";
-
-import { SessionsIndexPublisher } from "./sessions-index-publisher.js";
-
-import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
-import type { V4SubscribeDispatchResult } from "./gateway-support.js";
 /**
  * 把某会话的最新摘要推进到其 workspace 的 sessions-index publisher，并 flush 给列表订阅者。
  * projection 必须在无列表订阅者时也继续推进，保证下一次 snapshot 读取权威当前态；
@@ -87,12 +82,14 @@ export function resolveIndexMeta(
 ): {
   createdAt: number;
   lastActivityAt: number;
+  lastOutcome?: SessionSummary["lastOutcome"];
   parentSessionId?: string;
 } {
   const meta = this.host.getSessionIndexMeta?.(sessionId);
   return {
     createdAt: meta?.createdAt ?? 0,
     lastActivityAt: meta?.lastActivityAt ?? this.now(),
+    ...(meta?.lastOutcome ? { lastOutcome: meta.lastOutcome } : {}),
     ...(meta?.parentSessionId ? { parentSessionId: meta.parentSessionId } : {}),
   };
 }

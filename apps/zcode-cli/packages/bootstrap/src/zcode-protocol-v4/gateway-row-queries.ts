@@ -44,11 +44,16 @@ export async function rowsRange(
 ): Promise<V4ConversationRowsRangeResult> {
   const params = v4ConversationRowsRangeParamsSchema.parse(rawParams);
   const existingReady = this.readyFlights.get(params.sessionId);
-  const publisher = existingReady
-    ? await existingReady
-    : !this.hasLiveConversation(params.sessionId)
-      ? await this.ensureColdReadyPublisher(params.sessionId)
-      : await this.hydratePublisher(params.sessionId);
+  const publisher = this.historyOpenings.has(params.sessionId)
+    ? await this.historyOpenings.get(params.sessionId)!.history
+    : this.publishers.get(params.sessionId)?.getSnapshot().runtimeInitialization?.status ===
+        "failed"
+      ? this.publishers.get(params.sessionId)!
+      : existingReady
+        ? await existingReady
+        : !this.hasLiveConversation(params.sessionId)
+          ? await this.ensureColdReadyPublisher(params.sessionId)
+          : await this.hydratePublisher(params.sessionId);
   return publisher.getRowsRange(
     {
       ...(params.beforeRowId !== undefined ? { beforeRowId: params.beforeRowId } : {}),
@@ -84,6 +89,10 @@ export async function ensureHostRecordForJournalRead(
   this: ConversationV4GatewayMethodsContext,
   sessionId: string,
 ): Promise<void> {
+  const ready = this.readyFlights.get(sessionId);
+  if (ready) await ready;
+  if (this.publishers.get(sessionId)?.getSnapshot().runtimeInitialization?.status === "failed")
+    throw new Error("fault.subscribe.resumeFailed");
   if (this.hasLiveConversation(sessionId)) return;
   await this.coldResume.ensureResumed(sessionId);
 }

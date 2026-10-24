@@ -32,6 +32,15 @@ export async function updateSession(
   return sessionRepository.updateSession(this.db, input);
 }
 
+export async function softDeleteSession(
+  this: SqliteSessionStoreContext,
+  sessionID: SessionId,
+  timeDeleted = Date.now(),
+): Promise<void> {
+  this.throwBeforeWrite();
+  sessionRepository.softDeleteSession(this.db, sessionID, timeDeleted);
+}
+
 export async function getSession(
   this: SqliteSessionStoreContext,
   sessionID: SessionId,

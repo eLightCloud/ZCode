@@ -1,71 +1,42 @@
 import { join } from "node:path";
-
-import { AgentRuntime, buildPluginReferenceCatalog, type ResumeSessionResult } from "@zcode/core";
-
-import { type TraceContext } from "@zcode/contracts";
-
+import { AgentRuntime } from "@zcode/core";
+import { buildPluginReferenceCatalog } from "@zcode/core";
+import type { ResumeSessionResult } from "@zcode/core";
+import type { TraceContext } from "@zcode/contracts";
 import { createModelAdapter } from "../model-factory.js";
-
 import { scheduleStartupLogRetentionCleanup } from "../log-retention.js";
-
-import type {
-  PrepareUserExecutionBoundary,
-  ResumeOptions,
-  ZCodeApp,
-  ZCodeAppOptions,
-} from "./types.js";
-
+import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { ResumeOptions } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { ZCodeAppOptions } from "./types.js";
 import { projectIdFromDirectory } from "./paths.js";
-
-import {
-  asLocalSettingStore,
-  openStartupSessionStore,
-  readProjectPermissionMode,
-} from "./session-store.js";
-
+import { asLocalSettingStore } from "./session-store.js";
+import { openStartupSessionStore } from "./session-store.js";
+import { readProjectPermissionMode } from "./session-store.js";
 import { createPluginFacadeForApp } from "./plugin-facade.js";
-
 import { resolveAppRuntimeConfig } from "./runtime-config.js";
-
 import { createScriptWorkflowBridge } from "./script-workflow-methods.js";
-
 import { getWorkflowConcurrencyGovernor } from "./workflow-concurrency-governor.js";
-
 import { createDynamicWorkflowSnippetService } from "./dynamic-workflow-snippet-service.js";
-
 import { createModelCatalogPort } from "./model-catalog-port.js";
-
-import { type NodeReplBrowserBroker } from "./node-repl-browser-broker.js";
-
+import type { NodeReplBrowserBroker } from "./node-repl-browser-broker.js";
 import { createRuntimeAiSdkModelExecutionConfig } from "../model-config.js";
-
 import { ApiProviderModelRuntime } from "./provider-registry-model-runtime.js";
-
-import { completeAppStartup, markRuntimeConstructed } from "./startup-marks.js";
-
+import { completeAppStartup } from "./startup-marks.js";
+import { markRuntimeConstructed } from "./startup-marks.js";
 import { resolveAppStartupSources } from "./app-startup-sources.js";
-
 import { createAppHookSecurity } from "./app-hook-security-assembly.js";
-
 import { createAppInfrastructure } from "./app-infrastructure.js";
-
 import { createAppResumeBoundary } from "./app-resume-boundary.js";
-
 import { createAppWorkflowRuntime } from "./app-workflow-assembly.js";
-
 import { createAppAgentRuntime } from "./app-agent-assembly.js";
-
 import { createAppFacades } from "./app-facade-assembly.js";
-
 import { createAppHookReviewFacade } from "./app-hook-review-facade.js";
-
 import { createAppAttachmentFacade } from "./app-attachment-facade.js";
-
 import { createAppWorkflowJournalFacade } from "./app-workflow-journal-facade.js";
-
 import { createAppStartupContext } from "./app-startup-context.js";
-
 import { configureAppBrowserResources } from "./app-browser-resources.js";
+import { CliDefaultSelection } from "./cli-default-selection.js";
 
 export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp> {
   const {
@@ -148,6 +119,10 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
     const pluginReferenceCatalog = buildPluginReferenceCatalog(pluginOutcome.plugins);
     runtimeConfig.pluginReferenceCatalog = pluginReferenceCatalog;
     let runtime: AgentRuntime | undefined;
+    const cliDefaultSelection =
+      options.modelSelectionMode === "cli-default"
+        ? new CliDefaultSelection(runtimeConfig.modelSelection)
+        : undefined;
     const getRuntime = (): AgentRuntime => {
       if (!runtime) throw new Error("ZCode runtime is not initialized yet.");
       return runtime;
@@ -202,7 +177,15 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         abortSignal?: AbortSignal,
       ) => Promise<void>;
       resumeFromStore: (resumeOptions?: ResumeOptions) => Promise<ResumeSessionResult>;
-    } = createAppResumeBoundary(options, getRuntime, sessionStore, sessionId, logger, traceContext);
+    } = createAppResumeBoundary(
+      options,
+      getRuntime,
+      sessionStore,
+      sessionId,
+      logger,
+      traceContext,
+      cliDefaultSelection,
+    );
 
     const modelExecutionConfig = createRuntimeAiSdkModelExecutionConfig(options.env, {
       appVersion,
@@ -388,6 +371,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       prepareResume,
       projectID,
       untrustedProjectMcpServers,
+      cliDefaultSelection,
     );
 
     const closeSession = sessionFacade.close;

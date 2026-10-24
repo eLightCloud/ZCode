@@ -1,50 +1,43 @@
 import { getTurnTools } from "./turn-tool-visibility.js";
 import { appendRuntimeAgentListing } from "../helpers/agent-listing.js";
-import {
-  beginLocalTurnPreparation,
-  getCurrentModelInvocationContext,
-  runWithModelInvocationContext,
-} from "@zcode/contracts";
-import {
-  CompactPhase,
-  CompactReason,
-  createMessageId,
-  traceContextToLogContext,
-  TurnMachineImpl,
-} from "../deps.js";
-import {
-  buildRuntimeModeReminderBody,
-  buildPlanModeExitReminderBody,
-  buildRuntimeOutputStyleReminderBody,
-  buildTodoReminderBody,
-  buildRuntimeProviderRequestMessages,
-  createCompactRapidRefillError,
-  throwIfTurnAborted,
-  shouldBuildTodoReminder,
-} from "../helpers/index.js";
-import {
-  systemReminderAttachmentEntry,
-  todoReminderRuntimeMetadata,
-} from "../../agent/message-history.js";
+import { beginLocalTurnPreparation } from "@zcode/contracts";
+import { getCurrentModelInvocationContext } from "@zcode/contracts";
+import { runWithModelInvocationContext } from "@zcode/contracts";
+import { CompactPhase } from "../deps.js";
+import { CompactReason } from "../deps.js";
+import { createMessageId } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import { TurnMachineImpl } from "../deps.js";
+import { buildRuntimeModeReminderBody } from "../helpers/index.js";
+import { buildPlanModeExitReminderBody } from "../helpers/index.js";
+import { buildRuntimeOutputStyleReminderBody } from "../helpers/index.js";
+import { buildTodoReminderBody } from "../helpers/index.js";
+import { buildRuntimeProviderRequestMessages } from "../helpers/index.js";
+import { prepareRuntimeProviderRequest } from "../helpers/index.js";
+import { createCompactRapidRefillError } from "../helpers/index.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
+import { shouldBuildTodoReminder } from "../helpers/index.js";
+import { systemReminderAttachmentEntry } from "../../agent/message-history.js";
+import { todoReminderRuntimeMetadata } from "../../agent/message-history.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
-import {
-  evaluateRapidRefill,
-  isAutomationMutationRestrictedTurn,
-  MAX_CONSECUTIVE_RAPID_REFILLS,
-  RAPID_REFILL_TOOL_TURN_THRESHOLD,
-  recordCompactHistoryRound,
-  recordCompactSuccess,
-} from "./turn-loop-state.js";
+import { persistRuntimeReminderMessage } from "./runtime-reminder-persistence.js";
+import { buildProjectionAnchor } from "./projection-anchor.js";
+import { evaluateRapidRefill } from "./turn-loop-state.js";
+import { isAutomationMutationRestrictedTurn } from "./turn-loop-state.js";
+import { MAX_CONSECUTIVE_RAPID_REFILLS } from "./turn-loop-state.js";
+import { RAPID_REFILL_TOOL_TURN_THRESHOLD } from "./turn-loop-state.js";
+import { recordCompactHistoryRound } from "./turn-loop-state.js";
+import { recordCompactSuccess } from "./turn-loop-state.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { consumeSettledProjectMemoryRecall } from "../helpers/project-memory-recall.js";
 import { consumePendingProjectMemoryUpdate } from "../helpers/project-memory-dream.js";
 import { ACTIVE_PROJECT_MEMORY_RETRIEVAL_BRANCH } from "../../memory/project-memory-retrieval-branch.js";
-import {
-  appendTurnRequestEntries,
-  commitTurnRequestEntries,
-  filterOutputTokenContinuationEntries,
-} from "./turn-output-token-continuation.js";
+import { appendTurnRequestEntries } from "./turn-output-token-continuation.js";
+import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
+import { filterOutputTokenContinuationEntries } from "./turn-output-token-continuation.js";
+import { refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
+import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
 
 export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,
@@ -70,6 +63,7 @@ async function runRegularTurnLoopIteration(
   state: RegularTurnLoopState,
 ) {
   throwIfTurnAborted(state.turnAbortSignal);
+  refreshOffPeakTurnAfterTakeover(this, state);
   const outputTokenRecoveryActive = state.turnRequestState.outputTokenContinuationCount > 0;
   // guide 只允许由完整 tool result batch 设置这个一次性诊断；普通 queue 不在
   // model roundtrip 起点消费，避免把未来 turn 错并入当前 product turn。
@@ -119,6 +113,7 @@ async function runRegularTurnLoopIteration(
       rapidRefill,
       model: state.model,
       turnRequestState: state.turnRequestState,
+      getContinuationTools: () => getTurnTools(this, state),
     },
   );
   if (autoCompactOutcome === "rapid_refill_blocked") {
@@ -193,6 +188,29 @@ async function runRegularTurnLoopIteration(
       systemReminderAttachmentEntry("output_style", outputStyleReminderBody),
     ]);
   }
+  if (!outputTokenRecoveryActive) {
+    const announcement = buildToolSearchAnnouncement({
+      model: state.model,
+      mode: this.config.toolSearch?.mode,
+      tools,
+      registry: this.getToolRegistry(),
+      entries: state.turnRequestState.entries,
+    });
+    if (announcement) {
+      // 公告正文和增量事实必须先一起落盘；否则 fork/resume 会把已公告工具重新当成首次出现。
+      const messageId = await persistRuntimeReminderMessage.call(
+        this,
+        announcement,
+        state.turnTraceContext,
+        {
+          model: state.model,
+          anchor: buildProjectionAnchor(state.turnTraceContext, "synthetic"),
+        },
+      );
+      if (messageId) this.latestConversationMessageId = messageId;
+      commitTurnRequestEntries(this, state.turnRequestState, [announcement]);
+    }
+  }
   // （2026-09-12）：原"回合开始注入 plugin_ui_state reminder"已删除，插件给模型的信息
   // 一律走 ui/update-model-context。
   const providerEntries = [...state.turnRequestState.entries];
@@ -202,20 +220,32 @@ async function runRegularTurnLoopIteration(
     ? undefined
     : consumePendingProjectMemoryUpdate(this);
   const requestEntries = memoryUpdate ? [...providerEntries, memoryUpdate] : providerEntries;
-  // 修复原因：provider-visible user ordering projection 会改变最终 latest user 落点，
-  // cache-control 必须在 projection 后统一设置，避免 raw synthetic entry 抢占缓存锚点。
-  const providerProjection = buildRuntimeProviderRequestMessages(this, {
+  const prepared = prepareRuntimeProviderRequest(this, {
+    model: state.model,
+    tools,
+    registry: this.getToolRegistry(),
     entries: requestEntries,
     applyCacheControl: true,
-    model: state.model,
   });
-  const { messages } = providerProjection;
-  const recordableEntries = filterOutputTokenContinuationEntries(requestEntries);
+  this.logger?.debug("ToolSearch request exposure", {
+    event: "tool.search.exposure",
+    enabled: prepared.toolSearch.enabled,
+    mode: prepared.toolSearch.mode,
+    reason: prepared.reason,
+    catalogSize: prepared.toolSearch.catalog.length,
+    schemaCount: prepared.request.tools.length,
+  });
+  // 修复原因：provider-visible user ordering projection 会改变最终 latest user 落点，
+  // cache-control 必须在 projection 后统一设置，避免 raw synthetic entry 抢占缓存锚点。
+  const providerProjection = prepared.projection;
+  const { messages } = prepared.request;
+  const recordableEntries = filterOutputTokenContinuationEntries(prepared.entries);
   const recordableProjection =
-    recordableEntries === requestEntries
+    recordableEntries === prepared.entries
       ? providerProjection
       : buildRuntimeProviderRequestMessages(this, {
           entries: recordableEntries,
+          loadedToolCallIds: prepared.loadedToolCallIds,
           applyCacheControl: true,
           model: state.model,
         });
@@ -244,6 +274,7 @@ async function runRegularTurnLoopIteration(
     sourceEntries: providerProjection.sourceEntries,
     requestEntries,
     recordedMessages: recordableProjection.messages,
-    tools,
+    tools: prepared.request.tools,
+    toolSearch: prepared.toolSearch,
   });
 }

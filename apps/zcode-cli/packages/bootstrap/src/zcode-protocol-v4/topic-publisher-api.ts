@@ -33,6 +33,9 @@ import * as implementation0 from "./topic-publisher-snapshot.js";
 import * as implementation3 from "./topic-publisher-subscribe.js";
 import type { ConversationSubscribeResult } from "./topic-publisher-support.js";
 export interface ConversationTopicPublisherApi {
+  appendDeltas(
+    ...args: Parameters<typeof implementation2.appendDeltas>
+  ): ReturnType<typeof implementation2.appendDeltas>;
   getSnapshot(...args: Parameters<typeof implementation0.getSnapshot>): ConversationSnapshot;
   getWireSnapshotLogicalBytes(
     ...args: Parameters<typeof implementation0.getWireSnapshotLogicalBytes>

@@ -1,4 +1,36 @@
-import { type BackgroundBashOutputResult } from "@zcode/shared/zcode-protocol-v4";
+import type { BackgroundBashOutputResult } from "@zcode/shared/zcode-protocol-v4";
+import type { DynamicWorkflowRunArtifact } from "@zcode/contracts";
+import type { DynamicWorkflowRunArtifactBytes } from "@zcode/contracts";
+import type { DynamicWorkflowRunArtifactItemsResult } from "@zcode/contracts";
+import type { DynamicWorkflowRunEventsResult } from "@zcode/contracts";
+import type { DynamicWorkflowRunSessionSummary } from "@zcode/contracts";
+import type { DynamicWorkflowRunWorkspaceNode } from "@zcode/contracts";
+import type { DynamicWorkflowRunWorkspaceNodeResult } from "@zcode/contracts";
+import type { MessageWithParts } from "@zcode/contracts";
+import type { SessionEvent } from "@zcode/contracts";
+import type { TurnId } from "@zcode/contracts";
+import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { ZCodeWorkspaceRef } from "@zcode/shared";
+import type { CommandAck } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandEnvelope } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandKey } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandResult } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationInputIntent } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationTelemetryFact } from "@zcode/shared/zcode-protocol-v4";
+import type { CuaPermissionObservation } from "@zcode/shared/zcode-protocol-v4";
+import type { RoutedTopicWireFrame } from "@zcode/shared/zcode-protocol-v4";
+import type { SessionSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { V4AttachmentPreviewSourceResult } from "@zcode/shared/zcode-protocol-v4";
+import type { V4ConversationFileChangesResult } from "@zcode/shared/zcode-protocol-v4";
+import type { V4ConversationFileRewindPreviewResult } from "@zcode/shared/zcode-protocol-v4";
+import type { WorkspaceConfigState } from "@zcode/shared/zcode-protocol-v4";
+import type { ColdSessionResumeOutcome } from "./cold-session-resume.js";
+import type { SessionConfigSeed } from "./product-projection.js";
+import type { SessionSubagentsSeed } from "./product-projection.js";
+import type { SessionUsageSeed } from "./product-projection.js";
+import type { PluginUiToolResultNotification } from "@zcode/shared/mcp-apps";
+import type { SessionsIndexReconcileParams } from "@zcode/shared/zcode-protocol-v4";
+import type { SessionsIndexReconcileResult } from "@zcode/shared/zcode-protocol-v4";
 
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
@@ -9,46 +41,6 @@ import { type BackgroundBashOutputResult } from "@zcode/shared/zcode-protocol-v4
 // - 命令副作用不在本类实现：inbox 裁决通过后经 host.executeCommand 调宿主操作
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
-import type {
-  DynamicWorkflowRunArtifact,
-  DynamicWorkflowRunArtifactBytes,
-  DynamicWorkflowRunArtifactItemsResult,
-  DynamicWorkflowRunEventsResult,
-  DynamicWorkflowRunSessionSummary,
-  DynamicWorkflowRunWorkspaceNode,
-  DynamicWorkflowRunWorkspaceNodeResult,
-  MessageWithParts,
-  SessionEvent,
-  TurnId,
-} from "@zcode/contracts";
-
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
-
-import type { ZCodeWorkspaceRef } from "@zcode/shared";
-
-import type {
-  CommandAck,
-  CommandEnvelope,
-  CommandKey,
-  CommandResult,
-  ConversationInputIntent,
-  ConversationTelemetryFact,
-  CuaPermissionObservation,
-  RoutedTopicWireFrame,
-  SessionSummary,
-  V4AttachmentPreviewSourceResult,
-  V4ConversationFileChangesResult,
-  V4ConversationFileRewindPreviewResult,
-  WorkspaceConfigState,
-} from "@zcode/shared/zcode-protocol-v4";
-
-import { type ColdSessionResumeOutcome } from "./cold-session-resume.js";
-
-import type {
-  SessionConfigSeed,
-  SessionSubagentsSeed,
-  SessionUsageSeed,
-} from "./product-projection.js";
 
 export interface PersistedEventsLoadResult {
   events: SessionEvent[];
@@ -73,10 +65,14 @@ export interface V4GatewayHost {
    * V4 冷恢复钩子。gateway 用同一个 READY promise 包住 runtime activation 与 projection
    * hydration；宿主只负责恢复 record。
    */
+  loadPersistedMessages?(sessionId: string): Promise<MessageWithParts[]>;
+  retainSessionRuntime?(sessionId: string): Promise<() => void>;
   resumePersistedSession?(
     sessionId: string,
     resumeThoughtLevel?: string,
     workspace?: ZCodeWorkspaceRef,
+    additionalDirectories?: string[],
+    persistedMessages?: MessageWithParts[],
   ): Promise<ColdSessionResumeOutcome>;
   /**
    * 下行物理帧出口（宿主负责投递：stdio notification / MessagePort / ws）。
@@ -90,6 +86,8 @@ export interface V4GatewayHost {
   emitLocalTtftFacts?(facts: import("@zcode/shared").LocalTtftFacts): void;
   /** 当前进程 live request_access 权限事实；不缓存、不进入 topic replay。 */
   emitCuaPermissionObservation?(observation: CuaPermissionObservation): void;
+  /** 成功 UI 工具结果的窗口副作用；与 conversation 订阅、历史 hydration 无关。 */
+  emitPluginUiToolResult?(result: PluginUiToolResultNotification): void;
   /**
    * sessions-index：会话 → 所属 workspaceId（列表 topic 的分桶键）。
    * 未实现（旧宿主）→ sessions-index 路径整体不激活（no-op），不影响 conversation。
@@ -99,6 +97,7 @@ export interface V4GatewayHost {
   getSessionIndexMeta?(sessionId: string): {
     createdAt: number;
     lastActivityAt: number;
+    lastOutcome?: SessionSummary["lastOutcome"];
     parentSessionId?: string;
   } | null;
   /**
@@ -136,6 +135,7 @@ export interface V4GatewayHost {
    * store 读取是异步的，故允许返回 Promise（gateway 订阅时 await；同步 stub 直接返回数组）。
    */
   getStoredSessionSummaries?(workspaceId: string): Promise<SessionSummary[]> | SessionSummary[];
+  reconcileSessions?(params: SessionsIndexReconcileParams): Promise<SessionsIndexReconcileResult>;
   /**
    * 3.3.6 远端历史兼容：用精确 task allowlist 幂等认领后返回严格 identity 摘要。
    * 非远端 workspace 返回 null；失败可降级为空数组，后续携带 allowlist 的订阅会重试。

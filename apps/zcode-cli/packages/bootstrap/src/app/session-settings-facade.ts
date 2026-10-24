@@ -1,3 +1,4 @@
+import { readUserModelSelection } from "./session-model-selection.js";
 import { updateUiLocaleInFileConfig } from "@zcode/adapters/config";
 import type { SupportedLocale } from "@zcode/contracts";
 
@@ -98,7 +99,7 @@ export function createSessionSettingsFacade(
       if (!registrySelection) {
         throw new Error(`Provider Registry 中不存在 Model: ${modelId}`);
       }
-      const previousSelection = deps.runtime.getSessionModelSelection();
+      const previousSelection = readUserModelSelection(deps);
       const previousModel = formatLegacyRuntimeModelValue(previousSelection);
       const model = formatLegacyRuntimeModelValue(registrySelection.selection);
       const sessionSelection: ModelSelection = {
@@ -108,7 +109,11 @@ export function createSessionSettingsFacade(
           ? { options: { ...registrySelection.selection.options } }
           : {}),
       };
-      deps.runtime.setSessionModelSelection(sessionSelection);
+      if (deps.cliDefaultSelection && !options?.transient) {
+        deps.cliDefaultSelection.set(sessionSelection);
+      } else {
+        deps.runtime.setSessionModelSelection(sessionSelection);
+      }
       // transient 切换不产出 modelChange 聊天通知：应用/还原成对出现会刷出两条无意义通知。
       if (!options?.transient) {
         deps.runtime.recordPendingModelChange({
@@ -136,7 +141,7 @@ export function createSessionSettingsFacade(
     setThoughtLevel: async (level) => {
       const registryState = currentRegistrySelection();
       if (registryState.owned) {
-        const currentSelection = deps.runtime.getSessionModelSelection();
+        const currentSelection = readUserModelSelection(deps);
         if (!currentSelection) throw new Error("Select a model before choosing reasoning effort");
         const registrySelection =
           registryState.selection ??
@@ -149,13 +154,15 @@ export function createSessionSettingsFacade(
           currentSelection.options?.reasoningLevel,
         );
         const thoughtLevel = requireRegistryThoughtLevel(registrySelection, level);
-        deps.runtime.setSessionModelSelection({
+        const nextSelection = {
           ...currentSelection,
           options: {
             ...currentSelection.options,
             reasoningLevel: thoughtLevel,
           },
-        });
+        };
+        if (deps.cliDefaultSelection) deps.cliDefaultSelection.set(nextSelection);
+        else deps.runtime.setSessionModelSelection(nextSelection);
         await persistSessionModelSelection(deps);
         deps.logger.info("Session reasoning effort updated", {
           ...traceContextToLogContext(deps.traceContext),

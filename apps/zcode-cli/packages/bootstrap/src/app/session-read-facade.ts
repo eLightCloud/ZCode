@@ -1,3 +1,4 @@
+import { readUserModelSelection } from "./session-model-selection.js";
 import type { SupportedLocale } from "@zcode/contracts";
 
 import {
@@ -54,17 +55,17 @@ export function createSessionReadFacade(
 ) {
   return {
     getMode: () => deps.runtime.getMode(),
-    getModel: () => formatLegacyRuntimeModelValue(deps.runtime.getSessionModelSelection()),
+    getModel: () => formatLegacyRuntimeModelValue(readUserModelSelection(deps)),
     getLocale: () => sessionState.currentLocale,
     getTheme: () => deps.configResult.config.ui.theme as UiThemePreference,
     getDefaultThoughtLevel: () => {
       const registryState = currentRegistrySelection();
       return registryState.owned
         ? resolveRegistryThoughtLevel(registryState.selection)
-        : deps.runtime.getSessionModelSelection()?.options?.reasoningLevel;
+        : readUserModelSelection(deps)?.options?.reasoningLevel;
     },
     // 当前档位只读会话事实；缺失时不能借默认档位伪装成已完成选择。
-    getThoughtLevel: () => deps.runtime.getSessionModelSelection()?.options?.reasoningLevel,
+    getThoughtLevel: () => readUserModelSelection(deps)?.options?.reasoningLevel,
     loadSessionTranscript: async () =>
       await loadSessionTranscriptFromStore({
         sessionId: deps.sessionId,
@@ -89,7 +90,7 @@ export function createSessionReadFacade(
       return listRegistryBackedModels(deps.providerRegistry);
     },
     getCurrentModelOption: () => {
-      const selection = deps.runtime.getSessionModelSelection();
+      const selection = readUserModelSelection(deps);
       return selection && getRegistryBackedModel(deps.providerRegistry, selection);
     },
     getModelOption: (selection) => getRegistryBackedModel(deps.providerRegistry, selection),

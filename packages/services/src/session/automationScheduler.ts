@@ -222,6 +222,9 @@ export function startAutomationScheduler(
       automationId: automation.automationId,
       runId,
       prompt: automation.prompt,
+      projectId: automation.projectId,
+      hostId: automation.hostId,
+      additionalDirectories: automation.additionalDirectories,
       ...(automation.targetTaskId ? { targetTaskId: automation.targetTaskId } : {}),
       ...((fixedSelection ?? automation.modelSelection)
         ? { modelSelection: fixedSelection ?? automation.modelSelection }

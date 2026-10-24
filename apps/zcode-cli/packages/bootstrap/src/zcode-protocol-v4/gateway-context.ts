@@ -2,6 +2,9 @@ import type { ConversationV4Gateway } from "./v4-gateway.js";
 
 /** 同一 owner 的内部类型视图；不复制状态，不暴露到端口。 */
 export interface ConversationV4GatewayMethodsContext {
+  readonly historyOpenings: ConversationV4Gateway["historyOpenings"];
+  setInitialization: ConversationV4Gateway["setInitialization"];
+  ensureHistoryReadyPublisher: ConversationV4Gateway["ensureHistoryReadyPublisher"];
   readonly publishers: ConversationV4Gateway["publishers"];
   readonly indexPublishers: ConversationV4Gateway["indexPublishers"];
   readonly configPublishers: ConversationV4Gateway["configPublishers"];

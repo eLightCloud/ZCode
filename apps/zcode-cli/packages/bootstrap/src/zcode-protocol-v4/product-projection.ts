@@ -1,3 +1,4 @@
+import { stringifyToolInput } from "./product-projection-tool-display.js";
 import type * as implementation1 from "./projection-action-targets.js";
 import type { ProductProjectionApi } from "./projection-api.js";
 import type * as implementation15 from "./projection-background-events.js";
@@ -5,7 +6,8 @@ import type * as implementation17 from "./projection-compact-events.js";
 import type * as implementation0 from "./projection-configuration.js";
 import type { ProductProjectionContext } from "./projection-context.js";
 import type * as implementation19 from "./projection-control-state.js";
-import { adoptProjectionState, cloneProjectionState } from "./projection-copy.js";
+import { adoptProjectionState } from "./projection-copy.js";
+import { cloneProjectionState } from "./projection-copy.js";
 import type * as implementation2 from "./projection-event-commit.js";
 import type * as implementation3 from "./projection-event-dispatch.js";
 import type * as implementation18 from "./projection-goal-events.js";
@@ -24,6 +26,22 @@ import type * as implementation9 from "./projection-tool-stream.js";
 import type * as implementation6 from "./projection-turn-end.js";
 import type * as implementation5 from "./projection-turn-start.js";
 import type * as implementation20 from "./projection-turn-timing.js";
+import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { CuaAppIdentity } from "@zcode/shared/zcode-protocol-v4";
+import type { MutableConversationSnapshotAccumulator } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationNormalizationDiagnostic } from "./event-normalizer.js";
+import { createInitialConversationSnapshot } from "./projection-state.js";
+import type { ContextWindowProjectionState } from "./product-projection-contract.js";
+import type { ConversationEditTarget } from "./product-projection-contract.js";
+import type { FileToolInputPreviewState } from "./product-projection-contract.js";
+import type { HighspeedToolInterval } from "./product-projection-contract.js";
+import type { PendingSessionHookInvocation } from "./product-projection-contract.js";
+import type { TurnModelBaseline } from "./product-projection-contract.js";
+import type { SessionEvent } from "@zcode/contracts";
+import type { StreamingToolLedgerPayload } from "@zcode/contracts";
+import { DEFERRED_TOOL_CALL_NAME } from "@zcode/contracts";
+import type { ConversationDelta } from "@zcode/shared/zcode-protocol-v4";
+import { shouldHideInvalidToolCallFromProduct } from "../tool-call-product-visibility.js";
 
 // ProductProjection —— CLI 权威投影第二 reducer。
 // 输入：CLI 事件日志（SessionEvent，权威事实源）；输出：ConversationDelta[]。
@@ -38,25 +56,6 @@ import type * as implementation20 from "./projection-turn-timing.js";
 // 其余忽略；跨 flow 等 onSessionResumed 清空）。
 // （改直连 monotonicity subpath；discovery barrel 的该 re-export
 // 会在 packages/ui 的 Desktop 构建链解析失败，App 重启后打不开。）
-
-import type {
-  ConversationSnapshot,
-  CuaAppIdentity,
-  MutableConversationSnapshotAccumulator,
-} from "@zcode/shared/zcode-protocol-v4";
-
-import { type ConversationNormalizationDiagnostic } from "./event-normalizer.js";
-
-import { createInitialConversationSnapshot } from "./projection-state.js";
-
-import type {
-  ContextWindowProjectionState,
-  ConversationEditTarget,
-  FileToolInputPreviewState,
-  HighspeedToolInterval,
-  PendingSessionHookInvocation,
-  TurnModelBaseline,
-} from "./product-projection-contract.js";
 
 export type {
   ConversationEditTarget,
@@ -183,6 +182,20 @@ export class ProductProjection {
 
   getSnapshot(): ConversationSnapshot {
     return this.snapshot;
+  }
+
+  /** 生命周期状态独立于 run phase；更新必须推进水位，避免旧 base 漏掉门禁。 */
+  setRuntimeInitialization(
+    state: NonNullable<ConversationSnapshot["runtimeInitialization"]>,
+    minimumSeq = this.snapshot.seq + 1,
+    minimumRevision = this.snapshot.revision + 1,
+  ): void {
+    this.snapshot = {
+      ...this.snapshot,
+      runtimeInitialization: state,
+      seq: Math.max(this.snapshot.seq, minimumSeq),
+      revision: Math.max(this.snapshot.revision, minimumRevision),
+    };
   }
 
   /** assistant 守恒：被拒收的正文流事件数（>0 = 投影可能缺段，需重 hydration）。 */
@@ -808,6 +821,33 @@ export class ProductProjection {
   declare private stringPayload: OmitThisParameter<typeof implementation21.stringPayload>;
 
   declare private mapSubagentStatus: OmitThisParameter<typeof implementation21.mapSubagentStatus>;
+
+  private onStreamingToolIdentity(event: SessionEvent): ConversationDelta[] {
+    if (this.isMirroredSubagentToolEvent(event) || !this.acceptsActiveModelEvent(event)) return [];
+    const payload = event.payload as StreamingToolLedgerPayload;
+    if (
+      payload.status !== "tool_call_closed" ||
+      payload.input === undefined ||
+      payload.toolName === DEFERRED_TOOL_CALL_NAME ||
+      shouldHideInvalidToolCallFromProduct(payload.toolName)
+    )
+      return [];
+    const row = this.findToolRow(String(payload.toolCallId));
+    if (row?.toolName !== DEFERRED_TOOL_CALL_NAME) return [];
+    // 断流恢复可能直接提交工具错误而不经过 scheduled；目标身份取 Core 已闭合的调用，
+    // 只补齐包装行，不触发 scheduled 的 Todo 等业务更新，也不重置已有状态和错误。
+    return [
+      {
+        op: "row.upserted",
+        row: {
+          ...row,
+          toolName: payload.toolName,
+          input: payload.input,
+          inputText: stringifyToolInput(payload.input),
+        },
+      },
+    ];
+  }
 }
 
 installProductProjectionMethods(ProductProjection.prototype);

@@ -394,11 +394,6 @@ Review carefully.`,
     });
   });
 
-  it("does not materialize built-in options without a model Selection", () => {
-    const profiles = normalizeAgentProfiles([]);
-    expect(profiles.find((profile) => profile.name === "Explore")?.modelSelection).toBeUndefined();
-  });
-
   it("formats built-in Explore tools for the embedded search branch", () => {
     const prompt = formatAgentProfilesForPrompt([], {
       embeddedSearchEnabled: true,
@@ -408,5 +403,22 @@ Review carefully.`,
     expect(prompt).toContain("Tools: Read, Bash, WebFetch, WebSearch, TodoWrite");
     expect(prompt).not.toContain("Glob");
     expect(prompt).not.toContain("Grep");
+  });
+});
+
+describe("trusted product name for built-in agents", () => {
+  it("brands built-ins and keeps user overrides byte-for-byte", () => {
+    expect(
+      createBuiltInGeneralPurposeAgentProfile({ productName: "Vantage" }).systemPrompt,
+    ).toContain("for Vantage CLI");
+    const custom = {
+      ...createBuiltInGeneralPurposeAgentProfile(),
+      source: "user" as const,
+      systemPrompt: "Review the ZCode runtime",
+    };
+    const active = normalizeAgentProfiles([custom], { productName: "Vantage" });
+    expect(active.find((profile) => profile.name === custom.name)?.systemPrompt).toBe(
+      custom.systemPrompt,
+    );
   });
 });

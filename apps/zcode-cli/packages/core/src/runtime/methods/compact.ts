@@ -273,6 +273,7 @@ export async function autoCompactIfNeeded(
         trigger: CompactTrigger.Auto,
         agentListingTools,
         activeEntries,
+        getContinuationTools: context.getContinuationTools,
         ...(context.model ? { model: context.model } : {}),
       },
     );

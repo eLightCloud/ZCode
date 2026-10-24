@@ -1,66 +1,46 @@
-import { subagentProfilesFromSnapshot } from "../subagent-runtime-config.js";
+import { subagentProfilesFromSnapshot } from "../runtime-subagents/index.js";
 import type { RuntimeModelFactory } from "./provider-registry-model-runtime.js";
-
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
-
-import { ConfigResult, createConfig } from "@zcode/adapters/config";
-
+import { ConfigResult } from "@zcode/adapters/config";
+import { createConfig } from "@zcode/adapters/config";
 import { createNodeContextSourceAdapter } from "@zcode/adapters/context";
-
 import { createNodeSkillAdapter } from "@zcode/adapters/skills";
-
-import {
-  AgentRuntime,
-  AgentRuntimeConfig,
-  normalizeAgentProfiles,
-  PermissionService,
-} from "@zcode/core";
-
+import { AgentRuntime } from "@zcode/core";
+import { AgentRuntimeConfig } from "@zcode/core";
+import { normalizeAgentProfiles } from "@zcode/core";
+import { PermissionService } from "@zcode/core";
 import { ModelTelemetryBootstrap } from "@zcode/telemetry";
-
-import {
-  BrowserControlPort,
-  DeliverableStorePort,
-  DynamicWorkflowSnippetPort,
-  ExecutionPort,
-  FileSystemPort,
-  HttpClientPort,
-  ImageProcessorPort,
-  Logger,
-  McpPort,
-  ModelCatalogPort,
-  PdfDocumentPort,
-  PluginLoadOutcome,
-  SessionId,
-  SessionMailboxPort,
-  SessionStorePort,
-  SkillRoot,
-  ToolArtifactStorePort,
-  type TraceContext,
-} from "@zcode/contracts";
-
+import { BrowserControlPort } from "@zcode/contracts";
+import { DeliverableStorePort } from "@zcode/contracts";
+import { DynamicWorkflowSnippetPort } from "@zcode/contracts";
+import { ExecutionPort } from "@zcode/contracts";
+import { FileSystemPort } from "@zcode/contracts";
+import { HttpClientPort } from "@zcode/contracts";
+import { ImageProcessorPort } from "@zcode/contracts";
+import { Logger } from "@zcode/contracts";
+import { McpPort } from "@zcode/contracts";
+import { ModelCatalogPort } from "@zcode/contracts";
+import { PdfDocumentPort } from "@zcode/contracts";
+import { PluginLoadOutcome } from "@zcode/contracts";
+import { SessionId } from "@zcode/contracts";
+import { SessionMailboxPort } from "@zcode/contracts";
+import { SessionStorePort } from "@zcode/contracts";
+import { SkillRoot } from "@zcode/contracts";
+import { ToolArtifactStorePort } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
 import { isRemoteWorkspaceIdentity } from "@zcode/shared";
-
 import { StartupTimer } from "../startup-logging.js";
-
 import type { ZCodeAppOptions } from "./types.js";
-
-import { createConfigCliOverrides, resolveEffectiveConfigResult } from "./app-config-options.js";
-
+import { createConfigCliOverrides } from "./app-config-options.js";
+import { resolveEffectiveConfigResult } from "./app-config-options.js";
 import { collectDynamicWorkflowDisabledSkillPaths } from "./dynamic-workflow-gate.js";
-
 import { WorkspaceHookRuntimeSecurity } from "./workspace-hook-trust.js";
-
 import { createScriptWorkflowBridge } from "./script-workflow-methods.js";
-
 import { createDynamicWorkflowRunService } from "./dynamic-workflow-run-service.js";
-
 import { getWorkflowConcurrencyGovernor } from "./workflow-concurrency-governor.js";
-
 import { collectDisabledPaths } from "../skill-command-overrides.js";
-
-import { loadPluginAgentTemplates, resolvePluginAgentProfiles } from "../subagents.js";
-
+import { loadPluginAgentTemplates } from "../subagents.js";
+import { resolvePluginAgentProfiles } from "../subagents.js";
 import { resolveStartupPlugins } from "./startup-marks.js";
 
 export function createAppAgentRuntime(
@@ -126,6 +106,7 @@ export function createAppAgentRuntime(
                   ...pluginProfiles,
                 ],
                 {
+                  productName: runtimeConfig.productName,
                   builtInModelSelectionOverrides: {
                     ...parsed.builtInModelSelectionOverrides,
                     ...options.runtimeConfig?.subagents?.builtInModelSelectionOverrides,
@@ -159,6 +140,7 @@ export function createAppAgentRuntime(
       configResult.config.features.skill && configResult.config.skills.enabled
         ? (options.skillPort ??
           createNodeSkillAdapter({
+            additionalDirectories: options.additionalDirectories,
             resolveRequiredPlugins: () => {
               const current = resolveEffectiveConfigResult(
                 createConfig({
@@ -204,6 +186,9 @@ export function createAppAgentRuntime(
         : undefined,
     mcpPort,
     eventSink: options.eventSink,
+    onOffPeakLifecycleEvent: options.onOffPeakLifecycleEvent
+      ? (event) => options.onOffPeakLifecycleEvent!({ ...event, sessionId })
+      : undefined,
     modelFactory,
     modelIoDir,
     providerRuntimeHeadersPort: options.providerRuntimeHeadersPort,

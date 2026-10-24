@@ -13,6 +13,16 @@ function encoded(update: { providers: ProviderConfigMap; models: ModelConfigRule
   };
 }
 
+// 新存储格式按规则种类分桶，Provider 名称与配置分离；不再断言已退场的扁平 DTO。
+const emptyModelRules = {
+  builtinProviderModelRules: [],
+  manualProviderModelRules: [],
+  modelApiRules: [],
+  modelRules: [],
+  providerSiteRules: [],
+  templateModelRules: [],
+};
+
 describe("importLegacyCliPersonalProviderConfig", () => {
   it("Standalone 与 Desktop 一样丢弃内置套餐配置，API 只迁 Key", () => {
     const update = importLegacyCliPersonalProviderConfig({
@@ -51,25 +61,6 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       group: "standard-personal",
       access: { type: "api-key", apiKey: "kept" },
     });
-  });
-
-  it("旧 CLI Provider 直接迁移为完整 Personal Provider", () => {
-    const update = importLegacyCliPersonalProviderConfig({
-      input: {
-        provider: {
-          openai: {
-            kind: "openai",
-            options: {
-              apiKey: "secret",
-              baseURL: "https://api.openai.com/v1",
-            },
-            models: {},
-          },
-        },
-      },
-    });
-
-    expect(update.providers.get("openai")?.group).toBe("standard-personal");
   });
 
   it("只把旧用户文件显式声明的 Provider 投影为 Personal Config", () => {
@@ -142,6 +133,7 @@ describe("importLegacyCliPersonalProviderConfig", () => {
               properties: {
                 contextWindow: 128000,
               },
+              optionSpecs: { maxOutputTokens: { max: 16_000 } },
             },
           },
         ],
@@ -225,7 +217,7 @@ describe("importLegacyCliPersonalProviderConfig", () => {
     expect(update.models.rules()).toHaveLength(1);
   });
 
-  it("不迁移历史 model options 中的输出上限", () => {
+  it("迁移 options.max_tokens，但不扩展任意 extra_body 字段", () => {
     const update = importLegacyCliPersonalProviderConfig({
       input: {
         provider: {
@@ -250,7 +242,14 @@ describe("importLegacyCliPersonalProviderConfig", () => {
       },
     });
 
-    expect(update.models.rules()).toEqual([]);
+    expect(update.models.rules()).toEqual([
+      {
+        type: "provider-model",
+        providerId: "custom",
+        modelId: "direct",
+        config: { optionSpecs: { maxOutputTokens: { max: 24_000 } } },
+      },
+    ]);
   });
 
   it("忽略没有生产消费方的 reasoning replay 元数据", () => {

@@ -1,3 +1,4 @@
+import { useApplicationSettings } from "@/root/ApplicationSettings.js";
 // ============================================================
 // 子代理模型的选择面：「配置」弹层与确认窗共用
 // ============================================================
@@ -60,11 +61,13 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
     scope.workspaceIdentity,
   );
   const view = modelRead.state.status === "ready" ? modelRead.state.view : null;
+  const applicationGrouping = Boolean(useApplicationSettings()?.modelEntries.length);
   const groups: ModelSelectGroup[] = useMemo(
     () =>
       view === null
         ? []
         : buildRegistryModelSelectGroups(ZCODE_AGENT_PROVIDER, view, {
+            applicationGrouping,
             apiKeyLabel: format("settings.modelProvider.apiKey"),
             apiKeyBadgeLabel: format("settings.modelProvider.connectionMode.apiKeyBadge"),
             codingPlanLabel: format("settings.modelProvider.connectionMode.codingPlan"),
@@ -74,7 +77,7 @@ export function useWorkflowSettingsModelChoices(scope: WorkflowSettingsModelScop
             teamPlanBadgeLabel: format("settings.modelProvider.connectionMode.teamPlanBadge"),
             teamPlanFallbackLabel: format("settings.modelProvider.connectionMode.teamPlan"),
           }),
-    [format, view],
+    [format, view, applicationGrouping],
   );
   const providerName = useCallback(
     (providerId: string) =>

@@ -3,6 +3,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.15.0",
     id: "0010_usage_observability",
+    touchedTables: ["model_usage", "tool_usage", "turn_usage"],
     sql: `
       create table if not exists model_usage (
         id text primary key,

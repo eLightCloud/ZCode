@@ -1,66 +1,47 @@
 import { parseAgentListingDelta } from "./agent-listing-metadata.js";
-
 import { runtimeInputMetadata } from "./runtime-input-presentation.js";
+import { modelMessageContentToText } from "@zcode/contracts";
+import type { FilePart } from "@zcode/contracts";
+import type { MessagePart } from "@zcode/contracts";
+import type { ModelMessageContent } from "@zcode/contracts";
+import type { ModelMessageContentBlock } from "@zcode/contracts";
+import type { ToolArtifactStorePort } from "@zcode/contracts";
+import { getSystemReminderDescriptor } from "../system-reminder/source.js";
+import { wrapSystemReminderForSource } from "../system-reminder/source.js";
+import type { SystemReminderSource } from "../system-reminder/source.js";
+import { buildPromptAttachmentReminderBodies } from "../system-reminder/prompt-attachment.js";
+import type { PromptAttachmentReminderInput } from "../system-reminder/prompt-attachment.js";
+import { isKnownSystemReminderSource } from "./message-history.js";
+import { legacySyntheticRuntimeMetadata } from "./message-history.js";
+import { realUserRuntimeMetadata } from "./message-history.js";
+import { buildUserMessageEntries } from "./message-history.js";
+import type { UserMessageAttachment } from "./message-history.js";
+import { systemReminderAttachmentEntry } from "./message-history.js";
+import { systemReminderRuntimeMetadata } from "./message-history.js";
+import { todoReminderRuntimeMetadata } from "./message-history.js";
+import type { RuntimeMessageEntry } from "./message-history.js";
+import type { RuntimeMessageMetadata } from "./message-history.js";
+import type { RuntimeMessageSource } from "./message-history.js";
+import { filePartToContentBlock } from "./file-part-hydration.js";
+import { hydrateToolSearchAnnouncement } from "./tool-search-hydration.js";
 
 // ============================================================
 // Session History Hydration - rebuild provider-visible context
 // ============================================================
 
-import { modelMessageContentToText } from "@zcode/contracts";
-
-import type {
-  FilePart,
-  MessagePart,
-  ModelMessageContent,
-  ModelMessageContentBlock,
-  ToolArtifactStorePort,
-} from "@zcode/contracts";
-
-import {
-  getSystemReminderDescriptor,
-  wrapSystemReminderForSource,
-  type SystemReminderSource,
-} from "../system-reminder/source.js";
-
-import {
-  buildPromptAttachmentReminderBodies,
-  type PromptAttachmentReminderInput,
-} from "../system-reminder/prompt-attachment.js";
-
-import {
-  isKnownSystemReminderSource,
-  legacySyntheticRuntimeMetadata,
-  realUserRuntimeMetadata,
-  systemReminderAttachmentEntry,
-  systemReminderRuntimeMetadata,
-  todoReminderRuntimeMetadata,
-  type RuntimeMessageEntry,
-  type RuntimeMessageMetadata,
-  type RuntimeMessageSource,
-} from "./message-history.js";
-
-import { filePartToContentBlock } from "./file-part-hydration.js";
-
 export async function userEntriesFromParts(
   parts: MessagePart[],
   artifactStore: ToolArtifactStorePort | undefined,
 ): Promise<RuntimeMessageEntry[]> {
-  const attachmentBlocks: ModelMessageContentBlock[] = [];
-  // 媒体数据块（image/video）统一后置组，恢复顺序对齐 live 主路径 [text, media]。
-  const inlineMediaBlocks: ModelMessageContentBlock[] = [];
+  const attachments: UserMessageAttachment[] = [];
   const promptBlocks: ModelMessageContentBlock[] = [];
   const syntheticAttachmentEntries: RuntimeMessageEntry[] = [];
-  const promptAttachmentEntries: RuntimeMessageEntry[] = [];
 
   for (const part of parts) {
     if (part.type === "text" && !part.ignored) {
       const syntheticAttachment = syntheticSystemReminderAttachmentFromTextPart(part);
       if (syntheticAttachment) {
-        syntheticAttachmentEntries.push({
-          kind: "attachment",
-          content: syntheticAttachment.content,
-          metadata: syntheticAttachment.metadata,
-        });
+        syntheticAttachmentEntries.push(syntheticAttachment);
         continue;
       }
       promptBlocks.push({ type: "text", text: textPartToProviderText(part) });
@@ -68,24 +49,10 @@ export async function userEntriesFromParts(
     }
 
     if (part.type === "file") {
-      const block = await filePartToContentBlock(part, artifactStore);
-      // local_ref 是附件恢复历史时的唯一路径句柄，不能因为 metadata_only 过滤。
-      if (block.type === "text") {
-        const promptAttachmentInput = promptAttachmentReminderInputForFilePart(part, block);
-        if (promptAttachmentInput) {
-          const reminderBody =
-            buildPromptAttachmentReminderBodies(promptAttachmentInput).join("\n");
-          promptAttachmentEntries.push(
-            systemReminderAttachmentEntry("prompt_attachment", reminderBody),
-          );
-          continue;
-        }
-      }
-      if (block.type === "image" || block.type === "video") {
-        inlineMediaBlocks.push(block);
-      } else {
-        attachmentBlocks.push(block);
-      }
+      attachments.push({
+        ...part,
+        contentBlock: await filePartToContentBlock(part, artifactStore),
+      });
       continue;
     }
 
@@ -94,12 +61,15 @@ export async function userEntriesFromParts(
     }
   }
 
-  const content = contentFromUserBlocks(
-    [...attachmentBlocks, ...promptBlocks, ...inlineMediaBlocks],
-    {
-      preserveBlocks: attachmentBlocks.length > 0 || inlineMediaBlocks.length > 0,
-    },
-  );
+  const prompt =
+    attachments.length > 0
+      ? promptBlocks
+      : promptBlocks
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .filter(Boolean)
+          .join("\n\n");
+  const [userEntry, ...promptAttachmentEntries] = buildUserMessageEntries(prompt, attachments);
+  const content = userEntry.message.content;
   const hasUserContent = modelMessageContentToText(content).trim().length > 0;
   const userMetadata = metadataFromUserParts(parts);
   // 文本附件从原始 file part 恢复为 prompt_attachment 后，空正文的
@@ -126,25 +96,6 @@ export async function userEntriesFromParts(
     ...syntheticAttachmentEntries,
     ...promptAttachmentEntries,
   ];
-}
-
-export function contentFromUserBlocks(
-  blocks: readonly ModelMessageContentBlock[],
-  options: { preserveBlocks?: boolean } = {},
-): ModelMessageContent {
-  if (options.preserveBlocks) {
-    return blocks.map((block) => ({ ...block })) as ModelMessageContentBlock[];
-  }
-  const textBlocks = blocks.filter(
-    (block): block is Extract<ModelMessageContentBlock, { type: "text" }> => block.type === "text",
-  );
-  if (blocks.length === textBlocks.length) {
-    return textBlocks
-      .map((block) => block.text)
-      .filter(Boolean)
-      .join("\n\n");
-  }
-  return blocks.map((block) => ({ ...block })) as ModelMessageContentBlock[];
 }
 
 export function promptAttachmentReminderInputForFilePart(
@@ -198,10 +149,7 @@ export function textPartToProviderText(part: Extract<MessagePart, { type: "text"
   return part.text;
 }
 
-export interface SyntheticSystemReminderAttachment {
-  metadata: RuntimeMessageMetadata;
-  content: string;
-}
+export type SyntheticSystemReminderAttachment = ReturnType<typeof systemReminderAttachmentEntry>;
 
 export function syntheticSystemReminderAttachmentFromParts(
   parts: MessagePart[],
@@ -219,13 +167,24 @@ export function syntheticSystemReminderAttachmentFromTextPart(
 ): SyntheticSystemReminderAttachment | undefined {
   if (!part.synthetic) return undefined;
   if (part.text.trim().length === 0) return undefined;
-  if (isProviderWrappedSystemReminderText(part.text)) return undefined;
   const metadata = metadataFromSyntheticTextPart(part);
+  // 只凭已校验的公告身份适配旧包装，不从普通用户正文推断提醒来源。
+  const announcement = metadata.toolSearchAnnouncement;
+  const wrapped = isProviderWrappedSystemReminderText(part.text);
+  if (wrapped && !announcement) return undefined;
   if (!isRestorableSystemReminderAttachmentSource(metadata.source)) return undefined;
 
   return {
+    ...systemReminderAttachmentEntry(
+      metadata.source,
+      wrapped && announcement
+        ? part.text
+            .trim()
+            .replace(/^<system-reminder>\s*/, "")
+            .replace(/\s*<\/system-reminder>$/, "")
+        : part.text,
+    ),
     metadata,
-    content: part.text,
   };
 }
 
@@ -314,8 +273,14 @@ export function runtimeMessageMetadataFromPartMetadata(
   if (source === "real_user") {
     return realUserRuntimeMetadata();
   }
-  if (source === "legacy_synthetic") {
-    return legacySyntheticRuntimeMetadata();
+  if (source === "legacy_synthetic" || source === "tool_search_announcement") {
+    const announcement = hydrateToolSearchAnnouncement(runtimeMessage.toolSearchAnnouncement);
+    return {
+      ...legacySyntheticRuntimeMetadata(),
+      ...(announcement
+        ? { source: "tool_search_announcement" as const, toolSearchAnnouncement: announcement }
+        : {}),
+    };
   }
   if (source === "todo_reminder") {
     return todoReminderRuntimeMetadata();

@@ -47,6 +47,7 @@ export async function performHydration(
           persistedMessages: persistedMessages?.length ?? 0,
           sessionId,
         });
+        if (this.historyOpenings.has(sessionId)) throw error;
         return { events: [] as SessionEvent[], synthesized: false, sourceEventSeq: 0 };
       })
     : { events: [] as SessionEvent[], synthesized: false, sourceEventSeq: 0 };

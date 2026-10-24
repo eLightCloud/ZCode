@@ -75,6 +75,7 @@ export const deliverFilesToolEntry: ToolEntry = {
   capability: "Declare explicit final files and preserve immutable snapshots",
   metadata: {
     name: DELIVER_FILES_TOOL_NAME,
+    shouldDefer: true,
     description: DESCRIPTION,
     readOnly: false,
     destructive: false,

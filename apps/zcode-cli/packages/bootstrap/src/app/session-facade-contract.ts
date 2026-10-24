@@ -1,27 +1,22 @@
-import { type ConfigResult } from "@zcode/adapters/config";
-
-import {
-  type ExecutionPort,
-  type LocalSettingStorePort,
-  type Logger,
-  type LoggerFactory,
-  type McpPort,
-  type McpServerConfig,
-  type ProjectId,
-  type SessionId,
-  type SessionStorePort,
-  type SupportedLocale,
-  type TraceContext,
-  type UiLocale,
-} from "@zcode/contracts";
-
-import { type AgentRuntime } from "@zcode/core";
-
-import { type ModelSelection } from "@zcode/provider";
-
+import type { ConfigResult } from "@zcode/adapters/config";
+import type { ExecutionPort } from "@zcode/contracts";
+import type { LocalSettingStorePort } from "@zcode/contracts";
+import type { Logger } from "@zcode/contracts";
+import type { LoggerFactory } from "@zcode/contracts";
+import type { McpPort } from "@zcode/contracts";
+import type { McpServerConfig } from "@zcode/contracts";
+import type { ProjectId } from "@zcode/contracts";
+import type { SessionId } from "@zcode/contracts";
+import type { SessionStorePort } from "@zcode/contracts";
+import type { SupportedLocale } from "@zcode/contracts";
+import type { TraceContext } from "@zcode/contracts";
+import type { UiLocale } from "@zcode/contracts";
+import type { AgentRuntime } from "@zcode/core";
+import type { ModelSelection } from "@zcode/provider";
 import type { ProviderRegistryModelSource } from "./provider-registry-model-runtime.js";
-
-import type { PrepareUserExecutionBoundary, ZCodeApp } from "./types.js";
+import type { PrepareUserExecutionBoundary } from "./types.js";
+import type { ZCodeApp } from "./types.js";
+import type { CliDefaultSelection } from "./cli-default-selection.js";
 
 export type SessionFacade = Pick<
   ZCodeApp,
@@ -31,6 +26,7 @@ export type SessionFacade = Pick<
   | "close"
   | "callMcpToolForUi"
   | "getMcpAppConnectionSnapshot"
+  | "waitForMcpAppConnection"
   | "onMcpAppConnectionInvalidated"
   | "replaceMcpAppProvidedTools"
   | "connectMcpServer"
@@ -85,6 +81,7 @@ export interface SessionResourceCloseInput {
 }
 
 export interface CreateSessionFacadeDeps {
+  cliDefaultSelection?: CliDefaultSelection;
   /**
    * 停下本会话拥有的 dwf run：
    * run service 的 `close()`。缺席即本装配没有 dwf 端口（journal 窄化失败、测试装配）。

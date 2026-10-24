@@ -74,6 +74,8 @@ export function reduce(
       return this.onModelComplete(event);
     case SessionEventType.ToolCallScheduled:
       return this.onToolCallScheduled(event);
+    case SessionEventType.StreamingToolLedgerUpdated:
+      return this.onStreamingToolIdentity(event);
     case SessionEventType.ToolCallStarted:
       return this.onToolCallActivity(event);
     case SessionEventType.ToolCallProgress:

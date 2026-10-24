@@ -1,3 +1,14 @@
+import { createExternalTurnFaultError } from "@zcode/core";
+import { V4CommandExecutor } from "../zcode-protocol-v4/commands/executor.js";
+import { lookupGlobalCreateSessionCommand } from "../zcode-protocol-v4/create-session-command-fact.js";
+import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
+import { PersistentCommandIndex } from "../zcode-protocol-v4/persistent-command-index.js";
+import { V4CommandNotImplementedError } from "../zcode-protocol-v4/v4-gateway.js";
+import type { V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
+import type { SessionId } from "@zcode/contracts";
+import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+import { isConversationInputAdmissionCommand } from "./v4-bridge-input-admission.js";
+import { isReadonlyAgentSessionKind } from "@zcode/shared";
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
@@ -8,27 +19,6 @@
 //
 // 不做桥接：依赖方向只允许 旧目录 → v4 目录。
 // 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
-
-import { createExternalTurnFaultError } from "@zcode/core";
-
-import { V4CommandExecutor } from "../zcode-protocol-v4/commands/executor.js";
-
-import { lookupGlobalCreateSessionCommand } from "../zcode-protocol-v4/create-session-command-fact.js";
-
-import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
-
-import { PersistentCommandIndex } from "../zcode-protocol-v4/persistent-command-index.js";
-
-import {
-  V4CommandNotImplementedError,
-  type V4GatewayHost,
-} from "../zcode-protocol-v4/v4-gateway.js";
-
-import type { SessionId } from "@zcode/contracts";
-
-import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
-
-import { isConversationInputAdmissionCommand } from "./v4-bridge-input-admission.js";
 
 export function createV4GatewayCommandHost(
   nativeExecutor: V4CommandExecutor,
@@ -55,7 +45,7 @@ export function createV4GatewayCommandHost(
         const taskType =
           context.sessions.get(envelope.sessionId)?.taskType ??
           (await context.deps.sessionStore?.getSession(envelope.sessionId as SessionId))?.taskType;
-        if (taskType === "subagent_child") {
+        if (isReadonlyAgentSessionKind(taskType)) {
           throw Object.assign(new Error("Subagent sessions are read-only"), {
             reasonCode: "guard.subagentReadOnly",
           });
@@ -73,7 +63,7 @@ export function createV4GatewayCommandHost(
       const record = context.sessions.get(sessionId);
       const controller = record?.activeAbortController;
       if (!controller || controller.signal.aborted) return;
-      // 投影越过 16MiB 后继续生成只会让所有后续 snapshot 都无法编码。
+      // 修复原因：投影越过 16MiB 后继续生成只会让所有后续 snapshot 都无法编码。
       // gateway 先原子拒绝越界事件并登记 protocol fault，再单次调用这里中止模型 turn；
       // abort 的正常终态负责释放 active lock，不能在 gateway 里越层伪造 TurnError。
       controller.abort(createExternalTurnFaultError(reasonCode));

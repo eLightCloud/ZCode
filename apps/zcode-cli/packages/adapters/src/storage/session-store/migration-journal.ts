@@ -1,14 +1,17 @@
-import { PROVIDER_MODEL_SELECTION_MIGRATION_SQL } from "./migrations/0020-provider-model-selection.js";
-
-import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "./migrations/0021-official-glm-selection.js";
-
+import { SESSION_DATABASE_IDENTITY_MIGRATION } from "@zcode/shared/sqlite-migrations";
 import type { SqliteMigration } from "./migration-contract.js";
+import { PROVIDER_MODEL_SELECTION_MIGRATION_SQL } from "./migrations/0020-provider-model-selection.js";
+import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "./migrations/0021-official-glm-selection.js";
 import { BACKFILLED_SESSION_REASONING_MIGRATION_SQL } from "./migrations/0022-backfilled-session-reasoning.js";
+
+export type { SqliteMigration } from "@zcode/shared/sqlite-migrations";
+
 export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.16.5",
     id: "0019_dwf_journal",
-    // dynamic-workflow 执行引擎的 durable journal。
+    touchedTables: ["dwf_run", "dwf_actor", "dwf_artifact", "dwf_node", "dwf_event"],
+    // dynamic-workflow 执行引擎的 durable journal（docs/execution-engine.md 的 "Journal & storage"）。
     // legacy 的 workflow_* 表只是模板不是家：dwf_* 自成一套，与既有 workflow 机制彼此独立。
     //
     // 本条是 beta 前把开发期 0019–0030 十二条迁移**压成的单一基线**：四张表一次建齐、形状即
@@ -126,17 +129,43 @@ export const migrations: SqliteMigration[] = [
     appVersion: "0.16.5",
     id: "0020_provider_model_selection",
     sql: PROVIDER_MODEL_SELECTION_MIGRATION_SQL,
+    touchedTables: ["message", "part", "session_entry"],
   },
 
   {
     appVersion: "0.16.5",
     id: "0021_official_glm_selection",
     sql: OFFICIAL_GLM_SELECTION_MIGRATION_SQL,
+    touchedTables: ["session_entry"],
   },
 
   {
     appVersion: "0.16.5",
     id: "0022_backfilled_session_reasoning",
     sql: BACKFILLED_SESSION_REASONING_MIGRATION_SQL,
+    touchedTables: ["session_entry"],
   },
+
+  {
+    appVersion: "0.16.9",
+    id: "0023_session_soft_delete_outcome",
+    previousIds: ["0020_session_soft_delete_outcome"],
+    touchedTables: ["session"],
+    apply: (db) => {
+      const columns = new Set(
+        db
+          .prepare("pragma table_info(session)")
+          .all()
+          .map((row) => row.name),
+      );
+      if (!columns.has("time_deleted"))
+        db.exec("alter table session add column time_deleted integer");
+      if (!columns.has("last_outcome")) db.exec("alter table session add column last_outcome text");
+    },
+    sql: `
+      alter table session add column time_deleted integer;
+      alter table session add column last_outcome text;
+    `,
+  },
+  { ...SESSION_DATABASE_IDENTITY_MIGRATION, touchedTables: ["zcode_database_identity"] },
 ];

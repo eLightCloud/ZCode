@@ -49,6 +49,14 @@ export type ConversationIndexFacts = z.infer<typeof conversationIndexFactsSchema
 /** Transport remains opaque; only the native checkpoint codec interprets its body. */
 export const conversationIndexProjectionSchema = z
   .object({
+    cliFacts: z
+      .object({
+        titleSource: z.enum(["default", "generated", "custom"]),
+        lastOutcome: z.enum(["completed", "interrupted", "error"]).optional(),
+        deleted: z.boolean(),
+      })
+      .strict()
+      .optional(),
     meta: zcodeTaskMetaSchema
       .pick({
         taskId: true,
@@ -64,6 +72,8 @@ export const conversationIndexProjectionSchema = z
     searchableText: z.string().max(200000),
   })
   .strict();
+export type ConversationIndexProjection = z.infer<typeof conversationIndexProjectionSchema>;
+
 export const conversationCheckpointResultSchema = z
   .object({
     dataBase64: z

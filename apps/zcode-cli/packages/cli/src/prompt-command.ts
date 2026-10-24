@@ -1,72 +1,44 @@
 import { extname } from "node:path";
-
-import { formatJson, type PresentationSurface } from "@zcode/core";
-
-import type { GlobalOptions, RunContext } from "@zcode/shared-types";
-
+import { formatJson } from "@zcode/core";
+import type { PresentationSurface } from "@zcode/core";
+import type { GlobalOptions } from "@zcode/shared-types";
+import type { RunContext } from "@zcode/shared-types";
 import { loadBootstrapModule } from "./bootstrap-loader.js";
-
-import {
-  buildManualSkillPrompt,
-  formatSlashCommandHelp,
-  parseSlashCommand,
-} from "./command-center.js";
-
+import { buildManualSkillPrompt } from "./command-center.js";
+import { formatSlashCommandHelp } from "./command-center.js";
+import { parseSlashCommand } from "./command-center.js";
 import { loadCliDotenv } from "./env.js";
-
 import { createCliHeadlessBrowserRuntime } from "./headless-browser.js";
-
-import {
-  createHeadlessPermissionBroker,
-  createHeadlessSessionObserver,
-  readHeadlessRuntimeFacts,
-  waitForHeadlessWorkflowSettle,
-} from "./headless-workflow.js";
-
-import { runLoginCommand, runLogoutCommand } from "./login-command.js";
-
+import { createHeadlessPermissionBroker } from "./headless-workflow.js";
+import { createHeadlessSessionObserver } from "./headless-workflow.js";
+import { readHeadlessRuntimeFacts } from "./headless-workflow.js";
+import { waitForHeadlessWorkflowSettle } from "./headless-workflow.js";
+import { runLoginCommand } from "./login-command.js";
+import { runLogoutCommand } from "./login-command.js";
 import { resolveResumeSession } from "./resume.js";
-
 import { readRuntimeEventSubscriber } from "./runtime-event-subscriber.js";
-
-import {
-  DEFAULT_CLI_CLEANUP_TIMEOUT_MS,
-  registerCliShutdownHandlers,
-  runCliCleanupWithTimeout,
-} from "./shutdown.js";
-
+import { DEFAULT_CLI_CLEANUP_TIMEOUT_MS } from "./shutdown.js";
+import { registerCliShutdownHandlers } from "./shutdown.js";
+import { runCliCleanupWithTimeout } from "./shutdown.js";
 import { runSkillsCommand } from "./skills-command.js";
-
-import {
-  DEFAULT_CLI_WORKFLOW_MODE,
-  WORKFLOW_DISABLED_NOTICE,
-  isWorkflowModeEnabled,
-  resolveWorkflowModeRuntimeConfig,
-} from "./workflow-mode.js";
-
+import { DEFAULT_CLI_WORKFLOW_MODE } from "./workflow-mode.js";
+import { WORKFLOW_DISABLED_NOTICE } from "./workflow-mode.js";
+import { isWorkflowModeEnabled } from "./workflow-mode.js";
+import { resolveWorkflowModeRuntimeConfig } from "./workflow-mode.js";
 import type { DynamicWorkflowMode } from "@zcode/shared";
-
-import type {
-  CliPermissionMode,
-  CliResumeRequest,
-  ModeCapableApp,
-  RunDependencies,
-} from "./cli-types.js";
-
+import type { CliPermissionMode } from "./cli-types.js";
+import type { CliResumeRequest } from "./cli-types.js";
+import type { ModeCapableApp } from "./cli-types.js";
+import type { RunDependencies } from "./cli-types.js";
+import { listCustomCommandsForPrompt } from "./prompt-command-center.js";
+import { routesToPromptCommandCenter } from "./prompt-command-center.js";
+import { runPromptCommandCenterCommand } from "./prompt-command-center.js";
+import { wantsEventStream } from "./prompt-output.js";
+import { wantsJsonSummary } from "./prompt-output.js";
+import { resolveHeadlessWorkspaceHookTrustDiagnostic } from "./prompt-hook-trust.js";
+import { writeHeadlessWorkspaceHookTrustDiagnostic } from "./prompt-hook-trust.js";
+import type { ToolSearchMode } from "@zcode/contracts";
 import { createCliProviderRefreshReporter } from "./provider-runtime-env.js";
-
-import {
-  listCustomCommandsForPrompt,
-  routesToPromptCommandCenter,
-  runPromptCommandCenterCommand,
-} from "./prompt-command-center.js";
-
-import { wantsEventStream, wantsJsonSummary } from "./prompt-output.js";
-
-import {
-  resolveHeadlessWorkspaceHookTrustDiagnostic,
-  writeHeadlessWorkspaceHookTrustDiagnostic,
-} from "./prompt-hook-trust.js";
 
 const IMAGE_EXTENSIONS = new Set([".gif", ".jpeg", ".jpg", ".png", ".webp"]);
 
@@ -88,6 +60,7 @@ export const runPrompt = async (
   resumeRequest: CliResumeRequest = { continueSession: false },
   toolDisallowlist?: readonly string[],
   forceMcs = false,
+  toolsearchMode: ToolSearchMode = "off",
   presentationSurface: PresentationSurface = "terminal",
   workflowMode: DynamicWorkflowMode = DEFAULT_CLI_WORKFLOW_MODE,
 ): Promise<number> => {
@@ -250,6 +223,7 @@ export const runPrompt = async (
     });
     browserRuntime = createCliHeadlessBrowserRuntime(options, deps);
     app = await createApp({
+      modelSelectionMode: "cli-default",
       browserControlPort: browserRuntime?.browserControlPort,
       env: appEnv,
       // headless 没有交互审批面，core 因此退到 deny broker，于是 CreateWorkflow 的
@@ -269,6 +243,7 @@ export const runPrompt = async (
       runtimeConfig: {
         ...(mode ? { mode } : {}),
         ...(toolDisallowlist ? { toolDisallowlist } : {}),
+        toolSearch: { mode: toolsearchMode },
         ...(forceMcs ? { midConversationSystem: { mode: "force" as const } } : {}),
         ...resolveWorkflowModeRuntimeConfig(workflowMode),
         memory: { extractionEnabled: options.memoryBench === true },

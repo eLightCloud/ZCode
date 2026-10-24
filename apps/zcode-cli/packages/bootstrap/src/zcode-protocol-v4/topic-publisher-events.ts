@@ -66,7 +66,15 @@ export function ingest(this: ConversationTopicPublisherMethodsContext, event: Se
     if (deltas === null) throw new ProjectionPayloadTooLargeError(candidateBytes);
     this.wireSnapshotBytesUpperBound = nextUpperBound;
   }
-  this.log.push({ seq: event.sequenceNumber, deltas });
+  this.appendDeltas(event.sequenceNumber, deltas);
+}
+
+export function appendDeltas(
+  this: ConversationTopicPublisherMethodsContext,
+  seq: number,
+  deltas: ConversationDelta[],
+): void {
+  this.log.push({ seq, deltas });
   while (this.log.length > this.retention) {
     const evicted = this.log.shift();
     if (evicted) this.floorSeq = evicted.seq;

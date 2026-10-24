@@ -15,8 +15,36 @@ import type * as implementation4 from "./gateway-session-index.js";
 import type * as implementation9 from "./gateway-workflow-artifacts.js";
 import type * as implementation5 from "./gateway-workspace-config.js";
 import { LocalTtftRecorder } from "./local-ttft.js";
-
-import { localTtftFactsSchema, localTtftNow } from "@zcode/shared/zcode-protocol-v4";
+import { localTtftFactsSchema } from "@zcode/shared/zcode-protocol-v4";
+import { localTtftNow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRowTarget } from "@zcode/shared/zcode-protocol-v4";
+import type { RoutedTopicFrame } from "@zcode/shared/zcode-protocol-v4";
+import type { SubscribeAck } from "@zcode/shared/zcode-protocol-v4";
+import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
+import { AttachmentUploadRegistry } from "./attachment-upload-registry.js";
+import { ColdSessionResumeCoordinator } from "./cold-session-resume.js";
+import { CommandInbox } from "./command-inbox.js";
+import { ConversationTopicPublisher } from "./conversation-topic-publisher.js";
+import { SessionsIndexFanoutThrottle } from "./sessions-index-fanout-throttle.js";
+import { SessionsIndexPublisherRegistry } from "./sessions-index-publisher-registry.js";
+import { WorkspaceConfigPublisher } from "./workspace-config-publisher.js";
+import type { TopicFrameReservation } from "./topic-frame-reservation.js";
+import { ConversationTelemetryFactNormalizer } from "./conversation-telemetry-facts.js";
+import { CuaPermissionObservationNormalizer } from "./cua-permission-observation.js";
+import { defaultLogEpoch } from "./gateway-support.js";
+import { encodeReservedTopicFrame } from "./gateway-support.js";
+import { rowTargetActionForCommand } from "./gateway-support.js";
+import type { BinaryReadCacheEntry } from "./gateway-support.js";
+import type { ConversationV4GatewayOptions } from "./gateway-support.js";
+import type { FlushState } from "./gateway-support.js";
+import type { HydrationBuffer } from "./gateway-support.js";
+import type { ProjectionEventCommitWaiter } from "./gateway-support.js";
+import type { RawSequenceState } from "./gateway-support.js";
+import type { V4GatewayHost } from "./gateway-support.js";
+import type { V4SubscribeDispatchResult } from "./gateway-support.js";
+import type { SessionsIndexReconcileResult } from "@zcode/shared/zcode-protocol-v4";
+import { sessionsIndexReconcileParamsSchema } from "@zcode/shared/zcode-protocol-v4";
+import { sessionsIndexReconcileResultSchema } from "@zcode/shared/zcode-protocol-v4";
 
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
@@ -27,51 +55,6 @@ import { localTtftFactsSchema, localTtftNow } from "@zcode/shared/zcode-protocol
 // - 命令副作用不在本类实现：inbox 裁决通过后经 host.executeCommand 调宿主操作
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
-
-import type {
-  ConversationRowTarget,
-  RoutedTopicFrame,
-  SubscribeAck,
-} from "@zcode/shared/zcode-protocol-v4";
-
-import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
-
-import { AttachmentUploadRegistry } from "./attachment-upload-registry.js";
-
-import { ColdSessionResumeCoordinator } from "./cold-session-resume.js";
-
-import { CommandInbox } from "./command-inbox.js";
-
-import { ConversationTopicPublisher } from "./conversation-topic-publisher.js";
-
-import { SessionsIndexFanoutThrottle } from "./sessions-index-fanout-throttle.js";
-
-import { SessionsIndexPublisherRegistry } from "./sessions-index-publisher-registry.js";
-
-import { WorkspaceConfigPublisher } from "./workspace-config-publisher.js";
-
-import type { TopicFrameReservation } from "./topic-frame-reservation.js";
-
-import { ConversationTelemetryFactNormalizer } from "./conversation-telemetry-facts.js";
-
-import { CuaPermissionObservationNormalizer } from "./cua-permission-observation.js";
-
-import {
-  defaultLogEpoch,
-  encodeReservedTopicFrame,
-  rowTargetActionForCommand,
-} from "./gateway-support.js";
-
-import type {
-  BinaryReadCacheEntry,
-  ConversationV4GatewayOptions,
-  FlushState,
-  HydrationBuffer,
-  ProjectionEventCommitWaiter,
-  RawSequenceState,
-  V4GatewayHost,
-  V4SubscribeDispatchResult,
-} from "./gateway-support.js";
 
 export {
   DETACHED_CHILD_PUBLISHER_GRACE_MS,
@@ -89,6 +72,8 @@ export type {
 } from "./gateway-support.js";
 
 export class ConversationV4Gateway {
+  declare setInitialization: ConversationV4GatewayApi["setInitialization"];
+  declare ensureHistoryReadyPublisher: ConversationV4GatewayApi["ensureHistoryReadyPublisher"];
   // 类型声明无实例字段；实现由下方唯一安装器登记在同一 owner 原型。
   declare setConnectionFlowState: ConversationV4GatewayApi["setConnectionFlowState"];
   declare flushNow: ConversationV4GatewayApi["flushNow"];
@@ -163,6 +148,14 @@ export class ConversationV4Gateway {
   /** 首次 hydration 按 session 单飞；并发 pane 共享同一份重建结果。 */
   private readonly hydrationInFlight = new Map<string, Promise<ConversationTopicPublisher>>();
   /** cold activation 到 hydration 的 READY 水位；只阻塞本次恢复期间的 command/query。 */
+  private readonly historyOpenings = new Map<
+    string,
+    {
+      history: Promise<ConversationTopicPublisher>;
+      start: () => void;
+      cancel: () => void;
+    }
+  >();
   private readonly readyFlights = new Map<string, Promise<ConversationTopicPublisher>>();
   /** load await 窗口内的 raw accepted events；重建后按 cursor/eventId 补回。 */
   private readonly hydrationBuffers = new Map<string, HydrationBuffer>();
@@ -231,8 +224,22 @@ export class ConversationV4Gateway {
     this.createLogEpoch = options.createLogEpoch ?? defaultLogEpoch;
     this.coldResume = new ColdSessionResumeCoordinator(host);
     this.inbox = new CommandInbox({
+      prepareDecision: async (envelope) => {
+        if (
+          envelope.sessionId &&
+          (envelope.type === "renameSession" || envelope.type === "deleteSession") &&
+          !this.host.sessionExists(envelope.sessionId)
+        ) {
+          // 历史行的重命名 / 删除仍由 CLI 原命令写持久事实；只在真实命令 admission 后冷恢复。
+          await this.ensureColdReadyPublisher(envelope.sessionId);
+        }
+      },
       getRevision: (sessionId) => {
-        if (!this.host.sessionExists(sessionId)) return null;
+        if (
+          !this.host.sessionExists(sessionId) &&
+          !this.publishers.get(sessionId)?.getSnapshot().runtimeInitialization
+        )
+          return null;
         // 已知会话但尚无事件 → 投影未建，revision 视为 0（draft 起点）。
         return this.publishers.get(sessionId)?.getSnapshot().revision ?? 0;
       },
@@ -250,6 +257,22 @@ export class ConversationV4Gateway {
         return resolution.status === "stale"
           ? { verdict: "stale", reasonCode: resolution.reasonCode }
           : { verdict: "reject", reasonCode: resolution.reasonCode };
+      },
+      // 在 inbox 去重之后拒绝新执行，不把未就绪输入接受进运行队列。
+      guard: (envelope) => {
+        const initialization =
+          envelope.sessionId === null
+            ? undefined
+            : this.publishers.get(envelope.sessionId)?.getSnapshot().runtimeInitialization;
+        return initialization && initialization.status !== "ready"
+          ? {
+              verdict: "reject",
+              reasonCode:
+                initialization.status === "failed"
+                  ? "guard.runtimeInitializationFailed"
+                  : "guard.runtimeInitializing",
+            }
+          : { verdict: "allow" };
       },
       lookupTranscriptCommand: (key) => this.host.lookupTranscriptCommand?.(key) ?? null,
       lookupTimelineCommand: (key) => this.host.lookupTimelineCommand?.(key) ?? null,
@@ -695,6 +718,12 @@ export class ConversationV4Gateway {
         return committed;
       },
     };
+  }
+
+  async reconcileSessions(rawParams: unknown): Promise<SessionsIndexReconcileResult> {
+    const params = sessionsIndexReconcileParamsSchema.parse(rawParams);
+    if (!this.host.reconcileSessions) throw new Error("sessionsIndex/reconcile is unavailable");
+    return sessionsIndexReconcileResultSchema.parse(await this.host.reconcileSessions(params));
   }
 }
 

@@ -16,6 +16,8 @@ import { estimateTokens } from "../context/utils.js";
 import { buildSubagentCommonNotes, buildSubagentEnvironmentContext } from "./system-prompt.js";
 
 export interface SubagentContextBuilderConfig {
+  /** Optional trusted product display name; does not change technical identity. */
+  productName?: string;
   agentPrompt: string;
   currentDate?: string;
   envInfo: EnvInfo;
@@ -109,7 +111,7 @@ export function createSubagentContextBuilder(
 }
 
 function buildSubagentContextSections(config: SubagentContextBuilderConfig): ContextSection[] {
-  const sections: ContextSection[] = [buildCliPrefixSection()];
+  const sections: ContextSection[] = [buildCliPrefixSection(config.productName)];
   const agentPrompt = config.agentPrompt.trimEnd();
   if (agentPrompt) {
     sections.push(
@@ -191,6 +193,7 @@ function createSubagentSection(input: {
 
 function toBaseContextBuilderConfig(config: SubagentContextBuilderConfig): ContextBuilderConfig {
   return {
+    productName: config.productName,
     workingDirectory: config.envInfo.cwd,
     envInfo: config.envInfo,
     model: config.model,

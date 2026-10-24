@@ -46,6 +46,7 @@ export function isBuiltInExploreAgentProfile(
 export function normalizeAgentProfiles(
   profiles: readonly AgentProfile[],
   options: {
+    productName?: string;
     builtInModelSelectionOverrides?: BuiltInSubagentModelSelectionOverrides;
   } = {},
 ): AgentProfile[] {
@@ -55,6 +56,7 @@ export function normalizeAgentProfiles(
     DEFAULT_SUBAGENT_TYPE,
     createBuiltInGeneralPurposeAgentProfile({
       modelSelection: overrides[DEFAULT_SUBAGENT_TYPE],
+      productName: options.productName,
     }),
   );
   active.set(
@@ -70,7 +72,7 @@ export function normalizeAgentProfiles(
 }
 
 export function createBuiltInGeneralPurposeAgentProfile(
-  options: { modelSelection?: ModelSelection } = {},
+  options: { modelSelection?: ModelSelection; productName?: string } = {},
 ): AgentProfile {
   return {
     name: DEFAULT_SUBAGENT_TYPE,
@@ -81,7 +83,7 @@ export function createBuiltInGeneralPurposeAgentProfile(
     injectAgentsMd: true,
     ...(options.modelSelection ? { modelSelection: options.modelSelection } : {}),
     source: "built-in",
-    systemPrompt: buildGeneralPurposeSystemPrompt(),
+    systemPrompt: buildGeneralPurposeSystemPrompt(options.productName),
     tools: ["*"],
   };
 }

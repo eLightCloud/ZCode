@@ -5,6 +5,18 @@ import { installConversationTopicPublisherMethods } from "./topic-publisher-meth
 import type * as implementation5 from "./topic-publisher-resync.js";
 import type * as implementation0 from "./topic-publisher-snapshot.js";
 import type * as implementation3 from "./topic-publisher-subscribe.js";
+import type { SessionEvent } from "@zcode/contracts";
+import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
+import { ProductProjection } from "./product-projection.js";
+import { ProjectionPayloadTooLargeError } from "./topic-publisher-support.js";
+import { nonNegativeHardBound } from "./topic-publisher-support.js";
+import type { ConversationTopicPublisherOptions } from "./topic-publisher-support.js";
+import type { LogEntry } from "./topic-publisher-support.js";
+import type { Subscription } from "./topic-publisher-support.js";
+import type { ConversationDelta } from "@zcode/shared/zcode-protocol-v4";
+import { statePatchSchema } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+
 // Conversation topic 发布器（传输外壳）。
 // CLI 侧权威运行时：内存有界 delta 日志（logEpoch + 保留窗）+ subscribe(base)
 // 裁决（resume/snapshot）+ 每订阅者 flush 管线（filter → coalesce → 打帧）。
@@ -17,19 +29,6 @@ import type * as implementation3 from "./topic-publisher-subscribe.js";
 //   因此「snapshot(W)+续流 ≡ 全量重放」黄金测试可直接覆盖恢复路径。
 // - 重订阅 = 替换：同 connectionId 重复 subscribe 即作废旧订阅并清其
 //   flush buffer，旧 subscriptionId 不再产帧，客户端按 subId 丢弃旧代际帧。
-import { type SessionEvent } from "@zcode/contracts";
-
-import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
-
-import { ProductProjection } from "./product-projection.js";
-
-import { ProjectionPayloadTooLargeError, nonNegativeHardBound } from "./topic-publisher-support.js";
-
-import type {
-  ConversationTopicPublisherOptions,
-  LogEntry,
-  Subscription,
-} from "./topic-publisher-support.js";
 
 export {
   PROJECTION_TERMINAL_RESERVE_BYTES,
@@ -49,6 +48,7 @@ export type {
 } from "./topic-publisher-support.js";
 
 export class ConversationTopicPublisher {
+  declare appendDeltas: ConversationTopicPublisherApi["appendDeltas"];
   // 类型声明无实例字段；实现由下方唯一安装器登记在同一 owner 原型。
   declare getSnapshot: ConversationTopicPublisherApi["getSnapshot"];
   declare getWireSnapshotLogicalBytes: ConversationTopicPublisherApi["getWireSnapshotLogicalBytes"];
@@ -248,8 +248,41 @@ export class ConversationTopicPublisher {
       }
     }
 
+    const previous = this.projection.getSnapshot();
+    if (previous.runtimeInitialization) {
+      // 首帧已对外发布，最终恢复不得让同一 epoch 的 seq/revision 倒退。
+      candidate.projection.setRuntimeInitialization(
+        previous.runtimeInitialization,
+        previous.seq + 1,
+        previous.revision + 1,
+      );
+    }
     this.projection = candidate.projection;
-    if (usedBatchHydration) {
+    const current = this.getSnapshot();
+    if (
+      previous.runtimeInitialization &&
+      previous.rows.window.length === current.rows.window.length &&
+      previous.rows.window.every(
+        (row, index) =>
+          row.rowId === current.rows.window[index]?.rowId &&
+          row.kind === current.rows.window[index]?.kind,
+      )
+    ) {
+      // 正常初始化只补控制/摘要，不能用尾窗 snapshot 丢掉用户已分页读出的历史与滚动锚点。
+      // 真正改变历史结构（如 compact 修复）仍走既有完整 snapshot 边界。
+      const deltas: ConversationDelta[] = [
+        { op: "state.updated", patch: statePatchSchema.parse(current) },
+      ];
+      current.rows.window.forEach((row, index) => {
+        if (JSON.stringify(row) !== JSON.stringify(previous.rows.window[index]))
+          deltas.push({ op: "row.upserted", row });
+      });
+      this.wireSnapshotBytesUpperBound = this.measureWireSnapshotBytes(this.getWireSnapshot());
+      this.appendDeltas(current.seq, deltas);
+      return;
+    }
+
+    if (usedBatchHydration || previous.runtimeInitialization) {
       // 批量重放会把派生 actions 延迟到最终 materialization；若允许客户端
       // 用逐事件旧快照的中间 base 续这份日志，batch 从未持有的旧 canEdit/canRetry 无法被
       // 定点撤销。rehydrate 本来就要求所有现有订阅 resync，因此在当前 seq 建立 snapshot
@@ -322,6 +355,17 @@ export class ConversationTopicPublisher {
   declare private ackFor: OmitThisParameter<typeof implementation4.ackFor>;
 
   declare private frameShell: OmitThisParameter<typeof implementation4.frameShell>;
+
+  /** 初始化只变化几次，沿既有 snapshot 恢复边界发布，不引入第二份事件流。 */
+  setRuntimeInitialization(
+    state: NonNullable<ConversationSnapshot["runtimeInitialization"]>,
+  ): void {
+    this.projection.setRuntimeInitialization(state);
+    this.wireSnapshotBytesUpperBound = this.measureWireSnapshotBytes(this.getWireSnapshot());
+    this.appendDeltas(this.currentSeq, [
+      { op: "state.updated", patch: statePatchSchema.parse(this.getSnapshot()) },
+    ]);
+  }
 }
 
 installConversationTopicPublisherMethods(ConversationTopicPublisher.prototype);

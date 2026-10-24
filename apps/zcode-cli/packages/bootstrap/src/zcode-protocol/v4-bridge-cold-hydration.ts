@@ -55,16 +55,27 @@ export function createV4GatewayHydrationHost(
       // 代价：contextWindow 分母会按父 record 的当前模型解析而不是 actor 模型，纯展示层偏差。
       const record = await resolveConversationBackingRecord(context, sessionId);
       if (!record) {
-        // 诊断：hydrate 预期在 runtime 已由 cold-resume 激活后执行；连父 record 兜底
-        // 都落空时，返回空事件会把真实的生命周期竞态伪装成“历史为空”，必须留下明确现场。
-        context.logger?.warn("ZCode Protocol v4 hydrate has no active runtime", {
-          activeSessionCount: context.sessions.size,
-          event: "zcode_protocol.v4.hydrate_runtime_missing",
-          module: "bootstrap.zcode_protocol",
-          phase: "loadPersistedEvents",
+        // detached live child 继续使用在线尾部；仅显式携带 M0 的冷打开可以独立物化历史。
+        if (persistedMessages === undefined)
+          return { events: [], synthesized: false, sourceEventSeq: 0 };
+        // 主对话历史只依赖持久化事实；旧路径在这里返回空数组会把冷会话误画成空白。
+        const store = context.deps.sessionStore;
+        if (!store) throw new Error("fault.subscribe.sessionNotFound");
+        const source = await loadPersistedConversationMaterialization({
           sessionId,
+          persistedMessages,
+          memoryEvents: [],
+          store,
         });
-        return { events: [], synthesized: false, sourceEventSeq: 0 };
+        const merged = mergeColdConversationEvents({ ...source, sessionId });
+        return {
+          events: merged.events,
+          synthesized: true,
+          sourceEventSeq: 0,
+          ...(source.sharedContextImport
+            ? { sharedContextImport: source.sharedContextImport }
+            : {}),
+        };
       }
       // message/part 与 session_entry 的异步读取期间 live sink 仍可收到新事件。
       // gateway 必须知道 memory eventStore 取快照时的 raw cursor，才能只补 await 窗口内

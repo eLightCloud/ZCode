@@ -36,6 +36,7 @@ import {
 import { toAiSdkToolResultOutput, toAiSdkUserContent } from "./transform-content.js";
 
 export interface AiSdkMessageTransformOptions {
+  toolSearchEnabled?: boolean;
   apiFormat?: string;
   providerOptions?: Record<string, unknown>;
   providerKind?: "openai" | "anthropic" | "openai-compatible" | "gateway" | "custom";
@@ -208,6 +209,11 @@ function contentBlockToAiSdkAssistantParts(
   options: AiSdkAssistantTransformOptions,
 ): AiSdkAssistantContentPart[] {
   switch (block.type) {
+    case "tool_reference":
+      throw new AiSdkModelAdapterError(
+        ModelErrorCode.InvalidModelRequest,
+        "Tool references must appear inside tool results",
+      );
     case "text":
       return block.text.length > 0 ? [{ type: "text", text: block.text }] : [];
 

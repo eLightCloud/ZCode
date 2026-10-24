@@ -2,6 +2,7 @@ import type { ConversationTopicPublisher } from "./conversation-topic-publisher.
 
 /** 同一 owner 的内部类型视图；不复制状态，不暴露到端口。 */
 export interface ConversationTopicPublisherMethodsContext {
+  appendDeltas: ConversationTopicPublisher["appendDeltas"];
   readonly topic: ConversationTopicPublisher["topic"];
   projection: ConversationTopicPublisher["projection"];
   readonly now: ConversationTopicPublisher["now"];

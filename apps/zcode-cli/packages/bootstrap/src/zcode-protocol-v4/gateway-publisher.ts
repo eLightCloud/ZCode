@@ -1,3 +1,11 @@
+import type { MessageWithParts } from "@zcode/contracts";
+import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { ZCodeWorkspaceRef } from "@zcode/shared";
+import { ConversationTopicPublisher } from "./conversation-topic-publisher.js";
+import type { SessionUsageSeed } from "./product-projection.js";
+import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
+import type { HydrationBuffer } from "./gateway-support.js";
+import { randomUUID } from "node:crypto";
 // V4 conversation 网关（host 通道层 CLI 侧）。
 // 职责：per-session ConversationTopicPublisher 注册表 + flushWindowMs 定时调度
 // + v4/command → CommandInbox → 宿主 executor 的收口。
@@ -7,18 +15,7 @@
 // - 命令副作用不在本类实现：inbox 裁决通过后经 host.executeCommand 调宿主操作
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
-import type { MessageWithParts } from "@zcode/contracts";
 
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
-
-import type { ZCodeWorkspaceRef } from "@zcode/shared";
-
-import { ConversationTopicPublisher } from "./conversation-topic-publisher.js";
-
-import type { SessionUsageSeed } from "./product-projection.js";
-
-import type { ConversationV4GatewayMethodsContext } from "./gateway-context.js";
-import type { HydrationBuffer } from "./gateway-support.js";
 export function ensurePublisher(
   this: ConversationV4GatewayMethodsContext,
   sessionId: string,
@@ -57,6 +54,140 @@ export function seedPublisherConfig(
   }
 }
 
+/** 首帧先落 transport queue，再启动会同步扫描插件的 runtime；重连不重跑失败 hook。 */
+export function ensureHistoryReadyPublisher(
+  this: ConversationV4GatewayMethodsContext,
+  sessionId: string,
+  thought?: string,
+  workspace?: ZCodeWorkspaceRef,
+  additionalDirectories?: string[],
+  retryAttempt?: string,
+): Promise<ConversationTopicPublisher> {
+  const existing = this.historyOpenings.get(sessionId);
+  if (existing) return existing.history;
+  const publisher = this.publishers.get(sessionId);
+  const failed = publisher?.getSnapshot().runtimeInitialization;
+  if (failed?.status === "failed" && failed.attemptId !== retryAttempt)
+    return Promise.resolve(publisher!);
+  // 失败 app 已回收，旧 raw tail 不属于下一次 runtime 的事件水位。
+  if (failed?.status === "failed") this.rawSequenceStates.delete(sessionId);
+  const attemptId = randomUUID();
+  const initializationStartedAt = performance.now();
+  let resolveReady!: (publisher: ConversationTopicPublisher) => void;
+  let rejectReady!: (error: unknown) => void;
+  const ready = new Promise<ConversationTopicPublisher>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  // 没有旧客户端等待时失败也由状态条消费，避免无人 await 的 rejection。
+  void ready.catch(() => undefined);
+  this.readyFlights.set(sessionId, ready);
+  let messages: MessageWithParts[] | undefined;
+  let started = false;
+  const clear = () => {
+    messages = undefined;
+    if (this.readyFlights.get(sessionId) === ready) this.readyFlights.delete(sessionId);
+    if (this.historyOpenings.get(sessionId) === opening) this.historyOpenings.delete(sessionId);
+  };
+  const opening = {
+    cancel: () => {
+      rejectReady(new Error("cold opening disposed"));
+      clear();
+    },
+    history: Promise.resolve()
+      .then(async () => {
+        messages = await this.host.loadPersistedMessages!(sessionId);
+        if (this.disposed || this.historyOpenings.get(sessionId) !== opening)
+          throw new Error("cold opening disposed");
+        const result = await this.hydratePublisher(sessionId, messages, true);
+        this.setInitialization(sessionId, result, { status: "initializing", attemptId });
+        return result;
+      })
+      .catch((error: unknown) => {
+        rejectReady(error);
+        clear();
+        throw error;
+      }),
+    start: () => {
+      if (started) return;
+      started = true;
+      // post-response commit 已确认首帧入队；下一轮让 stdio I/O 有机会交付，不用定时猜测 UI。
+      setImmediate(() => {
+        let disposeOnFailure: (() => Promise<void>) | undefined;
+        let releaseRuntime: (() => void) | undefined;
+        void (async () => {
+          if (this.disposed || this.historyOpenings.get(sessionId) !== opening)
+            throw new Error("cold opening disposed");
+          releaseRuntime = await this.host.retainSessionRuntime?.(sessionId);
+          if (this.disposed || this.historyOpenings.get(sessionId) !== opening)
+            throw new Error("cold opening disposed");
+          const restored = await this.coldResume.ensureResumed(
+            sessionId,
+            thought,
+            workspace,
+            additionalDirectories,
+            messages,
+            (outcome) => {
+              disposeOnFailure = outcome.disposeOnFailure;
+            },
+          );
+          if (this.disposed || this.historyOpenings.get(sessionId) !== opening)
+            throw new Error("cold opening disposed");
+          const result = await this.hydratePublisher(sessionId, restored ?? messages, true);
+          this.setInitialization(sessionId, result, { status: "ready", attemptId });
+          this.host.onDebug?.(
+            `v4 runtime ready session=${sessionId} attempt=${attemptId} runtimeReadyMs=${Math.round(performance.now() - initializationStartedAt)}`,
+          );
+          resolveReady(result);
+        })()
+          .catch(async (error: unknown) => {
+            // activation 成功而最终物化失败时，也必须拆掉本次 app，下一次重试才会完整 resume。
+            await disposeOnFailure?.();
+            if (!this.disposed && this.historyOpenings.get(sessionId) === opening) {
+              const result = this.publishers.get(sessionId);
+              if (result)
+                this.setInitialization(sessionId, result, {
+                  status: "failed",
+                  attemptId,
+                  reasonCode: "fault.subscribe.resumeFailed",
+                  message: error instanceof Error ? error.message : String(error),
+                });
+              this.host.onError?.("v4.initialize", error, { sessionId, attemptId });
+            }
+            rejectReady(error);
+          })
+          .finally(() => {
+            releaseRuntime?.();
+            clear();
+          });
+      });
+    },
+  };
+  this.historyOpenings.set(sessionId, opening);
+  return opening.history;
+}
+
+export function setInitialization(
+  this: ConversationV4GatewayMethodsContext,
+  sessionId: string,
+  publisher: ConversationTopicPublisher,
+  state: NonNullable<ConversationSnapshot["runtimeInitialization"]>,
+): void {
+  publisher.setRuntimeInitialization(state);
+  const sequence = this.rawSequenceStates.get(sessionId);
+  if (sequence) {
+    sequence.lastTransportSeq = publisher.getSnapshot().seq;
+    sequence.offset = sequence.lastTransportSeq - sequence.sourceEventSeq;
+  }
+  for (const connectionId of new Set(
+    [...this.flushStates.values()]
+      .filter((entry) => entry.sessionId === sessionId)
+      .map((entry) => entry.connectionId),
+  )) {
+    if (!this.pausedConnections.has(connectionId)) this.flushConnection(connectionId);
+  }
+}
+
 /**
  * 冷恢复 READY 只在明确需要 activation 的入口创建；hydratePublisher 保持 projection-only。
  * 注册 promise 早于 activation，避免 record 提前入册后并发 command/query 越过恢复水位。
@@ -67,6 +198,7 @@ export function ensureColdReadyPublisher(
   sessionId: string,
   resumeThoughtLevel?: string,
   workspace?: ZCodeWorkspaceRef,
+  additionalDirectories?: string[],
 ): Promise<ConversationTopicPublisher> {
   const existingFlight = this.readyFlights.get(sessionId);
   if (existingFlight) return existingFlight;
@@ -76,6 +208,7 @@ export function ensureColdReadyPublisher(
       sessionId,
       resumeThoughtLevel,
       workspace,
+      additionalDirectories,
     );
     return this.hydratePublisher(sessionId, persistedMessages);
   });
@@ -101,7 +234,8 @@ export function hydratePublisher(
 ): Promise<ConversationTopicPublisher> {
   const existing = this.publishers.get(sessionId);
   // 已 hydrate 过的 live publisher：直接复用（避免重复重建 / 双计）。
-  if (existing && this.hydratedSessions.has(sessionId)) return Promise.resolve(existing);
+  if (!forceRebuild && existing && this.hydratedSessions.has(sessionId))
+    return Promise.resolve(existing);
 
   const inFlight = this.hydrationInFlight.get(sessionId);
   if (inFlight) return inFlight;

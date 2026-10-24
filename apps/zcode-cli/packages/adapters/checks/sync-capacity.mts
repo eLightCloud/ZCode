@@ -37,8 +37,12 @@ export async function verifyCapacity(options: {
   checks: string[];
 }) {
   const outbox = createConversationSyncOutbox(join(options.root, "capacity-outbox.sqlite"));
-  const source = createSqliteSessionStore({ dbPath: join(options.root, "capacity-source.sqlite") });
-  const target = createSqliteSessionStore({ dbPath: join(options.root, "capacity-target.sqlite") });
+  const source = await createSqliteSessionStore({
+    dbPath: join(options.root, "capacity-source.sqlite"),
+  });
+  const target = await createSqliteSessionStore({
+    dbPath: join(options.root, "capacity-target.sqlite"),
+  });
   const measurements: Array<{ rounds: number; bytes: number; durationMs: number }> = [];
   let parent: string | null = null;
   let blocked = false;

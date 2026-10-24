@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ModelRetryBudget,
-  modelNetworkStatusEventJsonSchema,
-  type ModelTextRequest,
-} from "../src/model/index.js";
+import { ModelRetryBudget, modelNetworkStatusEventJsonSchema } from "../src/model/index.js";
 import {
   getCurrentModelInvocationContext,
   runWithModelInvocationContext,
@@ -21,12 +17,6 @@ describe("ModelRetryBudget", () => {
   });
 
   it("is a runtime-only request field and stays out of the model request JSON schema", async () => {
-    const request: ModelTextRequest = {
-      model: "test/model",
-      messages: [],
-      modelRetryBudget: ModelRetryBudget.Unbounded,
-    };
-    expect(request.modelRetryBudget).toBe("unbounded");
     const { modelTextRequestJsonSchema } = await import("../src/model/index.js");
     const properties = (modelTextRequestJsonSchema as { properties: Record<string, unknown> })
       .properties;

@@ -62,6 +62,7 @@ export async function recoverModelStepAfterContextExceeded(
       rapidRefillCount: rapidRefill.consecutiveRapidRefills,
       model: state.model,
       turnRequestState: state.turnRequestState,
+      getContinuationTools: () => getTurnTools(this, state),
     },
   );
   if (compactOutcome !== "compacted") {

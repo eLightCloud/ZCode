@@ -1,42 +1,29 @@
 import { join } from "node:path";
-
-import { createNodeToolArtifactStore, NodeDeliverableStore } from "@zcode/adapters/storage";
-
-import { ConfigResult, resolvePath } from "@zcode/adapters/config";
-
+import { createNodeToolArtifactStore } from "@zcode/adapters/storage";
+import { NodeDeliverableStore } from "@zcode/adapters/storage";
+import { ConfigResult } from "@zcode/adapters/config";
+import { resolvePath } from "@zcode/adapters/config";
 import { createNodeExecutionAdapter } from "@zcode/adapters/exec";
-
 import { createNodeFileSystemAdapter } from "@zcode/adapters/fs";
-
 import { createNodeWebFetchHttpClientAdapter } from "@zcode/adapters/http";
-
 import { createJimpImageProcessorAdapter } from "@zcode/adapters/image";
-
 import { createPopplerPdfDocumentAdapter } from "@zcode/adapters/pdf";
-
 import { createNodeSessionMailboxAdapter } from "@zcode/adapters/mailbox";
-
 import { createMcpAdapter } from "@zcode/adapters/mcp";
-
-import { AgentRuntimeConfig, PermissionService } from "@zcode/core";
-
-import { Logger, McpServerConfig, SessionStorePort } from "@zcode/contracts";
-
+import { AgentRuntimeConfig } from "@zcode/core";
+import { PermissionService } from "@zcode/core";
+import { Logger } from "@zcode/contracts";
+import { McpServerConfig } from "@zcode/contracts";
+import { SessionStorePort } from "@zcode/contracts";
 import { StartupTimer } from "../startup-logging.js";
-
 import type { ZCodeAppOptions } from "./types.js";
-
 import { isMessageEnabled } from "./app-config-options.js";
-
 import { getCliStorageRoot } from "./paths.js";
-
 import { asInputHistoryStore } from "./session-store.js";
-
-import {
-  debugRuntimeConfigResolved,
-  markMcpAdapterInitialized,
-  markStorageAdaptersInitialized,
-} from "./startup-marks.js";
+import { debugRuntimeConfigResolved } from "./startup-marks.js";
+import { markMcpAdapterInitialized } from "./startup-marks.js";
+import { markStorageAdaptersInitialized } from "./startup-marks.js";
+import { tmpdir } from "node:os";
 
 export function createAppInfrastructure(
   configResult: ConfigResult,
@@ -114,6 +101,7 @@ export function createAppInfrastructure(
         caCertFile: configResult.config.network.caCertFile,
       },
       outputRootDir: join(storageRoot, "cli", "exec"),
+      bashOutputTempDir: tmpdir(),
       processEnv: options.env ?? process.env,
     });
   const ownsExecutionPort = options.executionPort === undefined;

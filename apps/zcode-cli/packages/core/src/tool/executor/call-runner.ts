@@ -1,80 +1,57 @@
-import {
-  CoreErrorType,
-  createChildTraceContext,
-  createCoreError,
-  createRootTraceContext,
-  getCurrentTraceContext,
-  traceContextToLogContext,
-  type SessionEvent,
-  type ToolExecutionSpanWriter,
-} from "@zcode/contracts";
-
-import {
-  normalizeToolExecutionInput,
-  prepareInitialToolExecutionInput,
-} from "../input-normalization.js";
-
+import { CoreErrorType } from "@zcode/contracts";
+import { createChildTraceContext } from "@zcode/contracts";
+import { createCoreError } from "@zcode/contracts";
+import { createRootTraceContext } from "@zcode/contracts";
+import { getCurrentTraceContext } from "@zcode/contracts";
+import { traceContextToLogContext } from "@zcode/contracts";
+import type { SessionEvent } from "@zcode/contracts";
+import type { ToolExecutionSpanWriter } from "@zcode/contracts";
+import { normalizeToolExecutionInput } from "../input-normalization.js";
+import { prepareInitialToolExecutionInput } from "../input-normalization.js";
 import type { SkillTelemetryMetadata } from "@zcode/contracts";
-
-import type { ToolExecutionContext, ToolExecutionResult } from "../types.js";
-
+import type { ToolExecutionContext } from "../types.js";
+import type { ToolExecutionResult } from "../types.js";
 import type { ToolEntry } from "../types.js";
-
 import type { BackgroundTaskTracker } from "./background-tasks.js";
-
-import {
-  createErrorResult,
-  createPermissionErrorResult,
-  createToolHandlerFailureError,
-  isToolHandlerFailure,
-} from "./errors.js";
-
-import { emitToolCallError, emitToolCallStarted } from "./events.js";
-
+import { createErrorResult } from "./errors.js";
+import { createPermissionErrorResult } from "./errors.js";
+import { createToolHandlerFailureError } from "./errors.js";
+import { isToolHandlerFailure } from "./errors.js";
+import { emitToolCallError } from "./events.js";
+import { emitToolCallStarted } from "./events.js";
 import { runPreToolUseHooks } from "./hook-flow.js";
-
 import { resolveToolCallCapabilityFlags } from "./permission-capability.js";
-
 import { resolveToolPermission } from "./permission-flow.js";
-
 import { snapshotPermissionInput } from "./permission-input.js";
-
 import { buildToolInputResolutionContext } from "./permission-input-adjustments.js";
-
 import { createMcpToolDisplay } from "./result-display.js";
-
-import {
-  ToolDeadline,
-  executeWithTimeout,
-  linkAbortSignal,
-  observeToolAdmissionClock,
-  resolveTimeoutMs,
-} from "./timeout.js";
-
+import { ToolDeadline } from "./timeout.js";
+import { executeWithTimeout } from "./timeout.js";
+import { linkAbortSignal } from "./timeout.js";
+import { observeToolAdmissionClock } from "./timeout.js";
+import { resolveTimeoutMs } from "./timeout.js";
 import { runToolCallWithTelemetry } from "./telemetry.js";
-
-import { withPlanExitDeniedTurnStop, withWorkflowRefineDeniedFollowUp } from "./turn-control.js";
-
-import type { ToolExecuteOptions, ToolExecutorDeps } from "./types.js";
-
-import { validateInitialModelToolInput, validateInput, validateOutput } from "./validation.js";
-
+import { withPlanExitDeniedTurnStop } from "./turn-control.js";
+import { withWorkflowRefineDeniedFollowUp } from "./turn-control.js";
+import type { ToolExecuteOptions } from "./types.js";
+import type { ToolExecutorDeps } from "./types.js";
+import { validateInitialModelToolInput } from "./validation.js";
+import { validateInput } from "./validation.js";
+import { validateOutput } from "./validation.js";
 import type { ExecutableToolCall } from "../types.js";
-
 import { resolveToolEntryModelContract } from "../model-contract.js";
-
-import {
-  appendPreToolAdditionalContextsToErrorResult,
-  isEmptyToolName,
-} from "./call-input-errors.js";
-
-import { completeFailedToolCall, errorCategoryForToolError } from "./call-failure.js";
-
+import { appendPreToolAdditionalContextsToErrorResult } from "./call-input-errors.js";
+import { isEmptyToolName } from "./call-input-errors.js";
+import { completeFailedToolCall } from "./call-failure.js";
+import { errorCategoryForToolError } from "./call-failure.js";
 import { createToolHandlerContext } from "./call-handler-context.js";
-
 import { completeSuccessfulToolCall } from "./call-success.js";
-
 import { rejectUnregisteredTool } from "./call-unregistered-tool.js";
+import { resolveDeferredToolCall } from "../deferred-call.js";
+
+const UNDISCOVERED_TOOL_SCHEMA_EXPLANATION =
+  "\n\nThis tool's schema was not sent to the API — it was not in the discovered-tool set derived from message history. " +
+  "Without the schema in your prompt, typed parameters (arrays, numbers, booleans) get emitted as strings and the client-side parser rejects them. ";
 
 export async function executeToolCall(
   deps: ToolExecutorDeps,
@@ -82,6 +59,24 @@ export async function executeToolCall(
   toolCall: ExecutableToolCall,
   options?: ToolExecuteOptions,
 ): Promise<ToolExecutionResult> {
+  const admission = resolveDeferredToolCall(toolCall, options?.toolSearch, deps.registry);
+  if (admission.error) {
+    const result = createErrorResult(admission.call, admission.error);
+    await emitToolCallError(
+      deps,
+      toolCall.id,
+      options?.traceContext ??
+        deps.traceContext ??
+        createRootTraceContext({ sessionId: deps.sessionId, turnId: deps.turnId }),
+      deps.turnId,
+      result.error,
+    );
+    return result;
+  }
+  // 历史只保存一份原始目标参数；执行/Hook 可修改的对象在执行入口独立复制。
+  toolCall = admission.call.modelCallWrapper
+    ? { ...admission.call, input: structuredClone(admission.call.input) }
+    : admission.call;
   const totalStartedAt = Date.now();
   const entry = isEmptyToolName(toolCall.name) ? undefined : deps.registry.get(toolCall.name);
   const canonicalToolCall =
@@ -117,6 +112,7 @@ async function executeToolCallImpl(
         model,
       })
     : undefined;
+  const pluginId = entry?.metadata.mcpPresentation?.pluginId;
   const canonicalToolCall =
     entry && toolCall.name !== entry.metadata.name
       ? { ...toolCall, name: entry.metadata.name }
@@ -154,7 +150,15 @@ async function executeToolCallImpl(
         error instanceof Error ? error.message : "Tool instance is unavailable",
       ),
     );
-    await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
+    await emitToolCallError(
+      deps,
+      canonicalToolCall.id,
+      traceContext,
+      turnId,
+      result.error,
+      undefined,
+      pluginId,
+    );
     return result;
   }
   if (lifetime)
@@ -189,10 +193,35 @@ async function executeToolCallImpl(
     );
     if (initialInputValidation) {
       const result = createErrorResult(canonicalToolCall, initialInputValidation);
+      const search = options?.toolSearch;
+      // 延迟 schema 未加载只提供纠错提示，不增加工具执行拒绝条件。
+      if (
+        search?.enabled &&
+        !search.discovered.has(canonicalToolCall.name) &&
+        search.catalog.some((tool) => tool.name === canonicalToolCall.name && tool.deferred)
+      ) {
+        // 原提示省略了类型退化原因；完整解释与 schema 一并提供，避免只引导盲目重试。
+        result.modelContent =
+          (result.modelContent ?? initialInputValidation.message) +
+          UNDISCOVERED_TOOL_SCHEMA_EXPLANATION +
+          `Load the tool first: call ToolSearch with query "select:${canonicalToolCall.name}", then retry this call. ` +
+          `For reference, this tool's input schema is: ${JSON.stringify(entry.inputSchema)}` +
+          (search.mode === "local"
+            ? `\nCall DeferredToolCall with {name: "${canonicalToolCall.name}", input: {...}}.`
+            : "");
+      }
       // schema 失败与 registry miss 同属 handler/ToolCallStarted 之前的早退；旧代码
       // 只把失败回灌模型，没有发布 ToolCallError，V4 tool row 因而在整个 turn 里停在
       // inputStreaming（CreateWorkflow 卡持续显示「正在编写工作流」），模型重试后又叠一张。
-      await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
+      await emitToolCallError(
+        deps,
+        canonicalToolCall.id,
+        traceContext,
+        turnId,
+        result.error,
+        undefined,
+        pluginId,
+      );
       telemetry?.finishFailed("validation", "parse", result.error);
       return result;
     }
@@ -207,7 +236,15 @@ async function executeToolCallImpl(
         canonicalToolCall,
         createToolHandlerFailureError(canonicalToolCall, toolInputValidation),
       );
-      await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
+      await emitToolCallError(
+        deps,
+        canonicalToolCall.id,
+        traceContext,
+        turnId,
+        result.error,
+        undefined,
+        pluginId,
+      );
       // 工具专属校验以普通失败结果返回，不走 handler 执行的 try/catch 失败收口。
       // 先发出 ToolCallError 更新工具行，再显式标记遥测失败，避免被记录为 abandoned。
       telemetry?.finishFailed("validation", "parse", result.error);
@@ -229,7 +266,15 @@ async function executeToolCallImpl(
           canonicalToolCall,
           createToolHandlerFailureError(canonicalToolCall, resolution),
         );
-        await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
+        await emitToolCallError(
+          deps,
+          canonicalToolCall.id,
+          traceContext,
+          turnId,
+          result.error,
+          undefined,
+          pluginId,
+        );
         telemetry?.finishFailed("validation", "parse", result.error);
         return result;
       }
@@ -443,6 +488,7 @@ async function executeToolCallImpl(
         turnId,
         backgroundTasks,
         telemetry,
+        pluginId,
       );
     } catch (error) {
       return await completeFailedToolCall(
@@ -457,6 +503,7 @@ async function executeToolCallImpl(
         turnId,
         handlerState,
         telemetry,
+        pluginId,
       );
     } finally {
       unlinkParentAbort();

@@ -34,6 +34,9 @@ import * as implementation6 from "./sqlite-session-targets.js";
 import * as implementation7 from "./sqlite-session-usage.js";
 import * as implementation9 from "./sqlite-session-workflows.js";
 export interface SqliteSessionStoreApi {
+  softDeleteSession(
+    ...args: Parameters<typeof implementation3.softDeleteSession>
+  ): ReturnType<typeof implementation3.softDeleteSession>;
   exportTextCheckpoint(
     ...args: Parameters<typeof implementation0.exportTextCheckpoint>
   ): ReturnType<typeof implementation0.exportTextCheckpoint>;

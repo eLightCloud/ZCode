@@ -2,6 +2,7 @@ import type { ProductProjection } from "./product-projection.js";
 
 /** 同一 owner 的内部类型视图；不复制状态，不暴露到端口。 */
 export interface ProductProjectionContext {
+  onStreamingToolIdentity: ProductProjection["onStreamingToolIdentity"];
   snapshot: ProductProjection["snapshot"];
   rowIndexById: ProductProjection["rowIndexById"];
   hydrationAccumulator: ProductProjection["hydrationAccumulator"];

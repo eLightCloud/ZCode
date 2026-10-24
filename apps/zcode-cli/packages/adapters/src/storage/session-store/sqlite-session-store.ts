@@ -1,3 +1,6 @@
+import type { MigrationResult } from "@zcode/shared/sqlite-migrations";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { SqliteSessionStoreApi } from "./sqlite-session-api.js";
 import * as implementation0 from "./sqlite-session-checkpoints.js";
 import * as implementation10 from "./sqlite-session-diagnostics.js";
@@ -10,38 +13,25 @@ import * as implementation2 from "./sqlite-session-shared-context.js";
 import * as implementation6 from "./sqlite-session-targets.js";
 import * as implementation7 from "./sqlite-session-usage.js";
 import * as implementation9 from "./sqlite-session-workflows.js";
-
 import { DatabaseSync } from "node:sqlite";
-
-import type {
-  InputHistoryStorePort,
-  LocalSettingStorePort,
-  ScriptWorkflowStorePort,
-  SessionStorePort,
-  UsageStorePort,
-} from "@zcode/contracts";
-
-// 端口留在领域包 @zcode/dynamic-workflow，这里只做类型引用：adapters 运行时不依赖它。
+import type { InputHistoryStorePort } from "@zcode/contracts";
+import type { LocalSettingStorePort } from "@zcode/contracts";
+import type { ScriptWorkflowStorePort } from "@zcode/contracts";
+import type { SessionStorePort } from "@zcode/contracts";
+import type { UsageStorePort } from "@zcode/contracts";
 import type { JournalStorePort } from "@zcode/dynamic-workflow";
-
 import { SqliteSessionMigrationError } from "./errors.js";
-
-import {
-  DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS,
-  runSqliteSessionMigrations,
-  runSqliteSessionMigrationsAsync,
-  type AsyncSqliteMigrationOptions,
-} from "./migration-runner.js";
-
-import type { ForkCommitFaultStage, SqliteSessionStoreOptions } from "./options.js";
-
-import { ensureParentDir, getDefaultSessionDbPath } from "./paths.js";
-
+import { DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS } from "./migration-runner.js";
+import { runSqliteSessionMigrationsAsync } from "./migration-runner.js";
+import type { AsyncSqliteMigrationOptions } from "./migration-runner.js";
+import type { ForkCommitFaultStage } from "./options.js";
+import type { SqliteSessionStoreOptions } from "./options.js";
+import { getDefaultSessionDbPath } from "./paths.js";
 import { maybeThrowStorageFsFault } from "../fs-fault-injection.js";
 
-export { getDefaultSessionDbPath };
+// 端口留在领域包 @zcode/dynamic-workflow，这里只做类型引用：adapters 运行时不依赖它。
 
-const deferredStartup = Symbol("deferredSqliteStartup");
+export { getDefaultSessionDbPath };
 
 export class SqliteSessionStore
   implements
@@ -59,6 +49,7 @@ export class SqliteSessionStore
   declare commitSharedContextImportBundle: SqliteSessionStoreApi["commitSharedContextImportBundle"];
   declare transitionSharedContextImport: SqliteSessionStoreApi["transitionSharedContextImport"];
   declare createSession: SqliteSessionStoreApi["createSession"];
+  declare softDeleteSession: SqliteSessionStoreApi["softDeleteSession"];
   declare updateSession: SqliteSessionStoreApi["updateSession"];
   declare getSession: SqliteSessionStoreApi["getSession"];
   declare listSessions: SqliteSessionStoreApi["listSessions"];
@@ -131,36 +122,52 @@ export class SqliteSessionStore
   private readonly checkpointLogger?: SqliteSessionStoreOptions["logger"];
   private dwfJournalStore?: JournalStorePort;
 
-  constructor(options: SqliteSessionStoreOptions = {}, startupToken?: symbol) {
-    this.dbPath = options.dbPath ?? getDefaultSessionDbPath();
+  private constructor(
+    db: DatabaseSync,
+    dbPath: string,
+    options: SqliteSessionStoreOptions,
+    readonly migrationResult: MigrationResult,
+  ) {
+    this.db = db;
+    this.dbPath = dbPath;
     this.forkCommitFaultAt = options.forkCommitFaultAt;
     this.checkpointLogger = options.logger;
+  }
+
+  static async open(
+    options: SqliteSessionStoreOptions = {},
+    migrationOptions?: AsyncSqliteMigrationOptions,
+  ): Promise<SqliteSessionStore> {
+    const dbPath = options.dbPath ?? getDefaultSessionDbPath();
     const startupLockTimeoutMs =
       options.startupLockTimeoutMs ?? DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS;
+    let db: DatabaseSync;
     try {
-      ensureParentDir(this.dbPath);
-      maybeThrowStorageFsFault({ operation: "sqliteOpen", path: this.dbPath });
-      // 多个本地或远程 Agent 会共享同一个 session DB；timeout 必须在执行首条
-      // PRAGMA 前生效，否则并发启动会在 migration prelude 直接抛 database is locked。
-      this.db = new DatabaseSync(this.dbPath, { timeout: startupLockTimeoutMs });
+      if (dbPath !== ":memory:") {
+        maybeThrowStorageFsFault({ operation: "mkdir", path: dirname(dbPath) });
+        await mkdir(dirname(dbPath), { recursive: true });
+      }
+      maybeThrowStorageFsFault({ operation: "sqliteOpen", path: dbPath });
+      db = new DatabaseSync(dbPath, { timeout: startupLockTimeoutMs });
     } catch (error) {
-      throw new SqliteSessionMigrationError(
-        `Failed to open SQLite session database at ${this.dbPath}`,
-        {
-          cause: error,
-          dbPath: this.dbPath,
-          kind: "open_failed",
-        },
-      );
+      throw new SqliteSessionMigrationError(`Failed to open SQLite session database at ${dbPath}`, {
+        cause: error,
+        dbPath,
+        kind: "open_failed",
+      });
     }
     try {
-      if (startupToken !== deferredStartup)
-        runSqliteSessionMigrations(this.db, this.dbPath, startupLockTimeoutMs);
+      const migration = await runSqliteSessionMigrationsAsync(
+        db,
+        dbPath,
+        migrationOptions ?? { lockWaitTimeoutMs: startupLockTimeoutMs },
+      );
+      return new SqliteSessionStore(db, dbPath, options, migration);
     } catch (error) {
       try {
-        this.db.close();
+        db.close();
       } catch {
-        /* 保留原始迁移失败。 */
+        /* 关闭失败不能覆盖迁移错误。 */
       }
       throw error;
     }
@@ -169,21 +176,8 @@ export class SqliteSessionStore
   static async openStartup(
     options: SqliteSessionStoreOptions = {},
     migrationOptions: AsyncSqliteMigrationOptions = {},
-  ): Promise<SqliteSessionStore> {
-    // 未迁移的实例只保留在这个工厂内部；所有 Repo/业务只可能拿到 COMMIT 后的连接。
-    const store = new SqliteSessionStore(options, deferredStartup);
-    try {
-      await runSqliteSessionMigrationsAsync(store.db, store.dbPath, migrationOptions);
-      return store;
-    } catch (error) {
-      // close 也可能因 IO 失败；迁移的原始 cause 才是用户应处理的原因。
-      try {
-        store.close();
-      } catch {
-        /* 保留原始迁移失败。 */
-      }
-      throw error;
-    }
+  ) {
+    return SqliteSessionStore.open(options, migrationOptions);
   }
 
   getDatabasePath(): string {
@@ -237,12 +231,12 @@ for (const methods of [
 
 export function createSqliteSessionStore(
   options: SqliteSessionStoreOptions = {},
-): SqliteSessionStore {
-  return new SqliteSessionStore(options);
+): Promise<SqliteSessionStore> {
+  return SqliteSessionStore.open(options);
 }
 
 export function openStartupSqliteSessionStore(
   options: SqliteSessionStoreOptions = {},
-): SqliteSessionStore {
-  return new SqliteSessionStore(options);
+): Promise<SqliteSessionStore> {
+  return SqliteSessionStore.open(options);
 }

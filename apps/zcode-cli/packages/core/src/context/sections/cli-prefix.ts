@@ -5,10 +5,18 @@
 import type { ContextSection } from "../types.js";
 import { estimateTokens } from "../utils.js";
 
-const CLI_PREFIX_PROMPT = "You are ZCode, an interactive coding agent";
+/** Trusted display identity only; never an execution or agent identifier. */
+export function resolveContextProductName(productName?: string): string {
+  if (productName === undefined) return "ZCode";
+  const name = productName.trim();
+  if (!name || name.length > 80 || /[\p{Cc}\p{Cf}<>]/u.test(name)) {
+    throw new Error("Invalid application product name");
+  }
+  return name;
+}
 
-export function buildCliPrefixSection(): ContextSection {
-  const content = CLI_PREFIX_PROMPT;
+export function buildCliPrefixSection(productName?: string): ContextSection {
+  const content = `You are ${resolveContextProductName(productName)}, an interactive coding agent`;
 
   return {
     name: "CLI Prefix",

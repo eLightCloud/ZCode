@@ -1,118 +1,90 @@
 import { queryNativeDeliverables } from "./deliverables.js";
 import { subscribeConversationTopic } from "./protocol-v4-subscription.js";
-
 import { querySessionDebug } from "./session-debug.js";
-
 import { zcodeProtocolMethods } from "@zcode/shared";
-
-import { V4_METHODS, V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
-
+import { V4_METHODS } from "@zcode/shared/zcode-protocol-v4";
+import { V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
 import type { ZCodeProtocolRequest } from "@zcode/shared";
-
-import {
-  cancelBackgroundTask,
-  closeSession,
-  compactSession,
-  createSession,
-  forkSession,
-  generateWorkspaceText,
-  getTaskTokenUsage,
-  getUsageStats,
-  goalSession,
-  listSessionSubagents,
-  listSessions,
-  readEvents,
-  readMessages,
-  readSession,
-  resumeSession,
-  sendPrompt,
-  setMode,
-  setModel,
-  setThoughtLevel,
-  stopSession,
-  subscribeSession,
-} from "./server-operations.js";
-
+import { cancelBackgroundTask } from "./server-operations.js";
+import { closeSession } from "./server-operations.js";
+import { compactSession } from "./server-operations.js";
+import { createSession } from "./server-operations.js";
+import { forkSession } from "./server-operations.js";
+import { generateWorkspaceText } from "./server-operations.js";
+import { getTaskTokenUsage } from "./server-operations.js";
+import { getUsageStats } from "./server-operations.js";
+import { goalSession } from "./server-operations.js";
+import { listSessionSubagents } from "./server-operations.js";
+import { listSessions } from "./server-operations.js";
+import { readEvents } from "./server-operations.js";
+import { readMessages } from "./server-operations.js";
+import { readSession } from "./server-operations.js";
+import { resumeSession } from "./server-operations.js";
+import { sendPrompt } from "./server-operations.js";
+import { setMode } from "./server-operations.js";
+import { setModel } from "./server-operations.js";
+import { setThoughtLevel } from "./server-operations.js";
+import { stopSession } from "./server-operations.js";
+import { subscribeSession } from "./server-operations.js";
 import { listChildProcesses } from "./process-child-processes.js";
-
-import {
-  readWorkspacePresentation,
-  testProviderModelConnectivity,
-} from "./workspace-model-runtime.js";
-
-import {
-  addPluginMarketplace,
-  configurePlugin,
-  describePlugin,
-  getPluginsOverview,
-  installPlugin,
-  listPlugins,
-  removePluginMarketplace,
-  resetPluginConfig,
-  restoreBuiltinPlugin,
-  setPluginEnabled,
-  uninstallPlugin,
-  updatePlugin,
-  updatePluginMarketplace,
-  validatePlugin,
-} from "./plugins.js";
-
-import {
-  getPluginReferenceCatalog,
-  resolveSuggestedPluginReference,
-} from "./plugin-reference-catalog.js";
-
+import { readWorkspacePresentation } from "./workspace-model-runtime.js";
+import { testProviderModelConnectivity } from "./workspace-model-runtime.js";
+import { addPluginMarketplace } from "./plugins.js";
+import { configurePlugin } from "./plugins.js";
+import { describePlugin } from "./plugins.js";
+import { getPluginsOverview } from "./plugins.js";
+import { installPlugin } from "./plugins.js";
+import { listPlugins } from "./plugins.js";
+import { removePluginMarketplace } from "./plugins.js";
+import { resetPluginConfig } from "./plugins.js";
+import { restoreBuiltinPlugin } from "./plugins.js";
+import { setPluginEnabled } from "./plugins.js";
+import { uninstallPlugin } from "./plugins.js";
+import { updatePlugin } from "./plugins.js";
+import { updatePluginMarketplace } from "./plugins.js";
+import { validatePlugin } from "./plugins.js";
+import { getPluginReferenceCatalog } from "./plugin-reference-catalog.js";
+import { resolveSuggestedPluginReference } from "./plugin-reference-catalog.js";
 import { getSkillReferenceCatalog } from "./skill-reference-catalog.js";
-
-import {
-  deleteSavedWorkflowOp,
-  getSavedWorkflowOp,
-  listSavedWorkflowRunsOp,
-  listSavedWorkflowsOp,
-  moveSavedWorkflowOp,
-  updateSavedWorkflowMetaOp,
-} from "./saved-workflows.js";
-
-import { findSavedWorkflowForRunOp, saveSavedWorkflowFromRunOp } from "./saved-workflows-run.js";
-
+import { deleteSavedWorkflowOp } from "./saved-workflows.js";
+import { getSavedWorkflowOp } from "./saved-workflows.js";
+import { listSavedWorkflowRunsOp } from "./saved-workflows.js";
+import { listSavedWorkflowsOp } from "./saved-workflows.js";
+import { moveSavedWorkflowOp } from "./saved-workflows.js";
+import { updateSavedWorkflowMetaOp } from "./saved-workflows.js";
+import { findSavedWorkflowForRunOp } from "./saved-workflows-run.js";
+import { saveSavedWorkflowFromRunOp } from "./saved-workflows-run.js";
 import { listMcpServers } from "./mcp.js";
-
-import {
-  callMcpUiTool,
-  cancelMcpUiSampling,
-  cancelMcpUiToolCall,
-  claimMcpUiAppToolCall,
-  listMcpUiResourceTemplates,
-  listMcpUiResources,
-  readMcpUiResource,
-  readMcpUiResourceForUi,
-  registerMcpUiAppTools,
-  resolveMcpUiAppToolCall,
-  sampleMcpUi,
-  subscribeMcpUiResource,
-  unregisterMcpUiAppTools,
-  unsubscribeMcpUiResource,
-} from "./mcp-ui/index.js";
-
+import { callMcpUiTool } from "./mcp-ui/index.js";
+import { cancelMcpUiSampling } from "./mcp-ui/index.js";
+import { cancelMcpUiToolCall } from "./mcp-ui/index.js";
+import { claimMcpUiAppToolCall } from "./mcp-ui/index.js";
+import { listMcpUiResourceTemplates } from "./mcp-ui/index.js";
+import { listMcpUiResources } from "./mcp-ui/index.js";
+import { readMcpUiResource } from "./mcp-ui/index.js";
+import { readMcpUiResourceForUi } from "./mcp-ui/index.js";
+import { registerMcpUiAppTools } from "./mcp-ui/index.js";
+import { resolveMcpUiAppToolCall } from "./mcp-ui/index.js";
+import { sampleMcpUi } from "./mcp-ui/index.js";
+import { subscribeMcpUiResource } from "./mcp-ui/index.js";
+import { unregisterMcpUiAppTools } from "./mcp-ui/index.js";
+import { unsubscribeMcpUiResource } from "./mcp-ui/index.js";
 import { listPluginUiSurfaces } from "./plugin-ui-surfaces.js";
-
 import { updateInteractionPreferences } from "./interaction-preferences.js";
-
 import { updateAccountProviderConfig } from "./account-provider-config.js";
-
 import { updateModelIoPreferences } from "./model-io-preferences.js";
-
 import { updateOffPeakToolPolicy } from "./off-peak-tool-policy.js";
-
 import { updateDynamicWorkflowPolicy } from "./dynamic-workflow-policy.js";
-
 import { grantWorkspaceHookTrustAndNotifySessions } from "./workspace-hook-trust.js";
-
 import { ProtocolRequestError } from "./server-types.js";
-
-import { closeMcpUiInstance, openMcpUiInstance, validateMcpUiInstance } from "./mcp-ui/index.js";
-
+import { closeMcpUiInstance } from "./mcp-ui/index.js";
+import { openMcpUiInstance } from "./mcp-ui/index.js";
+import { validateMcpUiInstance } from "./mcp-ui/index.js";
 import type { ZCodeProtocolAgentServerMethodsContext } from "./protocol-server-context.js";
+import { offPeakControlParamsSchema } from "@zcode/shared";
+import { offPeakControlResultSchema } from "@zcode/shared";
+import { refreshProviderRegistry } from "./account-provider-config.js";
+
 export async function dispatchRequest(
   this: ZCodeProtocolAgentServerMethodsContext,
   request: ZCodeProtocolRequest,
@@ -159,6 +131,14 @@ export async function dispatchRequest(
       return await this.requireV4Gateway().plans(request.params);
     case V4_METHODS.backgroundBashOutput:
       return await this.requireV4Gateway().backgroundBashOutput(request.params);
+    case V4_METHODS.offPeakControl: {
+      const params = offPeakControlParamsSchema.parse(request.params);
+      const record = this.context.sessions.get(params.sessionId);
+      // 生命周期只存在于驻留 runtime；换票不能恢复冷会话或重放原始输入。
+      return offPeakControlResultSchema.parse(
+        record ? await record.app.runtime.controlOffPeakExecution(params) : { accepted: false },
+      );
+    }
     case V4_METHODS.conversationFileChanges:
       return await this.requireV4Gateway().fileChanges(request.params);
     case V4_METHODS.conversationFileRewindPreview:
@@ -211,6 +191,8 @@ export async function dispatchRequest(
       return this.requireV4Gateway().handleCommand(request.params);
     case V4_METHODS.commandsQuery:
       return this.requireV4Gateway().queryCommands(request.params);
+    case V4_METHODS.sessionsIndexReconcile:
+      return this.requireV4Gateway().reconcileSessions(request.params);
     case zcodeProtocolMethods.sessionCreate:
       return await createSession(this.context, request.params, request.trace);
     case zcodeProtocolMethods.sessionResume:
@@ -253,6 +235,8 @@ export async function dispatchRequest(
       return await grantWorkspaceHookTrustAndNotifySessions(this.context, request.params);
     case zcodeProtocolMethods.providerUpdateAccountConfig:
       return await updateAccountProviderConfig(this.context, request.params);
+    case zcodeProtocolMethods.providerRefreshRegistry:
+      return await refreshProviderRegistry(this.context, request.params);
     case zcodeProtocolMethods.workspaceUpdateInteractionPreferences:
       return await updateInteractionPreferences(this.context, request.params);
     case zcodeProtocolMethods.workspaceUpdateModelIoPreferences:
@@ -344,7 +328,7 @@ export async function dispatchRequest(
     case zcodeProtocolMethods.processChildProcesses:
       return listChildProcesses(this.context.deps.mcpTelemetry?.listProcesses() ?? []);
     case zcodeProtocolMethods.runtimeCapabilities:
-      return { independentPlanState: true };
+      return { independentPlanState: true, historyFirst: true };
     case zcodeProtocolMethods.pluginsMarketplaceAdd:
       return await this.withPluginOperationSignal(request, (signal) =>
         addPluginMarketplace(this.context, request.params, signal),

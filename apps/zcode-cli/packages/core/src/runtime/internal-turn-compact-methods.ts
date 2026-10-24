@@ -1,28 +1,23 @@
-import type {
-  CompactBoundaryPayload,
-  CompactPhase,
-  CompactReason,
-  CompactTimelinePayload,
-  CompactTimelineStatus,
-  CompactTrigger,
-  MessageId,
-  MessageWithParts,
-  Model,
-  SessionEvent,
-  TraceContext,
-} from "./deps.js";
-
+import type { CompactBoundaryPayload } from "./deps.js";
+import type { CompactPhase } from "./deps.js";
+import type { CompactReason } from "./deps.js";
+import type { CompactTimelinePayload } from "./deps.js";
+import type { CompactTimelineStatus } from "./deps.js";
+import type { CompactTrigger } from "./deps.js";
+import type { MessageId } from "./deps.js";
+import type { MessageWithParts } from "./deps.js";
+import type { Model } from "./deps.js";
+import type { SessionEvent } from "./deps.js";
+import type { TraceContext } from "./deps.js";
 import type { CompactTimelineContext } from "./types.js";
-
 import type { RuntimeMessageEntry } from "../agent/message-history.js";
+import type { AutoCompactLoopContext } from "./methods/turn-loop-state.js";
+import type { AutoCompactOutcome } from "./methods/turn-loop-state.js";
+import type { CompactAttemptOutcome } from "./methods/turn-loop-state.js";
+import type { ReactiveCompactLoopContext } from "./methods/turn-loop-state.js";
+import type { TurnRequestState } from "./methods/turn-loop-state.js";
+import type { ModelToolContract } from "@zcode/contracts";
 
-import type {
-  AutoCompactLoopContext,
-  AutoCompactOutcome,
-  CompactAttemptOutcome,
-  ReactiveCompactLoopContext,
-  TurnRequestState,
-} from "./methods/turn-loop-state.js";
 export interface InternalTurnCompactMethods {
   autoCompactIfNeeded(
     turnTraceContext: TraceContext,
@@ -72,6 +67,7 @@ export interface InternalTurnCompactMethods {
       model?: Model;
       agentListingTools?: readonly { name: string }[];
       activeEntries?: readonly RuntimeMessageEntry[];
+      getContinuationTools?: () => readonly ModelToolContract[];
     },
   ): Promise<{
     displayText: string;

@@ -53,7 +53,7 @@ describe("application branding boundary", () => {
       for (const id of [
         "chat.placeholder.newTask",
         "onboarding.dialog.title",
-        "settings.plugins.store.subtitle",
+        "settings.plugins.import.mode.copy.description",
         "offPeak.keepAwakeBanner",
         "cuaPermission.modal.relaunchAppButton",
         "bots.description",

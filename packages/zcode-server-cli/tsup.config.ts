@@ -2,6 +2,13 @@ import { defineConfig } from "tsup";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+
+const rootPackageJson = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, "../../package.json"), "utf8"),
+) as { version: string; zcodeCompatibility?: { minCompatibleVersion?: string } };
+const minCompatibleVersion =
+  rootPackageJson.zcodeCompatibility?.minCompatibleVersion ?? rootPackageJson.version;
 
 // tsup 配置自身会被打包，构建工具需保留原始文件位置，不能被内联后重定位。
 const { loadBuiltinProviderConfig } = await import(
@@ -9,11 +16,14 @@ const { loadBuiltinProviderConfig } = await import(
 );
 
 const { content: zcodeBuiltinProviderConfigJson } = await loadBuiltinProviderConfig();
-const { version } = JSON.parse(await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"));
+const { version } = JSON.parse(
+  await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"),
+);
 
 export const SERVER_CLI_DEFINES = {
   // 正式状态与发行清单必须同源；缺少注入会把可升级发行包错误标为 0.0.0-dev。
   __ZCODE_VERSION__: JSON.stringify(version),
+  __ZCODE_MIN_COMPATIBLE_VERSION__: JSON.stringify(minCompatibleVersion),
   __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: JSON.stringify(zcodeBuiltinProviderConfigJson),
 };
 
@@ -25,6 +35,8 @@ export default defineConfig({
   outDir: "dist",
   format: ["esm"],
   platform: "node",
+  // node:sqlite 只有带前缀的内置入口；tsup 去掉 node: 会错误加载第三方 sqlite 包。
+  removeNodeProtocol: false,
   target: "node22",
   sourcemap: true,
   splitting: false,

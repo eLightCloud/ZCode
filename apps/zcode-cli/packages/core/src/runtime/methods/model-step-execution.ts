@@ -1,66 +1,50 @@
-import {
-  SessionEventType,
-  TurnMachineImpl,
-  createChildTraceContext,
-  createPartId,
-  getModelUsageTotalTokens,
-  traceContextToLogContext,
-} from "../deps.js";
-import type { MessageId, ModelNetworkStatusEvent, ModelToolContract } from "../deps.js";
-import { type RuntimeMessageEntry } from "../../agent/message-history.js";
-import {
-  buildTurnFileChangeSummary,
-  createModelContextExceededFinishError,
-  finalizeSuspiciousEmptyModelResult,
-  isContextExceededFinishReason,
-  isSuspiciousEmptyModelResult,
-  objectKeys,
-  readRawFinishReason,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
-import type {
-  DrainedPendingInputDiagnostics,
-  RunModelTextRequestOptions,
-  RuntimeModelStreamSnapshot,
-  RuntimeModelTextResult,
-} from "../types.js";
+import type { ModelStepRequestOptions } from "./model-step-contract.js";
+import { SessionEventType } from "../deps.js";
+import { TurnMachineImpl } from "../deps.js";
+import { createChildTraceContext } from "../deps.js";
+import { createPartId } from "../deps.js";
+import { getModelUsageTotalTokens } from "../deps.js";
+import { traceContextToLogContext } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { ModelNetworkStatusEvent } from "../deps.js";
+import type { ModelToolContract } from "../deps.js";
+import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import { buildTurnFileChangeSummary } from "../helpers/index.js";
+import { createModelContextExceededFinishError } from "../helpers/index.js";
+import { finalizeSuspiciousEmptyModelResult } from "../helpers/index.js";
+import { isContextExceededFinishReason } from "../helpers/index.js";
+import { isSuspiciousEmptyModelResult } from "../helpers/index.js";
+import { objectKeys } from "../helpers/index.js";
+import { readRawFinishReason } from "../helpers/index.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
+import type { DrainedPendingInputDiagnostics } from "../types.js";
+import type { RunModelTextRequestOptions } from "../types.js";
+import type { RuntimeModelStreamSnapshot } from "../types.js";
+import type { RuntimeModelTextResult } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { captureAssistantPersistenceAnchor } from "./turn-stop.js";
 import { createStreamingToolCoordinator } from "./streaming-tool-coordinator.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
-import {
-  querySourceForTask,
-  recordMainTurnCacheHitUsage,
-  recordMainTurnModelUsage,
-} from "./turn-model-step-usage.js";
+import { querySourceForTask } from "./turn-model-step-usage.js";
+import { recordMainTurnCacheHitUsage } from "./turn-model-step-usage.js";
+import { recordMainTurnModelUsage } from "./turn-model-step-usage.js";
 import { estimateCurrentModelInputTokens } from "./compact.js";
-import {
-  resolveModelStepMaxOutputTokens,
-  resolveNormalRequestMaxOutputTokens,
-} from "./model-token-limits.js";
-import {
-  classifyOutputTokenContinuation,
-  hasAssistantReasoningContent,
-} from "./turn-output-token-continuation.js";
+import { resolveModelStepMaxOutputTokens } from "./model-token-limits.js";
+import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
+import { classifyOutputTokenContinuation } from "./turn-output-token-continuation.js";
+import { hasAssistantReasoningContent } from "./turn-output-token-continuation.js";
 import type { ModelStepResult } from "./model-step-contract.js";
 import { recoverFailedModelStep } from "./model-step-failure.js";
 import { buildAutomationCreateLimitFallback } from "./model-step-automation-limit.js";
 import { recoverModelStepAfterContextExceeded } from "./model-step-context-recovery.js";
 import { settleModelStepTools } from "./model-step-tools.js";
 import { persistModelStepStart } from "./model-step-start-persistence.js";
+import type { ToolSearchExecutionContext } from "@zcode/contracts";
 
 export async function runModelBackedTurnStepImpl(
   this: AgentRuntimeInternal,
   state: RegularTurnLoopState,
-  options: {
-    drainedSteerForNextRequest?: DrainedPendingInputDiagnostics;
-    latestRealUserMessageIndex?: number;
-    messages: RunModelTextRequestOptions["messages"];
-    sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
-    requestEntries: readonly RuntimeMessageEntry[];
-    tools: ModelToolContract[];
-  },
+  options: ModelStepRequestOptions,
   assistantMessageId: MessageId,
 ): Promise<ModelStepResult> {
   const model = state.model;
@@ -96,6 +80,7 @@ export async function runModelBackedTurnStepImpl(
   const streamingToolCoordinator = createStreamingToolCoordinator(this, state, {
     assistantMessageId,
     model,
+    toolSearch: options.toolSearch,
     traceContext: modelTraceContext,
   });
   const networkEventStartIndex = state.events.length;
@@ -145,6 +130,7 @@ export async function runModelBackedTurnStepImpl(
       onStreamToolCall: (toolCall) => streamingToolCoordinator.accept(toolCall),
       streamRecovery: streamRecoveryRequest,
       tools: options.tools,
+      toolSearchEnabled: options.toolSearch?.mode === "native",
       traceContext: modelTraceContext,
     });
     throwIfTurnAborted(state.turnAbortSignal);

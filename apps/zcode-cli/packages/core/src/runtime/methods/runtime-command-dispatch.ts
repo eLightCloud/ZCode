@@ -127,6 +127,7 @@ export async function runRuntimeCommand(
       });
       const messageId = await persistSubagentMessageCommand.call(this, command);
       await this.executeTurnCommand(command.text, undefined, {
+        offPeakExecutionId: command.offPeakExecutionId,
         abortSignal: foregroundExecution.controller.signal,
         inputSource: "subagent_message",
         inputVisibility: "model-only",
@@ -201,6 +202,7 @@ export async function runTaskNotificationBatch(
       module: "core.runtime",
     });
     await this.executeTurnCommand(persisted.text, undefined, {
+      offPeakExecutionId: firstCommand.offPeakExecutionId,
       // wake 缺 inputId，telemetry 借用了持久化 msg_*，与普通 main turn 分叉。
       // 每个独立 batch 使用同一 UUID v7 规则；持久化消息仍使用 recordedInputMessageId。
       inputId: uuidv7(),

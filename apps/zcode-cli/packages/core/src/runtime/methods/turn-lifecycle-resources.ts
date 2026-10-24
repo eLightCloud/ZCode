@@ -1,13 +1,13 @@
-import type { TraceContext, TurnId } from "../deps.js";
+import { prepareOffPeakTurn } from "../off-peak/runtime.js";
+import type { SessionEvent } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import type { TurnId } from "../deps.js";
 import { createTurnAbortScope } from "../helpers/index.js";
-
 import type { ActiveTurnSteeringState } from "../types.js";
-
 import type { AgentRuntimeInternal } from "../internal.js";
-
 import { disposeProjectMemoryRecallPrefetch } from "../helpers/project-memory-recall.js";
-
 import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
+import { SessionEventType } from "../deps.js";
 
 export async function releaseRegularTurnResources(
   this: AgentRuntimeInternal,
@@ -16,6 +16,9 @@ export async function releaseRegularTurnResources(
   activeTurn: ActiveTurnSteeringState | undefined,
   turnAbortScope: ReturnType<typeof createTurnAbortScope>,
   turnTraceContext: TraceContext,
+  offPeakTurn: ReturnType<typeof prepareOffPeakTurn>,
+  turnAbortSignal: AbortSignal,
+  events: SessionEvent[],
 ) {
   disposeProjectMemoryRecallPrefetch(this);
   if (targetRunHeartbeat) {
@@ -24,6 +27,13 @@ export async function releaseRegularTurnResources(
   this.releaseTurnStart(turnId);
   clearBrowserTurnState(this.sessionId, turnId);
   this.finishActiveTurn(activeTurn);
+  offPeakTurn.release(
+    turnAbortSignal.aborted
+      ? "stopped"
+      : events.some((event) => event.type === SessionEventType.TurnError)
+        ? "failed"
+        : "succeeded",
+  );
   turnAbortScope.dispose();
   try {
     await this.browserControlPort?.turnEnded?.({

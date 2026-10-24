@@ -57,6 +57,12 @@ import type { V4SubscribeDispatchResult } from "./gateway-support.js";
 import * as implementation8 from "./gateway-workflow-queries.js";
 import * as implementation5 from "./gateway-workspace-config.js";
 export interface ConversationV4GatewayApi {
+  setInitialization(
+    ...args: Parameters<typeof implementation18.setInitialization>
+  ): ReturnType<typeof implementation18.setInitialization>;
+  ensureHistoryReadyPublisher(
+    ...args: Parameters<typeof implementation18.ensureHistoryReadyPublisher>
+  ): ReturnType<typeof implementation18.ensureHistoryReadyPublisher>;
   setConnectionFlowState(...args: Parameters<typeof implementation0.setConnectionFlowState>): void;
   flushNow(...args: Parameters<typeof implementation0.flushNow>): ConversationTopicFrame | null;
   ingest(...args: Parameters<typeof implementation1.ingest>): void;

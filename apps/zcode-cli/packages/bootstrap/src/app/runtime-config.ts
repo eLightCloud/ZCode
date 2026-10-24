@@ -1,3 +1,4 @@
+import { resolveContextProductName } from "@zcode/core";
 import type { ConfigResult } from "@zcode/adapters/config";
 import { GEN_UI_OUTPUT_ROOT_ENV } from "@zcode/shared/node";
 import { resolveInitialModelSelection, type ModelSelectionOptions } from "@zcode/provider";
@@ -118,6 +119,9 @@ export function resolveAppRuntimeConfig(input: {
     options.runtimeConfig?.subagents?.builtInModelSelectionOverrides ?? {};
   const runtimeConfig: AgentRuntimeConfig = {
     ...options.runtimeConfig,
+    productName: resolveContextProductName(
+      options.runtimeConfig?.productName ?? (options.env ?? process.env).ZCODE_APPLICATION_NAME,
+    ),
     genUiOutputRoot: (options.env ?? process.env)[GEN_UI_OUTPUT_ROOT_ENV],
     bashTimeoutPolicy:
       options.runtimeConfig?.bashTimeoutPolicy ??
@@ -139,6 +143,7 @@ export function resolveAppRuntimeConfig(input: {
     language: options.runtimeConfig?.language,
     titleGeneration,
     workingDirectory,
+    additionalDirectories: options.additionalDirectories,
     userInstructions: {
       ...userInstructions,
       workingDirectory: userInstructions.workingDirectory ?? workingDirectory,

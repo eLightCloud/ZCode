@@ -1,35 +1,31 @@
 import { runtimeInputMetadata } from "./runtime-input-presentation.js";
+import { selectActiveConversationBranch } from "@zcode/contracts";
+import type { MessageId } from "@zcode/contracts";
+import type { MessagePart } from "@zcode/contracts";
+import type { MessageWithParts } from "@zcode/contracts";
+import type { ModelReasoningContentBlock } from "@zcode/contracts";
+import type { ToolArtifactStorePort } from "@zcode/contracts";
+import type { ToolPart } from "@zcode/contracts";
+import { persistedTokenUsageBaseline } from "./message-history-usage.js";
+import type { MessageHistory } from "./message-history.js";
+import type { ToolCallInput } from "./message-history.js";
+import { compactActiveSessionMessages } from "./compact-session.js";
+import { isActiveCompactionBoundaryPart } from "./compact-session.js";
+import { filePartToContentBlock } from "./file-part-hydration.js";
+import { projectPersistedToolMediaContent } from "./file-part-hydration.js";
+import { selectToolPartsForHistory } from "./tool-part-order.js";
+import { metadataFromSyntheticTextPart } from "./session-user-history.js";
+import { syntheticSystemReminderAttachmentFromParts } from "./session-user-history.js";
+import { userEntriesFromParts } from "./session-user-history.js";
+import { ModelCallWrapperSchema } from "@zcode/contracts";
+import { hydrateToolSearchContent } from "./tool-search-hydration.js";
+import { hydrateCompactDiscovery } from "./tool-search-hydration.js";
+import type { Logger } from "@zcode/contracts";
+import { legacySyntheticRuntimeMetadata } from "./message-history.js";
 
 // ============================================================
 // Session History Hydration - rebuild provider-visible context
 // ============================================================
-
-import { selectActiveConversationBranch } from "@zcode/contracts";
-
-import type {
-  MessageId,
-  MessagePart,
-  MessageWithParts,
-  ModelReasoningContentBlock,
-  ToolArtifactStorePort,
-  ToolPart,
-} from "@zcode/contracts";
-
-import { persistedTokenUsageBaseline } from "./message-history-usage.js";
-
-import { type MessageHistory, type ToolCallInput } from "./message-history.js";
-
-import { compactActiveSessionMessages, isActiveCompactionBoundaryPart } from "./compact-session.js";
-
-import { filePartToContentBlock, projectPersistedToolMediaContent } from "./file-part-hydration.js";
-
-import { selectToolPartsForHistory } from "./tool-part-order.js";
-
-import {
-  metadataFromSyntheticTextPart,
-  syntheticSystemReminderAttachmentFromParts,
-  userEntriesFromParts,
-} from "./session-user-history.js";
 
 const INTERRUPTED_TOOL_RESULT = "[Tool execution was interrupted before resume]";
 
@@ -41,6 +37,7 @@ export interface SessionHistoryHydrationResult {
 }
 
 export async function hydrateMessageHistoryFromSession(input: {
+  logger?: Logger;
   artifactStore?: ToolArtifactStorePort;
   branchCutAfterMessageId?: MessageId;
   history: MessageHistory;
@@ -97,13 +94,7 @@ export async function hydrateMessageHistoryFromSession(input: {
       // user <system-reminder>，后续 mid-conversation system projection 会失去 attachment source。
       const syntheticAttachment = syntheticSystemReminderAttachmentFromParts(parts);
       if (syntheticAttachment) {
-        input.history.addEntries([
-          {
-            kind: "attachment",
-            content: syntheticAttachment.content,
-            metadata: syntheticAttachment.metadata,
-          },
-        ]);
+        input.history.addEntries([syntheticAttachment]);
         appliedMessageCount++;
         continue;
       }
@@ -113,10 +104,27 @@ export async function hydrateMessageHistoryFromSession(input: {
       const presentation = runtimeInputMetadata(
         (message.info.metadata as Record<string, unknown> | undefined)?.inputPresentation,
       );
+      const boundaryPart = parts.find(isActiveCompactionBoundaryPart);
+      const compactBoundary =
+        boundaryPart?.type === "compaction"
+          ? hydrateCompactDiscovery(boundaryPart.compactBoundary)
+          : undefined;
+      if (compactBoundary && entries[0]) {
+        entries[0] = {
+          ...entries[0],
+          metadata: {
+            ...legacySyntheticRuntimeMetadata(),
+            ...entries[0].metadata,
+            compactBoundary,
+          },
+        };
+      }
       input.history.addEntries(
         presentation
           ? entries.map((entry) =>
-              entry.kind === "attachment" ? entry : { ...entry, metadata: presentation },
+              entry.kind === "attachment"
+                ? entry
+                : { ...entry, metadata: { ...entry.metadata, ...presentation } },
             )
           : entries,
       );
@@ -144,7 +152,8 @@ export async function hydrateMessageHistoryFromSession(input: {
         (part): ToolCallInput => ({
           id: part.callID,
           input: part.state.input,
-          name: providerToolNameFromPart(part),
+          modelCallWrapper: modelCallWrapperFromPart(part),
+          name: historyToolNameFromPart(part),
         }),
       ),
       reasoning,
@@ -156,7 +165,8 @@ export async function hydrateMessageHistoryFromSession(input: {
     appliedMessageCount++;
 
     for (const part of toolParts) {
-      const providerToolName = providerToolNameFromPart(part);
+      const toolName = historyToolNameFromPart(part);
+      const modelCallWrapper = modelCallWrapperFromPart(part);
       if (part.state.status === "completed") {
         // live tool result 使用结构化媒体，但旧恢复只读取 output 摘要，
         // 导致模型切换或冷恢复后丢失 Read/MCP 产生的真实媒体。
@@ -176,8 +186,11 @@ export async function hydrateMessageHistoryFromSession(input: {
                 attachmentBlocks,
               )
             : undefined;
-        const content = projectedMediaContent ?? part.state.output;
-        input.history.addToolResult(part.callID, providerToolName, content, true);
+        const content =
+          hydrateToolSearchContent(part.state.metadata?.modelContent, input.logger) ??
+          projectedMediaContent ??
+          part.state.output;
+        input.history.addToolResult(part.callID, toolName, content, true, false, modelCallWrapper);
         continue;
       }
 
@@ -187,15 +200,24 @@ export async function hydrateMessageHistoryFromSession(input: {
         // 面向 UI / 日志的 state.error；优先使用持久化字符串并兼容旧 session。
         input.history.addToolResult(
           part.callID,
-          providerToolName,
+          toolName,
           typeof persistedModelContent === "string" ? persistedModelContent : part.state.error,
           false,
+          true,
+          modelCallWrapper,
         );
         continue;
       }
 
       interruptedToolCount++;
-      input.history.addToolResult(part.callID, providerToolName, INTERRUPTED_TOOL_RESULT, false);
+      input.history.addToolResult(
+        part.callID,
+        toolName,
+        INTERRUPTED_TOOL_RESULT,
+        false,
+        true,
+        modelCallWrapper,
+      );
     }
   }
 
@@ -304,7 +326,12 @@ function isToolPart(part: MessagePart): part is ToolPart {
   return part.type === "tool";
 }
 
-function providerToolNameFromPart(part: ToolPart): string {
+function modelCallWrapperFromPart(part: ToolPart) {
+  const parsed = ModelCallWrapperSchema.safeParse(part.metadata?.modelCallWrapper);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function historyToolNameFromPart(part: ToolPart): string {
   const providerToolName = part.metadata?.providerToolName;
   // 空字符串在 cold hydration 中曾只能依赖 non-empty ToolPart.tool；
   // 必须按字段存在性恢复原值，不能用 truthy 判断把空名重新覆盖成占位值。

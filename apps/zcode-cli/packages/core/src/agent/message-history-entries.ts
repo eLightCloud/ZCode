@@ -1,31 +1,22 @@
+import { modelMessageContentToText } from "@zcode/contracts";
+import type { Model } from "@zcode/contracts";
+import type { ModelMessageContent } from "@zcode/contracts";
+import type { ModelMessageContentBlock } from "@zcode/contracts";
+import type { TokenUsageInfo } from "@zcode/contracts";
+import { parseAgentListingDelta } from "./agent-listing-metadata.js";
+import { SYSTEM_REMINDER_SOURCES } from "../system-reminder/source.js";
+import type { SystemReminderSource } from "../system-reminder/source.js";
+import { ModelInputMessage } from "./message-history-contract.js";
+import { RuntimeAttachmentEntry } from "./message-history-contract.js";
+import { RuntimeMessageMessageEntry } from "./message-history-contract.js";
+import { RuntimeMessageMetadata } from "./message-history-contract.js";
+import type { ReasoningContentInput } from "./message-history-contract.js";
+import type { RuntimeMessageEntry } from "./message-history-contract.js";
+import type { ToolCallInput } from "./message-history-contract.js";
+import type { ModelCallWrapper } from "@zcode/contracts";
 // ============================================================
 // Message History - Maintains conversation context across turns
 // ============================================================
-
-import {
-  modelMessageContentToText,
-  type Model,
-  type ModelMessageContent,
-  type ModelMessageContentBlock,
-  type TokenUsageInfo,
-} from "@zcode/contracts";
-
-import { parseAgentListingDelta } from "./agent-listing-metadata.js";
-
-import { SYSTEM_REMINDER_SOURCES, type SystemReminderSource } from "../system-reminder/source.js";
-
-import {
-  ModelInputMessage,
-  RuntimeAttachmentEntry,
-  RuntimeMessageMessageEntry,
-  RuntimeMessageMetadata,
-} from "./message-history-contract.js";
-
-import type {
-  ReasoningContentInput,
-  RuntimeMessageEntry,
-  ToolCallInput,
-} from "./message-history-contract.js";
 
 export function countContextPrefixMessages(
   messagesOrEntries: readonly (ModelInputMessage | RuntimeMessageEntry)[],
@@ -130,6 +121,7 @@ export function createRuntimeAssistantEntry(
         id: toolCall.id,
         name: toolCall.name,
         input: toolCall.input,
+        ...(toolCall.modelCallWrapper ? { modelCallWrapper: toolCall.modelCallWrapper } : {}),
       })),
       ...(model ? { providerId: model.providerId, modelId: model.modelId } : {}),
     },
@@ -142,6 +134,7 @@ export function createRuntimeToolResultEntry(
   toolName: string,
   content: ModelMessageContent,
   isError: boolean,
+  modelCallWrapper?: ModelCallWrapper,
 ): RuntimeMessageMessageEntry {
   return {
     message: {
@@ -149,6 +142,7 @@ export function createRuntimeToolResultEntry(
       content,
       toolCallId,
       toolName,
+      ...(modelCallWrapper ? { modelCallWrapper } : {}),
       isError,
     },
   };
@@ -217,7 +211,29 @@ export function cloneRuntimeMessageMetadata(
   if (!metadata) return undefined;
   const { agentListingDelta, ...rest } = metadata;
   const delta = parseAgentListingDelta(agentListingDelta);
-  return { ...rest, ...(delta ? { agentListingDelta: delta } : {}) };
+  return {
+    ...rest,
+    ...(delta ? { agentListingDelta: delta } : {}),
+    ...(metadata.compactBoundary
+      ? {
+          compactBoundary: {
+            ...metadata.compactBoundary,
+            preCompactDiscoveredTools: metadata.compactBoundary.preCompactDiscoveredTools
+              ? [...metadata.compactBoundary.preCompactDiscoveredTools]
+              : undefined,
+          },
+        }
+      : {}),
+    ...(metadata.toolSearchAnnouncement
+      ? {
+          toolSearchAnnouncement: {
+            addedNames: [...metadata.toolSearchAnnouncement.addedNames],
+            removedNames: [...metadata.toolSearchAnnouncement.removedNames],
+            readdedNames: [...metadata.toolSearchAnnouncement.readdedNames],
+          },
+        }
+      : {}),
+  };
 }
 
 export function messageFromEntryInput(
@@ -257,6 +273,7 @@ export function cloneModelInputMessage(message: ModelInputMessage): ModelInputMe
   if (message.toolCallId) next.toolCallId = message.toolCallId;
   // 空字符串是可恢复调用的 provider 原始名称，不能在 request-local clone 时按 falsy 丢失。
   if (message.toolName !== undefined) next.toolName = message.toolName;
+  if (message.modelCallWrapper) next.modelCallWrapper = message.modelCallWrapper;
   if (message.isError !== undefined) next.isError = message.isError;
   if (message.providerId) next.providerId = message.providerId;
   if (message.modelId) next.modelId = message.modelId;

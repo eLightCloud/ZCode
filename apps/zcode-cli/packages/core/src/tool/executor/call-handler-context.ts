@@ -43,6 +43,7 @@ export function createToolHandlerContext(
   });
   const context: ToolExecutionContext = {
     toolCallId: canonicalToolCall.id,
+    toolSearch: options?.toolSearch,
     telemetry,
     automationTurn: options?.automationTurn,
     offPeakTurn: options?.offPeakTurn,

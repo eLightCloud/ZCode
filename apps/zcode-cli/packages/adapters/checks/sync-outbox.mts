@@ -45,8 +45,8 @@ export async function verifyOutbox(
   assert.equal(outbox.pending(scope).length, 0);
   assert.equal(outbox.watermark(other, cp.session.id), null);
   checks.push("sqlite_outbox_reopen_lost_ack_exact_fingerprint_account_partition");
-  const source = createSqliteSessionStore({ dbPath: join(root, "source.sqlite") });
-  const target = createSqliteSessionStore({ dbPath: join(root, "target.sqlite") });
+  const source = await createSqliteSessionStore({ dbPath: join(root, "source.sqlite") });
+  const target = await createSqliteSessionStore({ dbPath: join(root, "target.sqlite") });
   try {
     await source.importTextCheckpoint!({
       checkpoint: cp,
@@ -115,7 +115,9 @@ export async function verifyOutbox(
   assert.equal(outbox.cursor(other), 0);
   assert.throws(() => outbox.capture(scope, 2, 0, [request]), { code: "stale" });
   checks.push("source_scan_qualification_atomic_cursor_singleflight_and_account_switch");
-  const scannerStore = createSqliteSessionStore({ dbPath: join(root, "scanner-source.sqlite") });
+  const scannerStore = await createSqliteSessionStore({
+    dbPath: join(root, "scanner-source.sqlite"),
+  });
   const scanCheckpoint = checkpoint("scan-session");
   try {
     await scannerStore.importTextCheckpoint!({

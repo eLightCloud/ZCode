@@ -74,7 +74,7 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
 
   it("Account 约束 Built-in 成员后仍由 Personal Overlay 最后覆盖", () => {
     const providerId = "account:zai-start-plan";
-    const modelId = "GLM-5.2";
+    const modelId = "GLM-5.3";
     const registry = resolveOneBuiltinProvider(providerId, {
       accountProviders: new ProviderConfigMap([
         [

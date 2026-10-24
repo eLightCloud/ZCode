@@ -1,40 +1,31 @@
 import type { ModelRetryBudget } from "@zcode/contracts";
 import type { StreamReplayState } from "./stream-attempt-contract.js";
-
-import { ModelFailureReason as ModelFailureReasonValue, ModelRetryReason } from "@zcode/contracts";
-
-import { classifyModelFailure, type ClassifiedModelFailure } from "./failure-classifier.js";
-
-import { getResponseHeaders, unwrapRetryError } from "./failure-inspection.js";
-
-import { offPeakTicketExpiredMessage, resolveOffPeakFailureDecision } from "./offpeak-retry.js";
-
-import { StreamDiagnostics, logStreamFailureDiagnostics } from "./runner-diagnostics.js";
-
+import { ModelFailureReason as ModelFailureReasonValue } from "@zcode/contracts";
+import { ModelRetryReason } from "@zcode/contracts";
+import { classifyModelFailure } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-classifier.js";
+import { getResponseHeaders } from "./failure-inspection.js";
+import { unwrapRetryError } from "./failure-inspection.js";
+import { offPeakTicketExpiredMessage } from "./offpeak-retry.js";
+import { resolveOffPeakFailureDecision } from "./offpeak-retry.js";
+import { StreamDiagnostics } from "./runner-diagnostics.js";
+import { logStreamFailureDiagnostics } from "./runner-diagnostics.js";
 import { sanitizeModelNetworkHeaders } from "./runner-network-headers.js";
-
-import { type AttemptAdmission } from "./request-admission.js";
-
+import type { AttemptAdmission } from "./request-admission.js";
 import { publishModelStatus } from "./runner-status.js";
-
 import { AccountRequestRetry } from "./account-request-retry.js";
-
 import { RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
-
-import { modelFailureStatusFields, readModelFailureErrorPhase } from "./runner-telemetry.js";
-
-import type {
-  RunStreamTextInput,
-  StreamDeliveryState,
-  StreamIteratorState,
-  StreamMetricState,
-  StreamRequestState,
-  StreamStatusState,
-} from "./stream-attempt-contract.js";
-
+import { modelFailureStatusFields } from "./runner-telemetry.js";
+import { readModelFailureErrorPhase } from "./runner-telemetry.js";
+import type { RunStreamTextInput } from "./stream-attempt-contract.js";
+import type { StreamDeliveryState } from "./stream-attempt-contract.js";
+import type { StreamIteratorState } from "./stream-attempt-contract.js";
+import type { StreamMetricState } from "./stream-attempt-contract.js";
+import type { StreamRequestState } from "./stream-attempt-contract.js";
+import type { StreamStatusState } from "./stream-attempt-contract.js";
 import { resolveStreamFailureDecision } from "./stream-failure-policy.js";
-
 import { statusPublishOptions } from "./stream-status.js";
+import { AiSdkModelAdapterError } from "./errors.js";
 
 export async function resolveStreamAttemptFailure(
   deliveryState: StreamDeliveryState,
@@ -161,6 +152,7 @@ export async function resolveStreamAttemptFailure(
       ...modelFailureStatusFields(error, failure, errorPhase),
       timestamp: new Date(completedAt).toISOString(),
       type: "model_request_failed",
+      ...(error instanceof AiSdkModelAdapterError && error.usage ? { usage: error.usage } : {}),
     },
     {
       ...statusPublishOptions(input, admission),

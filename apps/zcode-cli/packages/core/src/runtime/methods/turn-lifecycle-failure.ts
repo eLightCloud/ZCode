@@ -1,16 +1,25 @@
-import { CoreErrorType, TurnMachineImpl } from "../deps.js";
-
-import type { MessageId, SessionEvent, SessionGoal, TraceContext, TurnId } from "../deps.js";
-
-import { appendTurnOutcomeEvent, createTurnFailureError } from "../helpers/index.js";
-
-import type { ActiveTurnSteeringState, ExecuteTurnOptions } from "../types.js";
-
+import {
+  MODEL_CREATION_FAILED_MESSAGE,
+  MODEL_CREATION_TURN_PHASE,
+} from "./turn-model-initialization.js";
+const TURN_EXECUTION_FAILED_MESSAGE = "Turn execution failed";
+import type { createAdmittedTurnModel } from "./turn-model-initialization.js";
+import { CoreErrorType } from "../deps.js";
+import { TurnMachineImpl } from "../deps.js";
+import type { MessageId } from "../deps.js";
+import type { SessionEvent } from "../deps.js";
+import type { SessionGoal } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import type { TurnId } from "../deps.js";
+import { appendTurnOutcomeEvent } from "../helpers/index.js";
+import { createTurnFailureError } from "../helpers/index.js";
+import type { ActiveTurnSteeringState } from "../types.js";
+import type { ExecuteTurnOptions } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
-import { type RegularTurnLoopState } from "./turn-loop-state.js";
-
+import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { recordTurnUsageFact } from "./usage-observability.js";
+import { traceContextToLogContext } from "../deps.js";
+import { isTurnCancellationError } from "../helpers/index.js";
 
 export async function failRegularTurn(
   this: AgentRuntimeInternal,
@@ -27,8 +36,33 @@ export async function failRegularTurn(
   turnStartedAtMs: number,
   turnId: TurnId,
   userMessageId: MessageId | undefined,
+  modelPreparation: Awaited<ReturnType<typeof createAdmittedTurnModel>>,
 ): Promise<never> {
-  const coreError = createTurnFailureError(error, turnAbortSignal, "Turn execution failed");
+  const { creationFailure, creationFallbackUnavailable } = modelPreparation;
+  // CR-01：创建失败轮进入主链只为保留已接纳输入。落库中的普通失败不能覆盖模型创建错误，
+  // 只记 warn。用户取消仍收口为 cancelled；宿主 fault 只经 abort signal 传入，
+  // createTurnFailureError 会先于创建错误识别它。
+  const reportedCreationFailure =
+    creationFailure && !isTurnCancellationError(error, turnAbortSignal)
+      ? creationFailure
+      : undefined;
+  if (reportedCreationFailure && error !== reportedCreationFailure.error) {
+    this.logger?.warn("Accepted input persistence failed after model creation failed", {
+      ...traceContextToLogContext(turnTraceContext),
+      errorMessage: error instanceof Error ? error.message : String(error),
+      event: "turn.model_creation.input_persistence_failed",
+      module: "core.runtime",
+      status: "failed",
+    });
+  }
+  const fallbackMessage = reportedCreationFailure
+    ? MODEL_CREATION_FAILED_MESSAGE
+    : TURN_EXECUTION_FAILED_MESSAGE;
+  const coreError = createTurnFailureError(
+    reportedCreationFailure ? reportedCreationFailure.error : error,
+    turnAbortSignal,
+    fallbackMessage,
+  );
   const preserveQueueAutoDrainOnCancel =
     coreError.type === CoreErrorType.TurnCancelled &&
     this.activeForegroundExecution?.preserveQueueAutoDrainOnCancel === true;
@@ -85,10 +119,13 @@ export async function failRegularTurn(
     coreError,
     events,
     durationMs: Date.now() - turnMachine.state.startedAt.getTime(),
-    turnPhase: turnMachine.state.phase,
+    turnPhase: reportedCreationFailure ? MODEL_CREATION_TURN_PHASE : turnMachine.state.phase,
     inputId: options?.inputId,
+    highspeedCardId: options?.intent?.highspeed?.cardId,
+    highspeedFallbackUnavailable:
+      creationFallbackUnavailable || loopState?.highspeedFallbackUnavailable === true,
     traceContext: turnTraceContext,
-    fallbackMessage: "Turn execution failed",
+    fallbackMessage,
     logEvent: "turn.failed",
     logLabel: "Turn",
     preserveQueueAutoDrainOnCancel,

@@ -11,6 +11,8 @@ import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCusto
 import { shouldShowModelVisionBadge } from "@/lib/modelVisionBadge.js";
 
 export interface ModelProviderGroupLabelOptions {
+  /** Trusted application presentation, including its empty model sections. */
+  applicationGrouping?: boolean;
   apiKeyLabel?: string;
   apiKeyBadgeLabel?: string;
   codingPlanLabel?: string;
@@ -46,11 +48,20 @@ export function buildRegistryModelSelectGroups(
       ? getRegistryAccountProviderGroupPresentation(provider.providerId, accountAccess.data, labels)
       : null;
 
+    // 合并菜单仍需区分同名供应商的接入方式；API 标识直接来自 access，不能从名称猜测。
+    const labelBadge =
+      accountPresentation?.labelBadge ??
+      (provider.config.access?.type === "api-key" ||
+      provider.config.access?.type === "zhipu-coding-plan-api-key"
+        ? (labels.apiKeyBadgeLabel ?? "API")
+        : undefined);
+
     return [
       {
         key: `registry-provider:${provider.providerId}`,
         label: accountPresentation?.label || provider.providerName?.trim() || provider.providerId,
-        ...(accountPresentation?.labelBadge ? { labelBadge: accountPresentation.labelBadge } : {}),
+        ...(provider.config.logo ? { logo: provider.config.logo } : {}),
+        ...(labelBadge ? { labelBadge } : {}),
         ...(accountPresentation ? { directItems: true } : {}),
         items: provider.models.map(({ modelId, config }) => ({
           key: `registry-provider:${provider.providerId}:${modelId}`,
@@ -77,6 +88,11 @@ export function buildRegistryModelSelectGroups(
       },
     ];
   });
+  if (
+    !labels.applicationGrouping &&
+    !providers.some((provider) => provider.config.group === "application-managed")
+  )
+    return groups;
   // 没有可执行 Provider 时 Registry 会移除它，不能据此隐藏系统 / 自定义分区。
   const system: ModelSelectGroup = {
     key: "application-models:system",

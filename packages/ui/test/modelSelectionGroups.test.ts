@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/services";
-import { buildRegistryModelSelectGroups } from "../src/lib/modelSelectionGroups.js";
+import { buildRegistryModelSelectGroups as buildNativeModelGroups } from "../src/lib/modelSelectionGroups.js";
 import {
   ModelConfigRules,
   ProviderConfigMap,
@@ -10,6 +10,9 @@ import {
   parseZCodeBuiltinProviderConfigRules,
 } from "@zcode/provider";
 import builtinRelease from "../../../config/provider/zcode-builtin.json";
+
+const buildRegistryModelSelectGroups: typeof buildNativeModelGroups = (provider, view, labels) =>
+  buildNativeModelGroups(provider, view, { ...labels, applicationGrouping: true });
 
 describe("model selection groups", () => {
   it.each([null, undefined, { revision: 1, providers: [] }])(
@@ -128,6 +131,7 @@ describe("model selection groups", () => {
         {
           providerId: "fixture",
           config: {
+            logo: { type: "builtin", key: "deepseek" },
             access: access as ModelSelectionView["providers"][number]["config"]["access"],
             api: { type: "anthropic-messages" },
           },
@@ -222,6 +226,7 @@ describe("model selection groups", () => {
       {
         key: "registry-provider:anthropic-api",
         label: "Anthropic API",
+        labelBadge: "API",
         items: [
           {
             key: "registry-provider:anthropic-api:claude-a",
@@ -239,6 +244,7 @@ describe("model selection groups", () => {
       {
         key: "registry-provider:openai-api",
         label: "OpenAI API",
+        labelBadge: "API",
         items: [
           {
             key: "registry-provider:openai-api:model-a",
@@ -294,4 +300,8 @@ describe("model selection groups", () => {
       },
     ]);
   });
+});
+
+it("native assembly retains provider groups without application partitions", () => {
+  expect(buildNativeModelGroups("glm", { revision: 1, providers: [] })).toEqual([]);
 });

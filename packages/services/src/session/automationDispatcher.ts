@@ -273,6 +273,8 @@ export function createAutomationDispatcher(options: {
       const task = request.targetTaskId
         ? { taskId: request.targetTaskId }
         : await zcodeTaskService.createTask({
+            projectId: request.projectId,
+            additionalDirectories: request.additionalDirectories,
             workspacePath: request.workspacePath,
             workspaceIdentity: request.workspaceIdentity,
             model: formatModelPickerValue(submissionModelSelection),
@@ -289,6 +291,7 @@ export function createAutomationDispatcher(options: {
         // setConfig/sendPrompt 会立即报 Session is not active，看起来像「立即运行」没有触发。
         await zcodeTaskService.resumeTask({
           taskId: task.taskId,
+          additionalDirectories: request.additionalDirectories,
           workspacePath: request.workspacePath,
           workspaceIdentity: request.workspaceIdentity,
           model: formatModelPickerValue(submissionModelSelection),

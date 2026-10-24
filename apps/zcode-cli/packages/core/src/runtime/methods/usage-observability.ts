@@ -27,12 +27,12 @@ export async function recordModelUsageFact(
   if (!usageStore) return;
 
   const completedAt = Date.now();
-  const usage = input.result?.usage;
   const networkEvents = modelNetworkEvents(input.events.slice(input.networkEventStartIndex));
   const retryCount = networkEvents.filter((event) => event.type === "model_retry_scheduled").length;
   const failedNetworkEvent = networkEvents.findLast(
     (event) => event.type === "model_request_failed",
   );
+  const usage = input.result?.usage ?? failedNetworkEvent?.usage;
   const firstTokenAt = firstModelTokenAt(input.events, input.networkEventStartIndex);
   const durationMs = completedAt - input.startedAt;
   const errorInfo = errorInfoFor(input.error, failedNetworkEvent);

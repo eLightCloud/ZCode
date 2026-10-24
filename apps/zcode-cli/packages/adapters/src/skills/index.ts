@@ -310,6 +310,7 @@ export class NodeSkillAdapter implements SkillPort {
       description,
       whenToUse: parseScalar(parsed.values.when_to_use),
       ...pluginAlias,
+      ...(root.namespace ? { qualifiedName: `${root.namespace}/${name}` } : {}),
       path,
       directory: dirname(path),
       rootPath: root.path,

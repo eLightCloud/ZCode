@@ -37,14 +37,15 @@ async function ensureConversation() {
 it("selects only the trusted conversation workspace and preserves unique rename/archive/delete actions", async () => {
   await ensureConversation();
   const original = meta("conversation");
-  await index.syncTaskMeta({ meta: original });
-  await index.syncTaskMeta({ meta: meta("directory", join(root, "project")) });
+  await index.applyCliFacts({ meta: original });
+  await index.applyCliFacts({ meta: meta("directory", join(root, "project")) });
   const agent = { captureTextCheckpoint: vi.fn(async () => ({ dataBase64: "opaque-checkpoint" })) };
   const host = createConversationSyncHost({ index, agent });
   expect(await host.enumerate()).toEqual(["conversation"]);
+  await index.applyCliFacts({ meta: { ...original, title: "User title" }, titleSource: "custom" });
   await index.updateTaskState({
     ...original,
-    patch: { title: "User title", titleOverridden: true, archived: true, pinned: true },
+    patch: { archived: true, pinned: true },
   });
   expect(await host.capture("conversation")).toEqual({
     dataBase64: "opaque-checkpoint",
@@ -63,7 +64,7 @@ it("selects only the trusted conversation workspace and preserves unique rename/
 it("serializes Host actions around the native export and refuses automation metadata", async () => {
   await ensureConversation();
   const original = meta("conversation");
-  await index.syncTaskMeta({ meta: original });
+  await index.applyCliFacts({ meta: original });
   let finish!: () => void;
   const pending = new Promise<void>((resolve) => {
     finish = resolve;
@@ -83,7 +84,7 @@ it("serializes Host actions around the native export and refuses automation meta
   await vi.waitFor(() => expect(entered).toHaveBeenCalled());
   let changed = false;
   const rename = index
-    .updateTaskState({ ...original, patch: { title: "Later", titleOverridden: true } })
+    .applyCliFacts({ meta: { ...original, title: "Later" }, titleSource: "custom" })
     .then(() => {
       changed = true;
     });
@@ -92,9 +93,9 @@ it("serializes Host actions around the native export and refuses automation meta
   finish();
   expect((await capture).management.titleOverride).toBeNull();
   await rename;
-  await index.syncTaskMeta({ meta: { ...meta("scheduled"), cronAutomationId: "cron" } });
+  await index.applyCliFacts({ meta: { ...meta("scheduled"), cronAutomationId: "cron" } });
   await expect(host.capture("scheduled")).rejects.toThrow("ineligible");
-  await index.syncTaskMeta({
+  await index.applyCliFacts({
     meta: { ...meta("future-class"), workspacePurpose: "future-class" } as never,
   });
   await expect(host.capture("future-class")).rejects.toThrow("unsupported_index");
@@ -102,7 +103,7 @@ it("serializes Host actions around the native export and refuses automation meta
 it("rejects a second Host's change-and-revert during capture without holding a database lock", async () => {
   await ensureConversation();
   const original = meta("conversation");
-  await index.syncTaskMeta({ meta: original });
+  await index.applyCliFacts({ meta: original });
   const second = new TaskIndexRepo();
   await second.ensureReady();
   let finish!: () => void;
@@ -126,11 +127,11 @@ it("rejects a second Host's change-and-revert during capture without holding a d
     await vi.waitFor(() => expect(entered).toHaveBeenCalled());
     await second.updateTaskState({
       ...original,
-      patch: { title: "Changed", titleOverridden: true },
+      patch: { pinned: true },
     });
     await second.updateTaskState({
       ...original,
-      patch: { title: original.title, titleOverridden: false },
+      patch: { pinned: false },
     });
     finish();
     await rejected;
@@ -140,24 +141,24 @@ it("rejects a second Host's change-and-revert during capture without holding a d
 });
 it("persists native purpose for new rows without relabelling old unknown rows", async () => {
   const old = meta("old-unknown");
-  await index.syncTaskMeta({ meta: old });
+  await index.applyCliFacts({ meta: old });
   await ensureConversation();
   const agent = { captureTextCheckpoint: vi.fn(async () => ({ dataBase64: "opaque" })) };
   const host = createConversationSyncHost({ index, agent });
   await expect(host.capture(old.taskId)).rejects.toThrow("unsupported_index");
-  await index.syncTaskMeta({ meta: meta("new-conversation") });
+  await index.applyCliFacts({ meta: meta("new-conversation") });
   await host.capture("new-conversation");
   index.close();
   index = new TaskIndexRepo();
-  await index.syncTaskMeta({ meta: meta("new-conversation"), searchableText: "snapshot refresh" });
+  await index.applyCliFacts({ meta: meta("new-conversation") });
   const next = createConversationSyncHost({ index, agent });
   await expect(next.capture("new-conversation")).resolves.toHaveProperty("dataBase64", "opaque");
   await expect(next.capture(old.taskId)).rejects.toThrow("unsupported_index");
 });
 it("records the application bootstrap declaration before the first snapshot write", async () => {
   index.close();
-  index = new TaskIndexRepo(undefined, undefined, "conversation");
-  await index.syncTaskMeta({ meta: meta("first-snapshot") });
+  index = new TaskIndexRepo(undefined, undefined, undefined, undefined, "conversation");
+  await index.applyCliFacts({ meta: meta("first-snapshot") });
   const agent = { captureTextCheckpoint: vi.fn(async () => ({ dataBase64: "opaque" })) };
   await expect(
     createConversationSyncHost({ index, agent }).capture("first-snapshot"),

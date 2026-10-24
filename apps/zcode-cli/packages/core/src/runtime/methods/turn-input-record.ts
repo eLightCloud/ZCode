@@ -1,23 +1,19 @@
+import type { SessionEvent } from "../deps.js";
+import type { createAdmittedTurnModel } from "./turn-model-initialization.js";
 import { runtimeInputMetadata } from "../../agent/runtime-input-presentation.js";
-
 import { withConversationQuotes } from "../helpers/conversation-quotes.js";
-
-import type { MessageId, TraceContext } from "../deps.js";
-
-import {
-  buildRuntimeUserEntriesFromTurn,
-  buildUserContentFromTurn,
-  runtimeMetadataForSyntheticUserMessageSource,
-  throwIfTurnAborted,
-} from "../helpers/index.js";
-
-import type { ExecuteTurnOptions, ResolvedTurnAttachment } from "../types.js";
-
+import type { MessageId } from "../deps.js";
+import type { TraceContext } from "../deps.js";
+import { buildRuntimeUserEntriesFromTurn } from "../helpers/index.js";
+import { buildUserContentFromTurn } from "../helpers/index.js";
+import { runtimeMetadataForSyntheticUserMessageSource } from "../helpers/index.js";
+import { throwIfTurnAborted } from "../helpers/index.js";
+import type { ExecuteTurnOptions } from "../types.js";
+import type { ResolvedTurnAttachment } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-
 import { maybeStartSessionTitleGeneration } from "./session-title.js";
-
 import { enforceRequiredPluginEntry } from "./required-plugin.js";
+import { SessionEventType } from "../deps.js";
 
 export async function recordTurnUserInput(
   this: AgentRuntimeInternal,
@@ -29,7 +25,10 @@ export async function recordTurnUserInput(
   displayInput: string,
   turnAbortSignal: AbortSignal,
   shouldRetryTitleGenerationAfterTurn: boolean,
+  modelPreparation: Awaited<ReturnType<typeof createAdmittedTurnModel>>,
+  events: SessionEvent[],
 ) {
+  const { creationFailure, creationFallback } = modelPreparation;
   await this.persistPendingModelChangeTimeline(turnTraceContext);
   if (options?.skipInputRecord !== true && options?.inputVisibility === "model-only") {
     const inputSource = options.inputSource ?? "goal-continuation";
@@ -89,6 +88,26 @@ export async function recordTurnUserInput(
       },
     );
   }
+  if (creationFailure) {
+    // 已接纳输入已随 TurnStarted 和用户消息落库；不准备 Agent、不生成标题、不请求模型，
+    // 终态由下方 catch 统一写入。
+    throw creationFailure.error;
+  }
+  if (creationFallback) {
+    // TurnStarted 与用户消息已先落库，continuous/replayable 投影都能把退回事实关联到同一输入行。
+    const fallbackEvent = this.createEvent(
+      SessionEventType.TurnExecutionModelFallback,
+      {
+        ...(options?.inputId ? { inputId: options.inputId } : {}),
+        reason: creationFallback.reason,
+        fromModelSelection: creationFallback.fromModelSelection,
+        toModelSelection: creationFallback.toModelSelection,
+      },
+      turnTraceContext,
+    );
+    await this.appendEvent(fallbackEvent, turnTraceContext);
+    events.push(fallbackEvent);
+  }
   // 配置读取曾早于输入展示/持久化，失败会让已发送消息从界面消失。
   // 在原有输入记录后固定本轮定义，错误/取消复用本层收尾，且不启动标题或模型请求。
   await this.prepareAgentDefinitions({
@@ -112,6 +131,7 @@ export async function recordTurnUserInput(
       turnTraceContext,
       {
         deferIfProviderRuntimeHeadersRefresh: true,
+        offPeakExecutionId: options?.offPeakExecutionId,
       },
     );
     shouldRetryTitleGenerationAfterTurn = !titleGenerationStarted;

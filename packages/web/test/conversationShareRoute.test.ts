@@ -45,7 +45,9 @@ describe("conversation share route", () => {
     const authSource = readFileSync("packages/web/src/auth/webAuthService.ts", "utf8");
     const stateSource = readFileSync("packages/web/src/auth/oauthStateCodec.ts", "utf8");
     expect(mainSource).toContain('"/share/callback"');
-    expect(authSource).toContain('"/share/callback"');
+    expect(authSource).toContain("buildReturnToCallbackUrl");
+    const configSource = readFileSync("packages/web/src/auth/webZaiOAuthConfig.ts", "utf8");
+    expect(configSource).toContain("shareRedirectUri: zcodeEndpointUrls.webShareCallbackUrl");
     expect(stateSource).toContain('"/share/callback"');
     expect(stateSource).toContain("const SHARE_PATH_PATTERN");
     expect(stateSource).toContain("cn\\/share|share");

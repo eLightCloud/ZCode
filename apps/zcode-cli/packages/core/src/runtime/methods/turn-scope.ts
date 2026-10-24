@@ -1,14 +1,16 @@
-import { TurnMachineImpl, createChildTraceContext, createQueryId, createTurnId } from "../deps.js";
-
-import type { QueryId, SessionEvent } from "../deps.js";
-
-import { createTurnAbortScope, parseCompactCommand, parseRewindCommand } from "../helpers/index.js";
-
+import { TurnMachineImpl } from "../deps.js";
+import { createChildTraceContext } from "../deps.js";
+import { createQueryId } from "../deps.js";
+import { createTurnId } from "../deps.js";
+import type { QueryId } from "../deps.js";
+import type { SessionEvent } from "../deps.js";
+import { createTurnAbortScope } from "../helpers/index.js";
+import { parseCompactCommand } from "../helpers/index.js";
+import { parseRewindCommand } from "../helpers/index.js";
 import type { ExecuteTurnOptions } from "../types.js";
-
 import type { ActiveTurnStartReservation } from "../types.js";
-
 import type { AgentRuntimeInternal } from "../internal.js";
+import { prepareOffPeakTurn } from "../off-peak/runtime.js";
 
 export function beginRegularTurnScope(
   this: AgentRuntimeInternal,
@@ -16,7 +18,21 @@ export function beginRegularTurnScope(
   options: ExecuteTurnOptions | undefined,
   startReservation: ActiveTurnStartReservation | undefined,
 ): RegularTurnScope {
-  const admittedModelSelection = options?.intent?.modelSelection ?? this.getSessionModelSelection();
+  const offPeakTurn = prepareOffPeakTurn(this, options);
+  options = offPeakTurn.options;
+  const admittedModelSelection =
+    options?.intent?.modelSelection ??
+    (options && "executionSelection" in options
+      ? options.executionSelection
+      : this.getSessionModelSelection());
+  // 加速轮期间新输入可以更新 Session 续跑选择；卡过期必须回到本轮启动时的普通模型。
+  const highspeedFallbackSelection = options?.modelExecution?.selectionFallback
+    ? structuredClone(
+        "highspeedFallbackSelection" in options.modelExecution
+          ? options.modelExecution.highspeedFallbackSelection
+          : this.getSessionModelSelection(),
+      )
+    : undefined;
   const admittedOutputStyle = this.config.outputStyle;
   const compactInstructions = parseCompactCommand(input);
   const rewindCommand = parseRewindCommand(input);
@@ -47,6 +63,9 @@ export function beginRegularTurnScope(
   const turnAbortSignal = turnAbortScope.signal;
 
   return {
+    options,
+    offPeakTurn,
+    highspeedFallbackSelection,
     admittedModelSelection,
     admittedOutputStyle,
     compactInstructions,
@@ -66,6 +85,9 @@ export function beginRegularTurnScope(
 }
 
 interface RegularTurnScope {
+  options: ExecuteTurnOptions | undefined;
+  offPeakTurn: ReturnType<typeof prepareOffPeakTurn>;
+  highspeedFallbackSelection: ReturnType<AgentRuntimeInternal["getSessionModelSelection"]>;
   admittedModelSelection: ReturnType<AgentRuntimeInternal["getSessionModelSelection"]>;
   admittedOutputStyle: AgentRuntimeInternal["config"]["outputStyle"];
   compactInstructions: ReturnType<typeof parseCompactCommand>;

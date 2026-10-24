@@ -3,6 +3,14 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.13.0",
     id: "0007_workflow_script_runtime",
+    touchedTables: [
+      "session",
+      "session_task_link",
+      "workflow_activity",
+      "workflow_definition",
+      "workflow_event",
+      "workflow_run",
+    ],
     sql: `
       alter table session add column task_type text not null default 'interactive';
 
@@ -146,6 +154,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.13.0",
     id: "0008_workflow_definition_scope",
+    touchedTables: ["workflow_definition"],
     sql: `
       alter table workflow_definition
         add column scope text not null default 'explicit'
@@ -156,6 +165,7 @@ export const migrations: SqliteMigration[] = [
   {
     appVersion: "0.14.0",
     id: "0009_session_title_metadata",
+    touchedTables: ["session"],
     sql: `
       alter table session
         add column title_source text not null default 'first_input'

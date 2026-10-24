@@ -638,6 +638,7 @@ describe("SQLite session store", () => {
       "0022_backfilled_session_reasoning",
       "0023_session_soft_delete_outcome",
       "0024_session_database_identity",
+      "0025_session_continuation",
     ];
 
     try {
@@ -674,6 +675,7 @@ describe("SQLite session store", () => {
         "0.16.5",
         "0.16.5",
         "0.16.5",
+        "0.16.9",
         "0.16.9",
         "0.16.9",
       ]);
@@ -713,7 +715,7 @@ describe("SQLite session store", () => {
         ]),
       );
       expect(attempts.flat().filter((result) => !result.ok)).toEqual([]);
-      expect(attempts.flat().every((result) => result.migrationIds?.length === 24)).toBe(true);
+      expect(attempts.flat().every((result) => result.migrationIds?.length === 25)).toBe(true);
     },
     CONCURRENT_STARTUP_TEST_TIMEOUT_MS,
   );
@@ -940,6 +942,7 @@ describe("SQLite session store", () => {
         "0022_backfilled_session_reasoning",
         "0023_session_soft_delete_outcome",
         "0024_session_database_identity",
+      "0025_session_continuation",
       ]);
       store.close();
     } finally {

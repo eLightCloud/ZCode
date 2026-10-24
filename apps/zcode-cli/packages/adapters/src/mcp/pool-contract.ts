@@ -5,6 +5,7 @@ import type { McpConnectionContext } from "./pool.js";
 export interface PoolEntry {
   adapter: McpPort;
   closeTimer?: ReturnType<typeof setTimeout>;
+  closing?: Promise<void>;
   connectionContext: McpConnectionContext;
   connecting: Promise<McpServerStatus>;
   key: string;

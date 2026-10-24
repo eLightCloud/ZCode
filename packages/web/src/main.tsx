@@ -5,7 +5,11 @@ import {
   ApplicationShell,
   prepareApplication,
 } from "virtual:zcode-application-root";
-import { sessionCreateTelemetrySchema, type RendererTelemetryEventPayload } from "@zcode/shared";
+import {
+  conversationSessionIdSchema,
+  sessionCreateTelemetrySchema,
+  type RendererTelemetryEventPayload,
+} from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
 import { createRoot } from "react-dom/client";
 import {
@@ -2507,14 +2511,14 @@ async function bootstrapWebApp() {
       onClose: () => {},
     });
     // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
-    const conversation = params.get("conversation");
-    if (conversation && /^[a-zA-Z0-9_.:-]{1,128}$/.test(conversation)) {
+    const conversation = conversationSessionIdSchema.safeParse(params.get("conversation"));
+    if (conversation.success) {
       const workspace = await services.fileService.ensureConversationWorkspace();
       bootstrap = {
         ...bootstrap,
         initialWorkspaceAbsPath: workspace.path,
         initialWorkspacePurpose: "conversation",
-        initialTaskId: conversation,
+        initialTaskId: conversation.data,
         restoreSession: false,
       };
     }

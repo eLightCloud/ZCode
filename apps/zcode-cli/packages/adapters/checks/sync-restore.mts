@@ -41,7 +41,8 @@ try {
   assert.equal((await store.state(connection.scope, "worker-http"))!.revision, 1);
   assert.equal((await store.list(connection.scope, null, 100)).length, 6);
   const continuation = await store.state(connection.scope, "session-runtime-continuation");
-  assert.equal(continuation?.active?.location, "runtime-desktop");
+  // 最后一个用例已整份选择 cloud；恢复必须保持最终选择，不能期待早先的 desktop。
+  assert.equal(continuation?.active?.location, "runtime-cloud");
   assert.equal(continuation?.handoff?.phase, "activated");
   assert.equal(
     await store.continuations!.read(connection.scope, "session-runtime-continuation"),

@@ -314,6 +314,9 @@ export async function verifyContinuation(
   checks.push(
     "offline_ready_without_checkpoint_is_an_owner_choice_settles_it_cancel_restores_it_and_fenced_copy_cannot_reopen",
   );
+  const finalState = await center.state(scope, session);
+  assert.equal(finalState?.active?.location, "runtime-cloud");
+  assert.equal(finalState?.handoff?.phase, "activated");
   for (const value of known.values()) {
     value.store.close();
     value.outbox.close();

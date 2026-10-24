@@ -13,6 +13,7 @@ export interface SqliteSessionStoreContext {
   maybeThrowForkCommitFault: SqliteSessionStore["maybeThrowForkCommitFault"];
   createSession: SqliteSessionStore["createSession"];
   exportTextCheckpoint: SqliteSessionStore["exportTextCheckpoint"];
+  controlContinuation: SqliteSessionStore["controlContinuation"];
   importTextCheckpoint: SqliteSessionStore["importTextCheckpoint"];
   createForkedSessionWithMetadata: SqliteSessionStore["createForkedSessionWithMetadata"];
   commitForkBundle: SqliteSessionStore["commitForkBundle"];

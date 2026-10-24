@@ -49,6 +49,7 @@ export * from "./rewind/index.js";
 
 // Model
 export * from "./interfaces/text-checkpoint.js";
+export * from "./interfaces/session-continuation.js";
 export * from "./model/image-media.js";
 export * from "./model/index.js";
 export * from "./model/media-policy.js";

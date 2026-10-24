@@ -369,4 +369,7 @@ export {
 } from "./builtinPluginIdentity.js";
 export * from "./deliverables.js";
 export * from "./conversation-sync.js";
+export * from "./conversation-runtime.js";
+export * from "./conversation-continuation.js";
+export * from "./conversation-files.js";
 export * from "./zcode-task-search-text.js";

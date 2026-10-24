@@ -1,4 +1,6 @@
-import { createConfig } from "@zcode/adapters/config";
+import { createConfig, resolvePath } from "@zcode/adapters/config";
+import { createAppArtifactStore } from "./app/artifact-store.js";
+import { continuationModelValidator } from "./zcode-protocol/continuation-model.js";
 import type { McpElicitationPort, McpNotificationPort } from "@zcode/contracts";
 import { createNodeModelSelectionFacade } from "@zcode/provider-node";
 import { createNodeLoggerFactory } from "@zcode/adapters/logging";
@@ -274,6 +276,8 @@ export async function runZCodeProtocolAgent(
     );
     options.lifecycle?.signal.throwIfAborted();
     const server = (serverForCleanup = new ZCodeProtocolAgentServer({
+      continuationArtifacts: createAppArtifactStore(resolvePath(configResult.config.storage.dir)),
+      validateContinuationSelection: continuationModelValidator(modelSelectionFacade),
       createZCodeApp: (appOptions = {}) =>
         createZCodeApp({
           ...applyProtocolProviderRegistry(

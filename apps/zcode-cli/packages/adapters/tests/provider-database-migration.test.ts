@@ -156,7 +156,7 @@ describe("DB109 会话库正式数据迁移", () => {
     const sessionBefore = db.prepare("SELECT * FROM session").get();
     store = createSqliteSessionStore({ dbPath: path });
     expect(store.debugMigrationIds()).toContain(migrationId);
-    expect(store.debugMigrationIds().at(-1)).toBe("0022_backfilled_session_reasoning");
+    expect(store.debugMigrationIds().at(-1)).toBe("0023_session_continuation");
     expect(raw("session_entry", "selection")).toEqual({
       ...oldEntry,
       modelSelection: currentSelection,

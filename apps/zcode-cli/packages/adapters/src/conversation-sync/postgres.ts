@@ -4,7 +4,6 @@ import {
   syncScopeSchema,
   syncStateSchema,
   syncReceiptSchema,
-  syncVersionSchema,
   type ConversationSyncStore,
   type Logger,
   type SyncScope,
@@ -12,13 +11,23 @@ import {
   type SyncVersion,
   type SyncRequest,
   type SyncReceipt,
+  type ConversationObjectBytesPort,
 } from "@zcode/contracts";
 import type { Pool, PoolClient } from "pg";
 import { conversationHistorySchema } from "@zcode/shared";
 import type { ConversationCenterPolicy } from "@zcode/shared";
 import { readCenterPolicy } from "./policy.js";
+import { continuationJournal } from "./continuation-journal.js";
+import { createConversationFileStore } from "./files.js";
 import { canonical, digest } from "./canonical.js";
-import { initialState, transition, versionFacts, type VersionFacts } from "./transitions.js";
+import { versionsFor, readVersion, assignedGenerations } from "./postgres-versions.js";
+import {
+  initialState,
+  transition,
+  transitionContinuationSelection,
+  versionFacts,
+  type VersionFacts,
+} from "./transitions.js";
 
 interface InjectedPolicy {
   policy?: never;
@@ -30,6 +39,7 @@ interface InjectedPolicy {
 export type SyncStoreOptions = {
   pool: Pool;
   logger: Logger;
+  objects?: ConversationObjectBytesPort;
 } & (InjectedPolicy | { policy: "managed" });
 type Limits = Pick<
   ConversationCenterPolicy,
@@ -50,52 +60,6 @@ function outcome(kind: SyncRequest["command"]["kind"]): SyncReceipt["outcome"] {
     fence: "fenced",
   } as const;
   return values[kind];
-}
-async function versionsFor(
-  client: PoolClient,
-  session: string,
-): Promise<Map<string, VersionFacts>> {
-  const result = await client.query(
-    "select id,parent,location,generation,digest,management from zcode_sync.versions where session=$1",
-    [session],
-  );
-  return new Map(
-    result.rows.map((row) => [
-      row.id,
-      {
-        id: row.id,
-        parent: row.parent,
-        location: row.location,
-        generation: Number(row.generation),
-        checkpointDigest: row.digest,
-        managementDigest: row.management === null ? null : digest(row.management),
-      },
-    ]),
-  );
-}
-async function readVersion(
-  client: PoolClient,
-  session: string,
-  id: string,
-): Promise<SyncVersion | null> {
-  const result = await client.query(
-    `select v.id,v.parent,v.location,v.generation,v.digest,v.management,p.payload
-    from zcode_sync.versions v left join zcode_sync.payloads p using(tenant,subject,digest)
-    where v.session=$1 and v.id=$2`,
-    [session, id],
-  );
-  const row = result.rows[0];
-  if (!row) return null;
-  if (row.digest !== null && (!row.payload || digest(row.payload) !== row.digest))
-    throw new ConversationSyncError("storage");
-  return syncVersionSchema.parse({
-    id: row.id,
-    parent: row.parent,
-    location: row.location,
-    generation: Number(row.generation),
-    checkpoint: row.payload ?? null,
-    ...(row.management === null ? {} : { management: row.management }),
-  });
 }
 
 export function createConversationSyncStore(options: SyncStoreOptions): ConversationSyncStore {
@@ -139,7 +103,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         throw new ConversationSyncError("scope");
       }
       const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 3)
+      if (schema.rows.length !== 1 || schema.rows[0].version !== 5)
         throw new ConversationSyncError("schema");
       let limits: Limits;
       if (injected) limits = injected;
@@ -185,6 +149,14 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     limits: Limits,
   ) {
     if (versions.size >= limits.maxVersionsPerSession) throw new ConversationSyncError("limit");
+    for (const file of value.files ?? []) {
+      const saved = await client.query(
+        "select bytes from zcode_sync.file_objects where sha256=$1",
+        [file.sha256],
+      );
+      if (!saved.rowCount || Number(saved.rows[0].bytes) !== file.bytes)
+        throw new ConversationSyncError("blocked");
+    }
     const payload = value.checkpoint;
     const hash = payload ? digest(payload) : null;
     if (payload) {
@@ -193,7 +165,8 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
       if (bytes > limits.maxCheckpointBytes) throw new ConversationSyncError("limit");
       // 主体锁覆盖不同 session 的并发配额，不因去重而跨主体探测内容。
       const usage = await client.query(
-        "select coalesce(sum(bytes),0)::text as bytes from zcode_sync.payloads",
+        `select ((select coalesce(sum(bytes),0) from zcode_sync.payloads)+
+          (select coalesce(sum(bytes),0) from zcode_sync.file_objects))::text as bytes`,
       );
       const exists = await client.query("select 1 from zcode_sync.payloads where digest=$1", [
         hash,
@@ -207,8 +180,8 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
       );
     }
     await client.query(
-      `insert into zcode_sync.versions(tenant,subject,session,id,parent,location,generation,digest,management)
-      values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      `insert into zcode_sync.versions(tenant,subject,session,id,parent,location,generation,digest,management,files)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         scope.tenant,
         scope.subject,
@@ -219,103 +192,156 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         value.generation,
         hash,
         value.management ?? null,
+        value.files === undefined ? null : canonical(value.files),
       ],
     );
   }
-  return {
-    async execute(scope, input) {
-      const parsed = syncRequestSchema.safeParse(input);
-      if (!parsed.success) throw new ConversationSyncError("invalid");
-      const request = parsed.data;
-      const log = options.logger.child({
-        event: "conversation.sync",
-        operationId: request.operation,
-        sessionId: request.session,
-      });
-      try {
-        const result = await transaction(scope, async (client, limits) => {
-          // UUID scope also protects first-session creation and subject quota races.
-          await client.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-            canonical(syncScopeSchema.parse(scope)),
-          ]);
-          await client.query(
-            `insert into zcode_sync.sessions(tenant,subject,session,state)
+  async function execute(
+    scope: SyncScope,
+    input: SyncRequest,
+    intentOperation?: string,
+  ): Promise<SyncReceipt> {
+    const parsed = syncRequestSchema.safeParse(input);
+    if (!parsed.success) throw new ConversationSyncError("invalid");
+    const request = parsed.data;
+    const log = options.logger.child({
+      event: "conversation.sync",
+      operationId: request.operation,
+      sessionId: request.session,
+    });
+    try {
+      const result = await transaction(scope, async (client, limits) => {
+        // UUID scope also protects first-session creation and subject quota races.
+        await client.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+          canonical(syncScopeSchema.parse(scope)),
+        ]);
+        await client.query(
+          `insert into zcode_sync.sessions(tenant,subject,session,state)
             values($1,$2,$3,$4) on conflict do nothing`,
-            [scope.tenant, scope.subject, request.session, initialState()],
+          [scope.tenant, scope.subject, request.session, initialState()],
+        );
+        await client.query("select session from zcode_sync.sessions where session=$1 for update", [
+          request.session,
+        ]);
+        const previous = await receipt(client, request.session, request.operation);
+        const fingerprint = digest(request.command);
+        if (previous) {
+          if (previous.fingerprint !== fingerprint) throw new ConversationSyncError("conflict");
+          return syncReceiptSchema.parse(previous.receipt);
+        }
+        if (intentOperation) {
+          const intent = await client.query(
+            "select result_json from zcode_sync.continuations where session=$1 and operation=$2 for update",
+            [request.session, intentOperation],
           );
-          await client.query(
-            "select session from zcode_sync.sessions where session=$1 for update",
-            [request.session],
-          );
-          const previous = await receipt(client, request.session, request.operation);
-          const fingerprint = digest(request.command);
-          if (previous) {
-            if (previous.fingerprint !== fingerprint) throw new ConversationSyncError("conflict");
-            return syncReceiptSchema.parse(previous.receipt);
-          }
-          const current = (await state(client, request.session))!;
-          if (request.command.kind === "begin") {
-            const used = await client.query(
-              "select 1 from zcode_sync.receipts where session=$1 and receipt #>> '{state,handoff,id}'=$2 limit 1",
-              [request.session, request.command.handoff],
-            );
-            if (used.rows.length) throw new ConversationSyncError("conflict");
-          }
-          const versions = await versionsFor(client, request.session);
-          let next: SyncState;
-          if (request.command.kind === "receive" && versions.has(request.command.version.id)) {
-            if (
-              canonical(versions.get(request.command.version.id)) !==
-              canonical(versionFacts(request.command.version))
+          if (!intent.rowCount) throw new ConversationSyncError("not_found");
+          const status = intent.rows[0].result_json?.status;
+          if (
+            status &&
+            !(
+              (status === "cancelling" && request.command.kind === "cancel") ||
+              (status === "forward_only" && request.command.kind === "activate")
             )
-              throw new ConversationSyncError("conflict");
-            next = current;
-          } else {
-            if (request.command.kind === "receive")
-              await saveVersion(
-                client,
-                scope,
-                request.session,
-                request.command.version,
-                versions,
-                limits,
-              );
-            next = transition(current, request.command, versions);
-          }
-          syncStateSchema.parse(next);
-          const result = syncReceiptSchema.parse({
-            operation: request.operation,
-            session: request.session,
-            fingerprint,
-            outcome: outcome(request.command.kind),
-            state: next,
-          });
-          await client.query("update zcode_sync.sessions set state=$1 where session=$2", [
-            next,
-            request.session,
-          ]);
-          await client.query(
-            `insert into zcode_sync.receipts(tenant,subject,session,operation,fingerprint,receipt)
-            values($1,$2,$3,$4,$5,$6)`,
-            [scope.tenant, scope.subject, request.session, request.operation, fingerprint, result],
+          )
+            throw new ConversationSyncError("forward_only");
+        }
+        const current = (await state(client, request.session))!;
+        if (request.command.kind === "begin") {
+          const used = await client.query(
+            "select 1 from zcode_sync.receipts where session=$1 and receipt #>> '{state,handoff,id}'=$2 limit 1",
+            [request.session, request.command.handoff],
           );
-          return result;
+          if (used.rows.length) throw new ConversationSyncError("conflict");
+        }
+        const versions = await versionsFor(client, request.session);
+        let next: SyncState;
+        if (request.command.kind === "receive" && versions.has(request.command.version.id)) {
+          if (
+            canonical(versions.get(request.command.version.id)) !==
+            canonical(versionFacts(request.command.version))
+          )
+            throw new ConversationSyncError("conflict");
+          next = current;
+        } else {
+          if (request.command.kind === "receive")
+            await saveVersion(
+              client,
+              scope,
+              request.session,
+              request.command.version,
+              versions,
+              limits,
+            );
+          next =
+            intentOperation && request.command.kind === "select"
+              ? transitionContinuationSelection(current, request.command, versions)
+              : transition(
+                  current,
+                  request.command,
+                  versions,
+                  request.command.kind === "grant"
+                    ? await assignedGenerations(client, request.session)
+                    : undefined,
+                );
+        }
+        syncStateSchema.parse(next);
+        const result = syncReceiptSchema.parse({
+          operation: request.operation,
+          session: request.session,
+          fingerprint,
+          outcome: outcome(request.command.kind),
+          state: next,
         });
-        log.info("Conversation sync committed", {
-          status: "completed",
-          outcome: result.outcome,
-          revision: result.state.revision,
-        });
+        await client.query("update zcode_sync.sessions set state=$1 where session=$2", [
+          next,
+          request.session,
+        ]);
+        await client.query(
+          `insert into zcode_sync.receipts(tenant,subject,session,operation,fingerprint,receipt)
+            values($1,$2,$3,$4,$5,$6)`,
+          [scope.tenant, scope.subject, request.session, request.operation, fingerprint, result],
+        );
+        if (intentOperation && ["grant", "select"].includes(request.command.kind)) {
+          await client.query(
+            `update zcode_sync.continuations set result_json=$3 where session=$1 and operation=$2`,
+            [
+              request.session,
+              intentOperation,
+              {
+                session: request.session,
+                operation: intentOperation,
+                status: "forward_only",
+                phase: "granted",
+                location: next.pending!.location,
+                version: next.pending!.version,
+              },
+            ],
+          );
+        }
         return result;
-      } catch (error) {
-        log.warn("Conversation sync rejected", {
-          status: "failed",
-          outcome: "rejected",
-          code: error instanceof ConversationSyncError ? error.code : "storage",
-        });
-        throw error;
-      }
-    },
+      });
+      log.info("Conversation sync committed", {
+        status: "completed",
+        outcome: result.outcome,
+        revision: result.state.revision,
+      });
+      return result;
+    } catch (error) {
+      log.warn("Conversation sync rejected", {
+        status: "failed",
+        outcome: "rejected",
+        code: error instanceof ConversationSyncError ? error.code : "storage",
+      });
+      throw error;
+    }
+  }
+  return {
+    files: options.objects ? createConversationFileStore(transaction, options.objects) : undefined,
+    continuations: continuationJournal(transaction),
+    continuation: (scope, session, operation) =>
+      continuationJournal(transaction).read(scope, session, operation),
+    execute,
+    executeContinuation: (scope, operation, request) => execute(scope, request, operation),
     state: (scope, session) => transaction(scope, (client) => state(client, session)),
     history: (scope, after, limit) => {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)

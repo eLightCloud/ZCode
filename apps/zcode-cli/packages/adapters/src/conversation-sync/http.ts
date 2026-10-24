@@ -8,7 +8,15 @@ import {
   type SyncRequest,
 } from "@zcode/contracts";
 import { digest } from "./canonical.js";
-import { conversationDeletionChoiceSchema } from "@zcode/shared";
+import {
+  conversationDeletionChoiceSchema,
+  conversationContinuationIntentSchema,
+  conversationContinuationCancelSchema,
+  conversationFileSchema,
+  type ConversationFile,
+} from "@zcode/shared";
+import { z } from "zod";
+import type { createConversationContinuation } from "./continuation.js";
 
 /** Trusted assembly supplies identity/qualification; browsers cannot supply barrier proofs. */
 export function createConversationSyncHttpHandler(options: {
@@ -21,6 +29,7 @@ export function createConversationSyncHttpHandler(options: {
     transport: NodeHttpIncomingRequest,
   ): Promise<boolean>;
   logger: Logger;
+  continuation?: ReturnType<typeof createConversationContinuation>;
 }) {
   if (!Number.isSafeInteger(options.maxRequestBytes) || options.maxRequestBytes < 1)
     throw new ConversationSyncError("invalid");
@@ -55,7 +64,14 @@ export function createConversationSyncHttpHandler(options: {
         reply(200, { admitted: true });
       } else if (
         request.method === "POST" &&
-        ["/versions", "/deletion-choice"].includes(url.pathname)
+        [
+          "/versions",
+          "/deletion-choice",
+          "/continue",
+          "/continue-cancel",
+          "/file",
+          "/file-read",
+        ].includes(url.pathname)
       ) {
         if (request.headers["content-type"]?.split(";")[0].trim() !== "application/json")
           throw new ConversationSyncError("invalid");
@@ -72,6 +88,53 @@ export function createConversationSyncHttpHandler(options: {
           body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         } catch {
           throw new ConversationSyncError("invalid");
+        }
+        if (url.pathname === "/file" || url.pathname === "/file-read") {
+          if (!options.store.files) throw new ConversationSyncError("blocked");
+          const parsed = z
+            .object({
+              file: z.custom<ConversationFile>(
+                (value) => conversationFileSchema.safeParse(value).success,
+              ),
+              ...(url.pathname === "/file" ? { dataBase64: z.string().max(24 * 1024 * 1024) } : {}),
+            })
+            .strict()
+            .safeParse(body);
+          if (!parsed.success) throw new ConversationSyncError("invalid");
+          if (url.pathname === "/file") {
+            await options.store.files.put(
+              scope,
+              parsed.data.file,
+              Buffer.from((parsed.data as { dataBase64: string }).dataBase64, "base64"),
+            );
+            reply(200, { saved: true });
+          } else
+            reply(200, {
+              dataBase64: Buffer.from(
+                await options.store.files.read(scope, parsed.data.file),
+              ).toString("base64"),
+            });
+          return;
+        }
+        if (url.pathname === "/continue" || url.pathname === "/continue-cancel") {
+          if (!options.continuation) throw new ConversationSyncError("blocked");
+          const parsed = (
+            url.pathname === "/continue"
+              ? conversationContinuationIntentSchema
+              : conversationContinuationCancelSchema
+          ).safeParse(body);
+          if (!parsed.success) throw new ConversationSyncError("invalid");
+          reply(
+            200,
+            url.pathname === "/continue"
+              ? await options.continuation.run(scope, parsed.data)
+              : await options.continuation.cancel(
+                  scope,
+                  parsed.data.session,
+                  parsed.data.operation,
+                ),
+          );
+          return;
         }
         if (url.pathname === "/deletion-choice") {
           const choice = conversationDeletionChoiceSchema.safeParse(body);
@@ -125,6 +188,10 @@ export function createConversationSyncHttpHandler(options: {
           reply(200, saved);
           return;
         }
+        for (const file of parsed.data.command.version.files ?? []) {
+          if (!options.store.files) throw new ConversationSyncError("blocked");
+          await options.store.files.read(scope, file);
+        }
         const receipt = await options.store.execute(scope, parsed.data);
         logger.info("Conversation version saved", {
           outcome: "server_saved",
@@ -132,6 +199,12 @@ export function createConversationSyncHttpHandler(options: {
           sessionId: receipt.session,
         });
         reply(200, receipt);
+      } else if (request.method === "GET" && url.pathname === "/continuation-options") {
+        if (!options.continuation) throw new ConversationSyncError("blocked");
+        reply(
+          200,
+          await options.continuation.options(scope, url.searchParams.get("session") ?? ""),
+        );
       } else if (request.method === "GET" && url.pathname === "/transcript") {
         const session = url.searchParams.get("session") ?? "";
         const version = url.searchParams.get("version") ?? "";
@@ -184,6 +257,16 @@ export function createConversationSyncHttpHandler(options: {
             scope,
             url.searchParams.get("session") ?? "",
             url.searchParams.get("version") ?? "",
+          ),
+        );
+      } else if (request.method === "GET" && url.pathname === "/continuation-operation") {
+        if (!options.store.continuation) throw new ConversationSyncError("blocked");
+        reply(
+          200,
+          await options.store.continuation(
+            scope,
+            url.searchParams.get("session") ?? "",
+            url.searchParams.get("operation") ?? "",
           ),
         );
       } else if (request.method === "GET" && url.pathname === "/receipt") {

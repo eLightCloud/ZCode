@@ -26,7 +26,7 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
     await client.query(`create table if not exists zcode_sync.schema_version
       (singleton boolean primary key default true check(singleton), version integer not null)`);
     const previous = await client.query("select version from zcode_sync.schema_version");
-    if (previous.rows.length && ![1, 2, 3].includes(previous.rows[0].version))
+    if (previous.rows.length && ![1, 2, 3, 4, 5].includes(previous.rows[0].version))
       throw new ConversationSyncError("schema");
     if (!previous.rows.length) {
       await client.query(`do $$ begin
@@ -57,6 +57,27 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
       await client.query(`insert into zcode_sync.configuration values(true,0,
         '{"enabled":false,"subjects":[],"maxCheckpointBytes":65536,"maxSubjectBytes":8388608,"maxVersionsPerSession":64}')`);
       await client.query("update zcode_sync.schema_version set version=3");
+    }
+    if (!previous.rows.length || previous.rows[0].version < 4) {
+      await client.query(`create table zcode_sync.continuations(
+        tenant uuid not null,subject uuid not null,session text not null,operation uuid not null,
+        fingerprint text not null,input_json jsonb not null,result_json jsonb,ordinal bigint generated always as identity,
+        primary key(tenant,subject,session,operation),
+        foreign key(tenant,subject,session) references zcode_sync.sessions);
+        create unique index continuation_one_pending on zcode_sync.continuations(tenant,subject,session) where result_json is null or result_json->>'status' in ('forward_only','cancelling');
+        alter table zcode_sync.continuations enable row level security;
+        alter table zcode_sync.continuations force row level security;
+        create policy subject_scope on zcode_sync.continuations using (${scopeCheck}) with check (${scopeCheck});
+        update zcode_sync.schema_version set version=4;`);
+    }
+    if (!previous.rows.length || previous.rows[0].version < 5) {
+      await client.query(`alter table zcode_sync.versions add column files jsonb;
+        create table zcode_sync.file_objects(tenant uuid not null,subject uuid not null,sha256 text not null,
+          bytes bigint not null check(bytes>=0),receipt jsonb not null,primary key(tenant,subject,sha256));
+        alter table zcode_sync.file_objects enable row level security;
+        alter table zcode_sync.file_objects force row level security;
+        create policy subject_scope on zcode_sync.file_objects using (${scopeCheck}) with check (${scopeCheck});
+        update zcode_sync.schema_version set version=5;`);
     }
     await client.query(`do $$ begin
       if not exists(select 1 from pg_roles where rolname='zcode_sync_configurator') then
@@ -93,6 +114,14 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
       "grant insert on zcode_sync.sessions, zcode_sync.payloads, zcode_sync.versions, zcode_sync.receipts to zcode_sync_runtime",
     );
     await client.query("grant update(state) on zcode_sync.sessions to zcode_sync_runtime");
+    await client.query("grant insert on zcode_sync.continuations to zcode_sync_runtime");
+    await client.query(
+      "grant usage on sequence zcode_sync.continuations_ordinal_seq to zcode_sync_runtime",
+    );
+    await client.query("grant insert on zcode_sync.file_objects to zcode_sync_runtime");
+    await client.query(
+      "grant update(result_json) on zcode_sync.continuations to zcode_sync_runtime",
+    );
     await client.query("commit");
   } catch (cause) {
     await client.query("rollback");

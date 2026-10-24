@@ -1,5 +1,6 @@
 // Session Store Port：为会话输入、消息和投影提供稳定的存储边界。
 import type { TextCheckpointStorePort } from "./text-checkpoint.js";
+import type { SessionContinuationStorePort } from "./session-continuation.js";
 
 // ============================================================
 
@@ -173,7 +174,8 @@ export interface LocalSettingStorePort {
   }): CollaborationMode | Promise<CollaborationMode>;
 }
 
-export interface SessionStorePort extends Partial<TextCheckpointStorePort> {
+export interface SessionStorePort
+  extends Partial<TextCheckpointStorePort>, Partial<SessionContinuationStorePort> {
   createSession(input: CreateSessionInput): Promise<SessionInfo>;
   /** legacy 兼容原语；V4 stable/compact-edit fork 禁止调用，统一走 commitForkBundle。 */
   createForkedSessionWithMetadata?(

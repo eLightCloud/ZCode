@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { zcodeTaskMetaSchema } from "./validation.js";
+/** Native session IDs may become artifact directory segments after recovery. */
+export const conversationSessionIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9_.:-]+$/)
+  .refine((value) => value !== "." && value !== "..");
 
 export const conversationScopeSchema = z
   .object({
@@ -78,8 +85,20 @@ export const conversationCheckpointParamsSchema = z
   .strict();
 export type ConversationCheckpointResult = z.infer<typeof conversationCheckpointResultSchema>;
 export interface ConversationSyncHost {
+  readArtifact?(
+    session: string,
+    uri: string,
+  ): Promise<import("./conversation-files.js").ConversationContentResult>;
   enumerate(): Promise<string[]>;
   capture(session: string): Promise<{ dataBase64: string; management: ConversationIndexFacts }>;
+  captureContinuation?(
+    session: string,
+    operation: string,
+  ): Promise<{ dataBase64: string; management: ConversationIndexFacts }>;
+  continuationState?(
+    session: string,
+    operation: string,
+  ): Promise<import("./conversation-runtime.js").ConversationRuntimeResult>;
   /** Trusted Host only. Rebuilds a missing projection, never imports or executes. */
   rebuildIndex?(input: {
     session: string;
@@ -148,6 +167,22 @@ export class ConversationChoiceError extends Error {
   }
 }
 export interface ConversationHistoryReader {
+  continuation?: {
+    /** Optional platform provisioning intent; never sends business input or restores a body. */
+    prepareTarget?(session: string, signal: AbortSignal): Promise<void>;
+    options(
+      session: string,
+      signal: AbortSignal,
+    ): Promise<import("./conversation-continuation.js").ConversationContinuationOptions>;
+    run(
+      input: import("./conversation-continuation.js").ConversationContinuationIntent,
+      signal: AbortSignal,
+    ): Promise<import("./conversation-continuation.js").ConversationContinuationResult>;
+    cancel(
+      input: { session: string; operation: string },
+      signal: AbortSignal,
+    ): Promise<import("./conversation-continuation.js").ConversationContinuationResult>;
+  };
   history(after: string | null, signal: AbortSignal): Promise<ConversationHistoryItem[]>;
   transcript(
     session: string,

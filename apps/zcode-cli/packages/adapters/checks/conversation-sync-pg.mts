@@ -22,6 +22,7 @@ import { verifyDeletionChoice } from "./sync-deletion-choice.mjs";
 import { verifyCapacity } from "./sync-capacity.mjs";
 import { verifyTransitions } from "./sync-transitions.mjs";
 import { verifyManaged } from "./sync-managed.mjs";
+import { verifyContinuation } from "./sync-continuation.mjs";
 
 const lines: Buffer[] = [];
 for await (const chunk of process.stdin) lines.push(Buffer.from(chunk));
@@ -98,12 +99,15 @@ try {
   // Reproduce the previously shipped native v1 shape with real persisted data.
   await owner.query("alter table zcode_sync.versions drop column management");
   await owner.query("drop table zcode_sync.configuration");
+  await owner.query("alter table zcode_sync.versions drop column files");
+  await owner.query("drop table zcode_sync.file_objects");
+  await owner.query("drop table zcode_sync.continuations");
   await owner.query("update zcode_sync.schema_version set version=1");
   await assert.rejects(store.state(scope, "session-sync"), { code: "schema" });
   await migrateConversationSync(owner);
   assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
   assert.equal((await store.history(scope, null, 10))[0].management, null);
-  checks.push("native_v1_to_v3_preserves_existing_versions_receipts_and_unknown_index");
+  checks.push("native_v1_to_v5_preserves_existing_versions_receipts_and_unknown_index");
   assert.deepEqual(
     await store.execute(
       { tenant: scope.tenant.toUpperCase(), subject: scope.subject.toUpperCase() },
@@ -166,6 +170,7 @@ try {
   await verifyOutbox(reopened, scope, other, root, checks);
   await verifyHttp(reopened, scope, other, checks);
   await verifyDeletionChoice(reopened, scope, checks);
+  await verifyContinuation(reopened, scope, root, checks);
   const limited = createConversationSyncStore({ ...options, pool: runtime, maxCheckpointBytes: 1 });
   const blocked = {
     session: "limited",
@@ -196,7 +201,7 @@ try {
     (await owner.query("select version from zcode_sync.schema_version")).rows[0].version,
     99,
   );
-  await owner.query("update zcode_sync.schema_version set version=3");
+  await owner.query("update zcode_sync.schema_version set version=5");
   await owner.query("alter role zcode_sync_runtime bypassrls");
   await assert.rejects(migrateConversationSync(owner), { code: "scope" });
   await owner.query("alter role zcode_sync_runtime nobypassrls");

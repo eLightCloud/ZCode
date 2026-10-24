@@ -21,6 +21,7 @@ import type {
 } from "@zcode/contracts";
 
 import { maybeThrowStorageFsFault } from "./fs-fault-injection.js";
+import { readFixedArtifact, restoreFixedArtifact } from "./artifact-restore.js";
 
 import {
   contentTypeForFileName,
@@ -61,6 +62,14 @@ export interface NodeToolArtifactStoreOptions {
 }
 
 export class NodeToolArtifactStore implements ToolArtifactStorePort {
+  readFixedArtifact(input: Parameters<NonNullable<ToolArtifactStorePort["readFixedArtifact"]>>[0]) {
+    return readFixedArtifact(this.rootDir, input);
+  }
+  restoreFixedArtifact(
+    input: Parameters<NonNullable<ToolArtifactStorePort["restoreFixedArtifact"]>>[0],
+  ) {
+    return restoreFixedArtifact(this.rootDir, input);
+  }
   private readonly imageCacheRootDir: string;
   private readonly pdfCacheRootDir: string;
   private readonly rootDir: string;

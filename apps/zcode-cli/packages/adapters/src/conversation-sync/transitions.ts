@@ -13,6 +13,7 @@ export interface VersionFacts {
   generation: number;
   checkpointDigest: string | null;
   managementDigest: string | null;
+  filesDigest?: string;
 }
 export function versionFacts(value: SyncVersion): VersionFacts {
   return {
@@ -22,6 +23,7 @@ export function versionFacts(value: SyncVersion): VersionFacts {
     generation: value.generation,
     checkpointDigest: value.checkpoint === null ? null : digest(value.checkpoint),
     managementDigest: value.management === undefined ? null : digest(value.management),
+    ...(value.files?.length ? { filesDigest: digest(value.files) } : {}),
   };
 }
 
@@ -64,11 +66,35 @@ function nextBinding(state: SyncState, location: string, version: string) {
   state.pending = { location, generation: state.generation, version };
   state.active = null;
 }
+/** Private native continuation writer: all admission owners were actually settled.
+ * Return one state for the surrounding PG transaction; no intermediate fence is published.
+ */
+export function transitionContinuationSelection(
+  previous: SyncState,
+  command: Extract<SyncCommand, { kind: "select" }>,
+  versions: Map<string, VersionFacts>,
+): SyncState {
+  if (!previous.active) return transition(previous, command, versions);
+  requireRule(previous.revision === command.revision, "stale");
+  const base = transition(
+    previous,
+    {
+      kind: "fence",
+      revision: previous.revision,
+      location: previous.active.location,
+      generation: previous.active.generation,
+      sourceBarrier: true,
+    },
+    versions,
+  );
+  return transition(base, { ...command, revision: base.revision }, versions);
+}
 /** Pure native storage transitions. Runtime evidence is supplied by trusted assembly. */
 export function transition(
   previous: SyncState,
   command: SyncCommand,
   versions: Map<string, VersionFacts>,
+  assignments?: ReadonlyMap<number, string>,
 ): SyncState {
   const state = structuredClone(previous);
   if ("revision" in command) requireRule(command.revision === state.revision, "stale");
@@ -175,7 +201,15 @@ export function transition(
       let cursor: string | null = value.id;
       while (cursor !== h.baseline) {
         const item = versionOf(versions, cursor!);
-        requireRule(item.location === h.source && item.generation === h.generation);
+        // 取消后，合法已保存前序保留原代次。只接受已有中心回执证明分配给同一源的
+        // 较早代次；离线 0、其它位置及无授予的自报代次不能夹入当前主线。
+        requireRule(
+          item.location === h.source &&
+            (item.generation === h.generation ||
+              (item.generation > 0 &&
+                item.generation < h.generation &&
+                assignments?.get(item.generation) === h.source)),
+        );
         cursor = item.parent;
         requireRule(cursor !== null, "stale");
       }

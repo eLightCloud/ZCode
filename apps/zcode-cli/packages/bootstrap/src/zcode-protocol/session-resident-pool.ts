@@ -272,6 +272,30 @@ export class SessionResidentPool {
     }
   }
 
+  /** Explicit transfer after the persistent input barrier. Never stops accepted work. */
+  async settleForContinuation(sessionId: string): Promise<boolean> {
+    if (
+      this.maintenanceOperation ||
+      this.rebalancing ||
+      this.checkpointInProgress ||
+      this.operationLeaseCounts.has(sessionId)
+    )
+      return false;
+    await this.waitForDeactivation(sessionId);
+    if (!this.host.listSessionIds().includes(sessionId)) return true;
+    const facts = this.host.readResidencyFacts(sessionId);
+    if (
+      !facts?.persisted ||
+      facts.hasResidencyBlockingWork ||
+      facts.hasPendingInteractions ||
+      facts.hasQueuedCommands
+    )
+      return false;
+    // Explicit transfer may retire read-only subscribers; the ordinary sampler still cannot.
+    await this.host.deactivate(sessionId);
+    return !this.host.listSessionIds().includes(sessionId);
+  }
+
   private async performMaintenance(
     input: RuntimeMaintenanceParams,
   ): Promise<RuntimeMaintenanceResult> {

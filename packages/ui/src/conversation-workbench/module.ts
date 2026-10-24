@@ -1,7 +1,4 @@
-/**
- * conversation-workbench 模块清单（architecture-governance managed 模块）。
- * 层：ui。修改 requires 时同步更新 architecture-policy.yaml（检查器会校验两者一致）。
- */
+/** Conversation history, continuation and exact-version file reads share the existing UI owner. */
 export const conversationWorkbenchModule = {
   id: "conversation-workbench",
   requires: ["ui", "shared"],
@@ -12,5 +9,6 @@ export const conversationWorkbenchModule = {
     "packages/ui/src/components/ConversationHistory.tsx",
     "packages/ui/src/hooks/useConversationContinuation.ts",
     "packages/ui/src/hooks/useConversationHistory.ts",
+    "packages/ui/src/hooks/useConversationFileDownload.ts",
   ],
 } as const;

@@ -15,7 +15,8 @@ import {
 import { ControlRequestError } from "../ipc/controlError.js";
 import type { ReleaseManifest } from "../contracts.js";
 
-interface UpdateCliIO {
+export interface UpdateCliIO {
+  applicationName?: string;
   stdout?: { write(value: string): void };
 }
 
@@ -128,14 +129,18 @@ export async function runLocalArchiveUpdateCommand(
     await updateDaemonHandoff?.converge({ layout, previous, target: prepared });
     const result = { applied: true, installed: false, version: prepared.version };
     if (json) stdout(io, result);
-    else stdout(io, `ZCode Server ${prepared.version} updated`);
+    else stdout(io, `${io.applicationName ?? "ZCode"} Server ${prepared.version} updated`);
     return 0;
   }
   await releaseManager.applyPendingWithTransaction(previous);
   await releaseManager.completeUpdate();
   const result = { applied: true, installed: previous === null, version: prepared.version };
   if (json) stdout(io, result);
-  else stdout(io, `ZCode Server ${prepared.version} ${previous ? "updated" : "installed"}`);
+  else
+    stdout(
+      io,
+      `${io.applicationName ?? "ZCode"} Server ${prepared.version} ${previous ? "updated" : "installed"}`,
+    );
   return 0;
 }
 
@@ -176,7 +181,11 @@ export async function runUpdateCommand(
   discardPreparedUpdate = "discard" in preparation ? preparation.discard : undefined;
   if (preparation.status === "up-to-date") {
     if (json) stdout(io, preparation);
-    else stdout(io, `ZCode Server ${preparation.version} is already up to date`);
+    else
+      stdout(
+        io,
+        `${io.applicationName ?? "ZCode"} Server ${preparation.version} is already up to date`,
+      );
     return 0;
   }
   if (!force && discardPreparedUpdate) {
@@ -205,7 +214,7 @@ export async function runUpdateCommand(
     await updateDaemonHandoff?.converge({ layout, previous, target });
     const result = { applied: true, version: target.version };
     if (json) stdout(io, result);
-    else stdout(io, `ZCode Server ${target.version} updated`);
+    else stdout(io, `${io.applicationName ?? "ZCode"} Server ${target.version} updated`);
     return 0;
   } catch (error: unknown) {
     if (isRunningTaskUpdateGuard(error)) {

@@ -218,7 +218,8 @@ it("SILENTDB-02/04: reports real migration kind and counts only committed SQL as
   ).rejects.toThrow("commit barrier failed");
   expect(failed.find((s) => s.phase === "migrating")?.migration?.kind).toBe("upgrade");
   expect(failed.every((s) => !s.migration?.committedCount)).toBe(true);
-  expect(failed.at(-1)?.migration?.lastAppliedMigrationId).toBe("0025_session_continuation");
+  // 旧 schema 已真实退回 0019；失败事务不能把本轮未提交迁移报告为已应用。
+  expect(failed.at(-1)?.migration?.lastAppliedMigrationId).toBe("0019_dwf_journal");
   expect(
     db
       .prepare(

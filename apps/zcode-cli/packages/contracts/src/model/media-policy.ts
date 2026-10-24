@@ -1,8 +1,5 @@
-import {
-  modelMessageContentToText,
-  type ModelInputFormat,
-  type ModelMessageContentBlock,
-} from "./index.js";
+import { modelMessageContentToText, type ModelMessageContentBlock } from "./message-content.js";
+import { type ModelInputFormat } from "./model.js";
 
 export type UnsupportedModelInputMediaKind = "image input" | "PDF input" | "video input";
 

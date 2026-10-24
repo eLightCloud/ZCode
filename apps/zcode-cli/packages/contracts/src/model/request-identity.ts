@@ -1,3 +1,5 @@
+import type { ModelId, ModelProviderId } from "./model-identity.js";
+export type { JsonSchema, ModelId, ModelProviderId } from "./model-identity.js";
 // ============================================================
 // Model Protocol - provider-neutral model contracts
 // ============================================================
@@ -5,12 +7,6 @@
 import { ModelErrorCode, ModelProtocolError } from "./network-status.js";
 
 import type { ModelStatusSink } from "./network-status.js";
-
-export type JsonSchema = Record<string, unknown>;
-
-export type ModelProviderId = string & { readonly __brand: "ModelProviderId" };
-
-export type ModelId = string & { readonly __brand: "ModelId" };
 
 export const ModelRequestSessionType = {
   Main: "main",

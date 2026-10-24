@@ -91,7 +91,7 @@
     "build": "tsc",
     "clean": "node ../../scripts/clean-dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest tests",
+    "test": "vitest run --config tests/vitest.config.ts",
     "coverage": "vitest run tests --coverage",
     "lint": "oxlint src",
     "lint:fix": "oxlint --write src"

@@ -1,3 +1,5 @@
+import type { ForkCommitBundle } from "./session-fork-bundle.js";
+export type { ForkCommitBundle } from "./session-fork-bundle.js";
 // Session Store Port：为会话输入、消息和投影提供稳定的存储边界。
 import type { TextCheckpointStorePort } from "./text-checkpoint.js";
 import type { SessionContinuationStorePort } from "./session-continuation.js";
@@ -12,14 +14,12 @@ import type { GoalStatus, SessionGoal } from "../tools/target.js";
 
 import type { PermissionRuleset } from "./permission.port.js";
 
-import type { CollaborationMode } from "./session.port.js";
+import type { CollaborationMode } from "./session-execution-types.js";
 
 import type {
   ClaimLegacySessionWorkspaceInput,
   CreateSessionInput,
-  FileDiff,
   ForkChildSessionMetadata,
-  ForkCommitBundle,
   ListSessionsInput,
   RepairLegacyRemoteSessionWorkspaceInput,
   RepairRemoteSessionPathsInput,
@@ -27,6 +27,7 @@ import type {
   SessionRevert,
   UpdateSessionInput,
 } from "./session-metadata.js";
+import type { FileDiff } from "./session-file-diff.js";
 
 import type {
   SessionEntryInfo,
@@ -50,7 +51,6 @@ export type {
   FileDiff,
   ForkChildSessionMetadata,
   ForkCommandResult,
-  ForkCommitBundle,
   ListSessionsInput,
   RepairLegacyRemoteSessionWorkspaceInput,
   RepairRemoteSessionPathsInput,

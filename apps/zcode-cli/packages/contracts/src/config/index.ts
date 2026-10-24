@@ -1,6 +1,6 @@
 // Config Port - Scoped configuration with change notification
 
-import type { CollaborationMode } from "../interfaces/session.port.js";
+import type { CollaborationMode } from "../interfaces/session-execution-types.js";
 import type { McpServerConfig } from "../interfaces/mcp.port.js";
 import type { HooksRuntimeConfig, HooksRuntimeConfigPatch } from "../hooks/index.js";
 import type { PluginConfig, PluginOptionValues } from "../plugins/index.js";

@@ -12,17 +12,17 @@ import {
   applyStreamingToolLedgerUpdate,
 } from "./event-reducer-helpers.js";
 import type {
-  ModelCompletePayload,
   SessionCompactedPayload,
   SessionCreatedPayload,
-  SessionEvent,
   SessionModeChangedPayload,
   TargetChangedPayload,
   TargetCompletionVerificationPayload,
   TurnCompletePayload,
   TurnErrorPayload,
 } from "./session.events.js";
-import { SessionEventType as EventTypes } from "./session.events.js";
+import type { SessionEvent } from "./session-event-identity.js";
+import type { ModelCompletePayload } from "./model-execution-payloads.js";
+import { SessionEventType as EventTypes } from "./session-event-identity.js";
 import type {
   StreamRecoveryAnchorPayload,
   StreamingToolLedgerPayload,

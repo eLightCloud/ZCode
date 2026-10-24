@@ -740,6 +740,7 @@ modules:
       - apps/zcode-cli/packages/telemetry/vitest.config.ts
     managed: true
     requires:
+      - cli-model-contracts
       - zcode-cli
     publicEntrypoints:
       - apps/zcode-cli/packages/telemetry/src/index.ts
@@ -787,6 +788,46 @@ modules:
     layers:
       adapters: .
     owner: native-io
+  # cli-execution-contracts：由 architecture:adopt 登记
+  - id: cli-execution-contracts
+    roots:
+      - apps/zcode-cli/packages/contracts/src/interfaces
+      - apps/zcode-cli/packages/contracts/src/events
+      - apps/zcode-cli/packages/contracts/src/workflow
+    managed: true
+    requires:
+      - cli-model-contracts
+      - mcp-apps-protocol
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/contracts/src/interfaces/index.ts
+      - apps/zcode-cli/packages/contracts/src/interfaces/contract.ts
+      - apps/zcode-cli/packages/contracts/src/interfaces/browser-control.port.ts
+      - apps/zcode-cli/packages/contracts/src/interfaces/mcp.port.ts
+      - apps/zcode-cli/packages/contracts/src/interfaces/shared.ts
+      - apps/zcode-cli/packages/contracts/src/events/index.ts
+      - apps/zcode-cli/packages/contracts/src/workflow/index.ts
+    layers:
+      domain: .
+      app: [ in-memory-session-event-store.ts, ../events/index.ts ]
+    owner: execution-protocol
+  # cli-model-contracts：由 architecture:adopt 登记
+  - id: cli-model-contracts
+    roots:
+      - apps/zcode-cli/packages/contracts/src/model
+    managed: true
+    requires:
+      - cli-execution-contracts
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/contracts/src/model/index.ts
+      - apps/zcode-cli/packages/contracts/src/model/contract.ts
+    layers:
+      domain: .
+      adapters: [invocation-context.ts, index.ts, contract.ts, contract.example.ts, contract.test.ts]
+    owner: model-protocol
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

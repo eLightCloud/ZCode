@@ -8,6 +8,7 @@ import {
   applyBackgroundTaskStarted,
   applyBackgroundTaskUpdated,
 } from "./event-reducer-helpers.js";
+import type { SessionEvent } from "./session-event-identity.js";
 import type {
   BackgroundTaskCompletedPayload,
   BackgroundTaskStartedPayload,
@@ -15,14 +16,13 @@ import type {
   PermissionDeniedPayload,
   PermissionRequestedPayload,
   PermissionResolvedPayload,
-  SessionEvent,
   ToolBatchCompletePayload,
   ToolCallErrorPayload,
   ToolCallResultPayload,
   ToolCallScheduledPayload,
   ToolCallStartedPayload,
-} from "./session.events.js";
-import { SessionEventType as EventTypes } from "./session.events.js";
+} from "./tool-execution-payloads.js";
+import { SessionEventType as EventTypes } from "./session-event-identity.js";
 export const toolsEventHandlers: Record<
   string,
   (projection: SessionProjection, event: SessionEvent) => SessionProjection

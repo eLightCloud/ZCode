@@ -2,7 +2,7 @@
 // Model Protocol - provider-neutral model contracts
 // ============================================================
 
-import type { JsonSchema } from "./request-identity.js";
+import type { JsonSchema } from "./model-identity.js";
 
 import { ModelFailureReason, ModelTransportKind } from "./network-status.js";
 

@@ -1,3 +1,5 @@
+import { type BrowserViewportSize } from "./browser-geometry.js";
+export type { BrowserViewportSize } from "./browser-geometry.js";
 import type { TraceContext } from "../tracing/tracer.js";
 
 import type { BrowserCommand } from "./browser-commands.js";
@@ -67,11 +69,6 @@ export const BROWSER_VIEWPORT_LIMITS = {
   minHeight: 320,
   maxHeight: 2160,
 } as const;
-
-export interface BrowserViewportSize {
-  width: number;
-  height: number;
-}
 
 /** backend discovery 使用的完整 workspace/session 隔离上下文。 */
 export interface BrowserDiscoveryContext {

@@ -1,3 +1,5 @@
+import { type FileDiff } from "./session-file-diff.js";
+export type { FileDiff } from "./session-file-diff.js";
 export type SessionLastOutcome = "completed" | "error" | "interrupted";
 // Session Store Port：为会话输入、消息和投影提供稳定的存储边界。
 
@@ -5,13 +7,7 @@ export type SessionLastOutcome = "completed" | "error" | "interrupted";
 
 import type { MessageId, PartId, ProjectId, SessionId, TraceId, WorkspaceId } from "./shared.js";
 
-import type { GoalStatus, SessionGoal } from "../tools/target.js";
-
 import type { PermissionRuleset } from "./permission.port.js";
-
-import type { MessageWithParts } from "./session-message.js";
-
-import type { SessionEntryInfo, SessionInputDelivery } from "./session-entries.js";
 
 export const SESSION_TASK_TYPES = [
   "interactive",
@@ -102,37 +98,6 @@ export type ForkCommandResult =
   | { type: "createSelectionSideSession"; sessionId: string }
   | { type: "editUserQuery"; disposition: "fork"; sessionId: string };
 
-/**
- * conversation fork 的唯一原子提交载荷。core 在内存完成 remap；adapter 不参与业务裁决，
- * 只保证 child/copy/goal/entries/input/parent command fact 全有或全无。
- */
-export interface ForkCommitBundle {
-  child: CreateSessionInput;
-  messages: MessageWithParts[];
-  entries: SessionEntryInfo[];
-  /** 存储复制来源（目标 ID -> 父记录 ID）；只保留旧磁盘快照，不参与模型选择。 */
-  copySources?: { messages: Record<string, string>; parts: Record<string, string> };
-  goal?: { source: SessionGoal; status: GoalStatus };
-  initialInput?: {
-    id: string;
-    sessionID: SessionId;
-    kind: string;
-    delivery: SessionInputDelivery;
-    payload: { text: string; [key: string]: unknown };
-  };
-  commandFact: {
-    parentSessionId: string;
-    sourceCommandId: string;
-    ack: {
-      commandId: string;
-      status: "accepted";
-      revisionAtDecision: number;
-      result: ForkCommandResult;
-    };
-    metadata: Record<string, unknown>;
-  };
-}
-
 export interface UpdateSessionInput {
   id: SessionId;
   lastOutcome?: SessionLastOutcome;
@@ -153,14 +118,6 @@ export interface UpdateSessionInput {
   revert?: SessionRevert | null;
   permission?: PermissionRuleset | null;
   timeCompacting?: number | null;
-}
-
-export interface FileDiff {
-  path: string;
-  additions: number;
-  deletions: number;
-  oldPath?: string;
-  newPath?: string;
 }
 
 export interface SessionRevert {

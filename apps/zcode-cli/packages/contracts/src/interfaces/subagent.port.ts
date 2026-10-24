@@ -4,7 +4,7 @@
 
 import type { AgentBackgroundedOutput, AgentOutput } from "../tools/agent.js";
 import type { Model, ModelSelection } from "../model/index.js";
-import type { ModelRequestDependencies } from "../model/invocation-context.js";
+import type { ModelRequestDependencies } from "../model/index.js";
 import type { SessionId, ToolCallId, TurnId } from "./shared.js";
 import type { TraceContext } from "../tracing/tracer.js";
 

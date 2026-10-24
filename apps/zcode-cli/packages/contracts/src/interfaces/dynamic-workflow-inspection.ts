@@ -13,7 +13,7 @@ import type { DynamicWorkflowRunHole } from "./dynamic-workflow-run-hole.port.js
 import type {
   DynamicWorkflowRunArtifact,
   DynamicWorkflowRunPendingQuestion,
-} from "./dynamic-workflow-run.port.js";
+} from "./dynamic-workflow-artifacts.js";
 
 // ————————————————————————————————————————————————————————————————
 // run 内省（ListWorkflowRuns / GetWorkflowRun 的取数面）

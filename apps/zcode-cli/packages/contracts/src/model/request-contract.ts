@@ -13,12 +13,8 @@ import type { TraceContext } from "../tracing/tracer.js";
 
 import type { ModelApiCallObservation } from "../telemetry/index.js";
 
-import type {
-  JsonSchema,
-  ModelRequestAdmission,
-  ModelRequestSessionType,
-  ModelRetryBudget,
-} from "./request-identity.js";
+import type { ModelRequestAdmission, ModelRequestSessionType, ModelRetryBudget } from "./request-identity.js";
+import type { JsonSchema } from "./model-identity.js";
 
 import type {
   ModelInputMessage,

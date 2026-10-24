@@ -4,7 +4,7 @@
  */
 export const cliTelemetryModule = {
   id: "cli-telemetry",
-  requires: ["zcode-cli"],
+  requires: ["cli-model-contracts", "zcode-cli"],
   provides: ["cli-telemetry"],
   publicEntrypoints: ["index.ts", "contract.ts"],
 } as const;

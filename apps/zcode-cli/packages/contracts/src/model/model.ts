@@ -1,12 +1,6 @@
-import type {
-  JsonSchema,
-  ModelInputMessage,
-  ModelId,
-  ModelProviderId,
-  ModelStreamEvent,
-  ModelTextResult,
-  ModelToolContract,
-} from "./index.js";
+import type { JsonSchema, ModelId, ModelProviderId } from "./model-identity.js";
+import type { ModelInputMessage } from "./message-content.js";
+import type { ModelStreamEvent, ModelTextResult, ModelToolContract } from "./request-contract.js";
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-selection";
 import type { ModelPropertiesData, ModelOptionSpecsData } from "@zcode/shared/model-config";
 import type { ToolSearchCapability } from "../tools/tool-search.js";

@@ -130,6 +130,8 @@ describe("Todo121：只补 0020 回填后未动过的会话档位", () => {
       ...session,
       time_deleted: null,
       last_outcome: null,
+      last_outcome_input_id: null,
+      last_outcome_at: null,
     });
     expect(db.prepare("SELECT * FROM session_entry").get()).toEqual({
       ...entry,
@@ -140,6 +142,8 @@ describe("Todo121：只补 0020 回填后未动过的会话档位", () => {
     ).toEqual(ledger);
     store.close();
     store = undefined;
+    // 当前 writer 的用户修改，旧连接写入拒绝另有固定负例。
+    db.function("zcode_portable_context_version", { deterministic: true }, () => 4);
     db.prepare("UPDATE session_entry SET data=json_remove(data,'$.modelSelection.options')").run();
     store = await createSqliteSessionStore({ dbPath: path });
     expect(readEntry().modelSelection).not.toHaveProperty("options");

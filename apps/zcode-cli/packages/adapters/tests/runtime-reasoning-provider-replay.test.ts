@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,12 +11,12 @@ import {
   createModelId,
   createModelProviderId,
   createPartId,
-  createProjectId,
   createSessionId,
   parseModelSelectionValue,
   type Model,
   type ModelRequest,
   type SessionId,
+  type Part,
 } from "@zcode/contracts";
 import {
   createRegistryModelConfig,
@@ -24,6 +25,7 @@ import {
   parseProviderConfig,
 } from "@zcode/provider";
 import { createSqliteSessionStore } from "../src/storage/session-store/sqlite-session-store.js";
+import { SQLITE_MIGRATIONS } from "../src/storage/session-store/migrations.js";
 import { AiSdkModelAdapter } from "../src/model/runner.js";
 import { createTestModelProperties } from "./test-model-format.js";
 import { AgentRuntime } from "../../core/src/runtime.js";
@@ -59,15 +61,23 @@ describe.each(["off", "on"] as const)(
       async (source, target) => {
         const root = await mkdtemp(join(tmpdir(), "zcode-reasoning-replay-"));
         const sessionID = createSessionId("reasoning-replay");
-        let store = await createSqliteSessionStore({ dbPath: join(root, "session.sqlite") });
+        let store: Awaited<ReturnType<typeof createSqliteSessionStore>> | undefined;
         const db = new DatabaseSync(join(root, "session.sqlite"));
         let runtime: AgentRuntime | undefined;
         try {
-          // 合并修复：空库建表后移除尚未播种的迁移记录，模拟升级前数据；只操作临时夹具。
-          db.prepare("DELETE FROM schema_migration WHERE id = ?").run(
-            "0020_provider_model_selection",
+          db.exec(
+            "CREATE TABLE schema_migration(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, app_version TEXT, time_applied INTEGER NOT NULL)",
           );
-          await seedHistory({ db, store, root, sessionID, providerId: source });
+          for (const migration of SQLITE_MIGRATIONS.filter((item) => item.id < "0020")) {
+            db.exec(migration.sql);
+            db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+              migration.id,
+              createHash("sha256").update(migration.sql.trim()).digest("hex"),
+              migration.appVersion,
+              1,
+            );
+          }
+          await seedHistory({ db, root, sessionID, providerId: source });
           const snapshot = () => ({
             messages: db
               .prepare("select data from message where id in (?, ?) order by id")
@@ -78,7 +88,6 @@ describe.each(["off", "on"] as const)(
           });
           const before = snapshot();
           // Todo109 已将迁移收进数据库启动；不能恢复已删除的逐 Session 迁移接口。
-          store.close();
           store = await createSqliteSessionStore({ dbPath: join(root, "session.sqlite") });
           const migrated = snapshot();
           expect(migrated.messages).toHaveLength(before.messages.length);
@@ -210,7 +219,7 @@ describe.each(["off", "on"] as const)(
           runtime?.beginShutdown();
           vi.unstubAllGlobals();
           db.close();
-          store.close();
+          store?.close();
           await rm(root, { recursive: true, force: true });
         }
       },
@@ -235,21 +244,21 @@ function observeModel(model: Model, requests: ModelRequest[]): Model {
 
 async function seedHistory(input: {
   db: DatabaseSync;
-  store: Awaited<ReturnType<typeof createSqliteSessionStore>>;
   root: string;
   sessionID: SessionId;
   providerId: string;
 }) {
-  const { db, store, root, sessionID, providerId } = input;
+  const { db, root, sessionID, providerId } = input;
   const legacy = providerId.startsWith("builtin:");
-  await store.createSession({
-    id: sessionID,
-    projectID: createProjectId("reasoning-replay"),
-    directory: root,
-    slug: "replay",
-    title: "Replay",
-    version: "old",
-  });
+  db.prepare(
+    "INSERT INTO session(id,project_id,slug,directory,title,version,time_created,time_updated) VALUES(?,?,?,?,?,?,?,?)",
+  ).run(sessionID, "reasoning-replay", "replay", root, "Replay", "old", 1, 1);
+  const savePart = (part: Part) => {
+    const { id, sessionID: session, messageID, ...data } = part;
+    db.prepare(
+      "INSERT INTO part(id,message_id,session_id,time_created,time_updated,data) VALUES(?,?,?,?,?,?)",
+    ).run(id, messageID, session, 1, 3, JSON.stringify(data));
+  };
   const modelSelection = { providerId, modelId: MODEL_ID, options: { reasoningLevel: "disabled" } };
   // 已发布旧格式直接写入 SQLite，避免用新版 writer 生成伪旧数据。
   const insert = db.prepare(
@@ -307,7 +316,7 @@ async function seedHistory(input: {
     ["signed", "Historical thinking", { anthropic: { signature: SIGNATURE } }],
     ["redacted", "", { anthropic: { redactedData: REDACTED_DATA } }],
   ] as const) {
-    await store.savePart({
+    savePart({
       id: createPartId(id),
       sessionID,
       messageID: ASSISTANT_ID,
@@ -321,7 +330,7 @@ async function seedHistory(input: {
     [USER_ID, "Inspect report"],
     [ASSISTANT_ID, "Inspecting report"],
   ] as const) {
-    await store.savePart({
+    savePart({
       id: createPartId(`${messageID}-text`),
       sessionID,
       messageID,
@@ -330,7 +339,7 @@ async function seedHistory(input: {
       time: { start: 1, end: 3 },
     });
   }
-  await store.savePart({
+  savePart({
     id: createPartId("read"),
     sessionID,
     messageID: ASSISTANT_ID,

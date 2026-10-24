@@ -25,8 +25,8 @@ it.each(["source-first", "agent-first"])(
           .get(),
       ).toEqual(initial);
       expect(db.prepare("SELECT * FROM zcode_database_identity").all()).toEqual([]);
-      // 接续追加为 0025；identity 仍由双方以同一 0024 checksum 接管，不生成业务代际。
-      expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migration").get()?.n).toBe(25);
+      // 接续与 writer 门追加为 0025/0026；identity 仍共用原 0024 checksum。
+      expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migration").get()?.n).toBe(26);
     } finally {
       db.close();
     }

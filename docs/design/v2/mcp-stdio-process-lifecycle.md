@@ -18,6 +18,19 @@ MCP stdio servers are external processes owned by the CLI adapter. Many configur
 
 For stdio transports, the adapter captures the transport pid before invoking SDK close, then runs the managed process cleanup. This preserves the pid even if SDK close clears its internal process handle. After that, the adapter still calls `client.close()` and `transport.close()` for protocol and stream cleanup.
 
+## Pool lease finalization
+
+A session-isolated connection key includes the unique lease sequence. Once that lease
+finally closes, a successor cannot reuse its entries. Final release of the last session
+reference therefore closes and awaits the adapter immediately, including stdio process
+cleanup, before session shutdown can report completion. Ordinary disconnect or config
+replacement on an open lease retains the existing grace period.
+
+Workspace-isolated entries retain reference counting and their existing idle grace,
+since another lease can reuse the stable workspace key. Duplicate lease closes and
+pool shutdown join the same in-flight adapter close. Connection-close diagnostics and
+telemetry unregister retain the original connection identity and occur once.
+
 ## Non Goals
 
 - This change does not alter task archive semantics in the UI. Archiving a task hides it from the active list and does not imply `session/close`.

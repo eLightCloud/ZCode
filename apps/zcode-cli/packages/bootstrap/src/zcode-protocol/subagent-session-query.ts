@@ -1,3 +1,5 @@
+import { type SubagentCandidate, type SubagentEventRelation } from "./subagent-session-contract.js";
+export type { SubagentCandidate, SubagentEventRelation } from "./subagent-session-contract.js";
 import {
   STREAM_RECOVERY_DISCARDED_ERROR_NAME,
   SessionEventType,
@@ -7,7 +9,6 @@ import {
   type SessionEvent,
   type SessionInfo,
   type SessionProjection,
-  type ToolPart,
 } from "@zcode/contracts";
 
 import type { ZCodeSessionEndedSubagent, ZCodeSessionRunningSubagent } from "@zcode/shared";
@@ -20,31 +21,6 @@ import {
 } from "./subagent-session-facts.js";
 
 export { paginateEndedSubagents } from "./subagent-session-pagination.js";
-
-export interface SubagentCandidate {
-  agentId?: string;
-  childSessionId: string;
-  runInBackground: boolean;
-  output: Record<string, unknown> | null;
-  part: ToolPart;
-  subagentType: string;
-  summary?: string;
-  startedAt?: number;
-  stoppedAt?: number;
-  stoppedStatus?: "success" | "failed" | "cancelled";
-  title: string;
-}
-
-export interface SubagentEventRelation {
-  agentId?: string;
-  childSessionId?: string;
-  description?: string;
-  startedAt?: number;
-  stoppedAt?: number;
-  stoppedStatus?: "success" | "failed" | "cancelled";
-  subagentType?: string;
-  summary?: string;
-}
 
 export interface SessionSubagentProjection {
   revision: number;

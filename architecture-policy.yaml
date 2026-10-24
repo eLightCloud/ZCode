@@ -283,7 +283,7 @@ modules:
   - id: mcp-ui
     roots: [ apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui ]
     managed: true
-    requires: [ zcode-cli, shared, mcp-apps-protocol ]
+    requires: [ cli-protocol-host, zcode-cli, shared, mcp-apps-protocol ]
     publicEntrypoints: [ apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/index.ts, apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/contract.ts ]
     layers:
       app: "."
@@ -882,6 +882,31 @@ modules:
     layers:
       adapters: .
     owner: native-network
+  # cli-protocol-host：由 architecture:adopt 登记
+  - id: cli-protocol-host
+    roots:
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4
+      - apps/zcode-cli/packages/bootstrap/tests/protocol-host-contract
+    managed: true
+    requires:
+      - cli-adapters
+      - cli-session-execution
+      - cli-telemetry
+      - mcp-apps-protocol
+      - mcp-ui
+      - provider
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/server.ts
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/contract.ts
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/transport.ts
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/index.ts
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/replay.ts
+    layers:
+      adapters: .
+    owner: native-protocol
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

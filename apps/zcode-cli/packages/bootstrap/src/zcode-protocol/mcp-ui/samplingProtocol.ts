@@ -6,8 +6,8 @@ import { mcpAppsSamplingResultSchema } from "@zcode/shared/mcp-apps";
 import {
   parseParams,
   requireSession,
-  type ZCodeProtocolAgentServerContext,
-} from "../server-types.js";
+  type McpUiProtocolHost as ZCodeProtocolAgentServerContext,
+} from "../contract.js";
 import { mcpUiInstances } from "./instances.js";
 import { McpUiSamplingCalls } from "./samplingCalls.js";
 

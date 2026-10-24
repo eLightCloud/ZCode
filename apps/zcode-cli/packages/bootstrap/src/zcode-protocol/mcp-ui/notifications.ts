@@ -5,7 +5,7 @@ import {
   type PluginUiResourceSubscriberRef,
   type SessionEvent,
 } from "@zcode/contracts";
-import type { ZCodeProtocolAgentServerContext } from "../server-types.js";
+import type { McpUiProtocolHost as ZCodeProtocolAgentServerContext } from "../contract.js";
 import { parseMcpUiSubscriberKey } from "./contract.js";
 import { mcpUiInstances } from "./instances.js";
 

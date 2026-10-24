@@ -24,7 +24,7 @@ import {
 import { resolveSessionFallbackModelSelection } from "../input-admission.js";
 import { preemptActiveTurnAndWait } from "./session-flow.js";
 import { V4CommandNoopError } from "../../v4-gateway.js";
-import { commandExecutionContextOf } from "../executor.js";
+import { commandExecutionContextOf } from "../command-admission.js";
 export { V4SessionIdleTimeoutError } from "./session-flow.js";
 
 /** sendQueuedNow 在投影里查不到该项原文（已被 drain/删除或 id 无效）→ 拒绝。 */

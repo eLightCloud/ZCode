@@ -22,7 +22,8 @@ import type { SessionId } from "@zcode/contracts";
 
 import { hasSessionModelProvider } from "./workspace-model-runtime.js";
 
-import { afterStateMutation, ensureSessionModelAvailableForNextTurn } from "./server-operations.js";
+import { afterStateMutation } from "./protocol-state-notifications.js";
+import { ensureSessionModelAvailableForNextTurn } from "./protocol-session-model.js";
 
 import type {
   ZCodeProtocolAgentServerContext,

@@ -15,7 +15,7 @@ import { SessionEventType } from "@zcode/contracts";
 
 import { pushGoalVerificationFact } from "./transcript-goal-events.js";
 
-import type { GoalVerificationFact } from "./transcript-goal-events.js";
+import type { GoalVerificationFact } from "./transcript-goal-contract.js";
 
 import type {
   HydratedTimelineModel,

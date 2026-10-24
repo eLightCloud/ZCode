@@ -4,13 +4,13 @@ import { V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
 import type { V4GatewayHost } from "../zcode-protocol-v4/v4-gateway.js";
 import type { Logger } from "@zcode/contracts";
 import type { SessionId } from "@zcode/contracts";
-import { activateSessionForResume } from "./server-operations.js";
+import { activateSessionForResume } from "./protocol-session-lifecycle.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 import type { ZCodeProtocolSessionRecord } from "./server-types.js";
 import { persistHighspeedTimingOnTurnTerminal } from "./v4-bridge-highspeed-timing.js";
 import { parseRemoteWorkspaceIdentity } from "@zcode/shared";
 import type { MessageWithParts } from "@zcode/contracts";
-import { discardFailedSessionResume } from "./server-operations.js";
+import { discardFailedSessionResume } from "./protocol-session-lifecycle.js";
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
 // - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；

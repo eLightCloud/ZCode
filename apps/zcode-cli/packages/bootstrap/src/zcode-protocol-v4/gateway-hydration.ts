@@ -27,7 +27,7 @@ export async function performHydration(
   sessionId: string,
   buffer: HydrationBuffer,
   persistedMessages?: MessageWithParts[],
-  forceRebuild = false,
+  forceRebuild: boolean = false,
 ): Promise<ConversationTopicPublisher> {
   const existingAtStart = this.publishers.get(sessionId);
   const liveSessionAtStart = this.host.sessionExists(sessionId);

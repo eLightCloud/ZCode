@@ -26,7 +26,6 @@ import {
   type ZCodeProtocolRequest,
   type ZCodeProtocolRequestId,
   type ZCodeProtocolTrace,
-  type ZCodeSessionMode,
   type ZCodeSessionPersistence,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
@@ -329,11 +328,15 @@ export function protocolTraceFromTraceContext(context: TraceContext): ZCodeProto
   };
 }
 
-export function requireSession(
-  context: ZCodeProtocolAgentServerContext,
+export function requireSession<TRecord>(
+  context: {
+    sessions: ReadonlyMap<string, TRecord>;
+    logger?: Logger;
+    deps: Pick<ZCodeProtocolAgentDependencies, "sessionStore">;
+  },
   sessionId: string,
   options: { deliveryKind?: ZCodeDeliveryKind; operation?: string } = {},
-): ZCodeProtocolSessionRecord {
+): TRecord {
   const record = context.sessions.get(sessionId);
   if (!record) {
     // 诊断：readSession 只读取活跃 runtime；记录缺失时要区分“冷会话尚未恢复”和“ID 已失效”，

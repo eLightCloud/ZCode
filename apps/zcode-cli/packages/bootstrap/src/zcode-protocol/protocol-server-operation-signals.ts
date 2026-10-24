@@ -9,7 +9,7 @@ import type { ZCodeProtocolAgentServerMethodsContext } from "./protocol-server-c
 export function cancelPluginOperation(
   this: ZCodeProtocolAgentServerMethodsContext,
   rawParams: unknown,
-) {
+): { operationId: string; cancelled: boolean } {
   const params = parseParams(zcodePluginsCancelOperationParamsSchema, rawParams);
   const controller = this.pluginOperationControllers.get(params.operationId);
   if (!controller) return { operationId: params.operationId, cancelled: false };
@@ -22,7 +22,7 @@ export function cancelPluginOperation(
 export function cancelWorkspaceGenerateText(
   this: ZCodeProtocolAgentServerMethodsContext,
   rawParams: unknown,
-) {
+): { operationId: string; cancelled: boolean } {
   const params = parseParams(zcodeWorkspaceCancelGenerateTextParamsSchema, rawParams);
   const controller = this.workspaceGenerateTextControllers.get(params.operationId);
   if (!controller) return { operationId: params.operationId, cancelled: false };

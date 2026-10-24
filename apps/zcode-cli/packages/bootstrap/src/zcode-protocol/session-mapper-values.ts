@@ -38,3 +38,15 @@ export function compareMessagesByCreatedTime(
   if (byTime !== 0) return byTime;
   return String(left.info.id).localeCompare(String(right.info.id));
 }
+
+export function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function measureJsonBytes(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? "null", "utf8");
+  } catch {
+    return 0;
+  }
+}

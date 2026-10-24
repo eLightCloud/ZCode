@@ -62,8 +62,13 @@ export function rowBase(
   this: ProductProjectionContext,
   event: SessionEvent,
   turnId: string,
-  entityId = String(event.id),
-) {
+  entityId: string = String(event.id),
+): Required<
+  Pick<
+    ConversationRow,
+    "rowId" | "turnId" | "entityId" | "productTurnId" | "visibility" | "createdAt" | "createdAtSeq"
+  >
+> {
   const rowId = this.nextRowId++;
   this.entityIdByRowId.set(rowId, entityId);
   return {

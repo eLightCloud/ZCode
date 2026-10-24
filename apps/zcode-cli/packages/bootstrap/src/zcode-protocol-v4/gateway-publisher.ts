@@ -230,7 +230,7 @@ export function hydratePublisher(
   this: ConversationV4GatewayMethodsContext,
   sessionId: string,
   persistedMessages?: MessageWithParts[],
-  forceRebuild = false,
+  forceRebuild: boolean = false,
 ): Promise<ConversationTopicPublisher> {
   const existing = this.publishers.get(sessionId);
   // 已 hydrate 过的 live publisher：直接复用（避免重复重建 / 双计）。

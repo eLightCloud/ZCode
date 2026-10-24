@@ -5,27 +5,27 @@ import { zcodeProtocolMethods } from "@zcode/shared";
 import { V4_METHODS } from "@zcode/shared/zcode-protocol-v4";
 import { V4_NOTIFICATIONS } from "@zcode/shared/zcode-protocol-v4";
 import type { ZCodeProtocolRequest } from "@zcode/shared";
-import { cancelBackgroundTask } from "./server-operations.js";
-import { closeSession } from "./server-operations.js";
-import { compactSession } from "./server-operations.js";
-import { createSession } from "./server-operations.js";
-import { forkSession } from "./server-operations.js";
-import { generateWorkspaceText } from "./server-operations.js";
-import { getTaskTokenUsage } from "./server-operations.js";
-import { getUsageStats } from "./server-operations.js";
-import { goalSession } from "./server-operations.js";
-import { listSessionSubagents } from "./server-operations.js";
-import { listSessions } from "./server-operations.js";
-import { readEvents } from "./server-operations.js";
-import { readMessages } from "./server-operations.js";
-import { readSession } from "./server-operations.js";
-import { resumeSession } from "./server-operations.js";
-import { sendPrompt } from "./server-operations.js";
-import { setMode } from "./server-operations.js";
-import { setModel } from "./server-operations.js";
-import { setThoughtLevel } from "./server-operations.js";
-import { stopSession } from "./server-operations.js";
-import { subscribeSession } from "./server-operations.js";
+import { cancelBackgroundTask } from "./protocol-session-input.js";
+import { closeSession } from "./protocol-session-lifecycle.js";
+import { compactSession } from "./protocol-session-input.js";
+import { createSession } from "./protocol-session-lifecycle.js";
+import { forkSession } from "./protocol-session-fork.js";
+import { generateWorkspaceText } from "./protocol-workspace-text.js";
+import { getTaskTokenUsage } from "./protocol-session-queries.js";
+import { getUsageStats } from "./protocol-session-queries.js";
+import { goalSession } from "./protocol-session-goal.js";
+import { listSessionSubagents } from "./protocol-session-queries.js";
+import { listSessions } from "./protocol-session-queries.js";
+import { readEvents } from "./protocol-session-queries.js";
+import { readMessages } from "./protocol-session-queries.js";
+import { readSession } from "./protocol-session-queries.js";
+import { resumeSession } from "./protocol-session-lifecycle.js";
+import { sendPrompt } from "./protocol-session-input.js";
+import { setMode } from "./protocol-session-model.js";
+import { setModel } from "./protocol-session-model.js";
+import { setThoughtLevel } from "./protocol-session-model.js";
+import { stopSession } from "./protocol-session-input.js";
+import { subscribeSession } from "./protocol-session-queries.js";
 import { listChildProcesses } from "./process-child-processes.js";
 import { readWorkspacePresentation } from "./workspace-model-runtime.js";
 import { testProviderModelConnectivity } from "./workspace-model-runtime.js";
@@ -88,7 +88,7 @@ import { refreshProviderRegistry } from "./account-provider-config.js";
 export async function dispatchRequest(
   this: ZCodeProtocolAgentServerMethodsContext,
   request: ZCodeProtocolRequest,
-) {
+): Promise<unknown> {
   switch (request.method) {
     case zcodeProtocolMethods.deliverablesList:
       return await queryNativeDeliverables("list", request.params);

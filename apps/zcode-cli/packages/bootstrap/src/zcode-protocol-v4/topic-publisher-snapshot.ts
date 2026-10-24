@@ -22,7 +22,6 @@ import type {
 
 import {
   DELIVERY_PROFILES,
-  statePatchSchema,
   PROTOCOL_V4_LIMITS,
   clampWorkflowRunsForLegacy,
   filterConversationDeltasForProfile,
@@ -109,7 +108,7 @@ export function seedSubagents(
 
 export function getWireSnapshot(
   this: ConversationTopicPublisherMethodsContext,
-  snapshot = this.projection.getSnapshot(),
+  snapshot: ConversationSnapshot = this.projection.getSnapshot(),
 ): ConversationSnapshot {
   return this.getWireSnapshotForProfile(DELIVERY_PROFILES.continuous, snapshot);
 }
@@ -117,7 +116,7 @@ export function getWireSnapshot(
 export function getWireSnapshotForProfile(
   this: ConversationTopicPublisherMethodsContext,
   profile: DeliveryProfile,
-  snapshot = this.projection.getSnapshot(),
+  snapshot: ConversationSnapshot = this.projection.getSnapshot(),
 ): ConversationSnapshot {
   const visibleRows = filterConversationRowsForProfile(snapshot.rows.window, profile);
   const visibleSnapshot: ConversationSnapshot = {

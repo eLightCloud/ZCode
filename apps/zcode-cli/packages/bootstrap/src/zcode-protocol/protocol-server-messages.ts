@@ -162,7 +162,9 @@ export async function handleRequest(
   }
 }
 
-export function requireV4Gateway(this: ZCodeProtocolAgentServerMethodsContext) {
+export function requireV4Gateway(
+  this: ZCodeProtocolAgentServerMethodsContext,
+): NonNullable<ZCodeProtocolAgentServerMethodsContext["context"]["v4Gateway"]> {
   if (!this.context.v4Gateway) {
     throw new ProtocolRequestError(-32603, "v4 gateway is not initialized");
   }

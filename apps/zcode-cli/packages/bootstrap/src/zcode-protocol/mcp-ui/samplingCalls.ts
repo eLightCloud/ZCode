@@ -4,7 +4,7 @@ import {
   MCP_APPS_SAMPLING_MAX_PER_SESSION,
   MCP_APPS_SAMPLING_TIMEOUT_MS,
 } from "@zcode/shared/mcp-apps";
-import { ProtocolRequestError } from "../server-types.js";
+import { ProtocolRequestError } from "../contract.js";
 
 type Scope = { token: string; sessionId: string; signal: AbortSignal };
 type Ledger = { scope: Scope; calls: Map<string, AbortController | null> };

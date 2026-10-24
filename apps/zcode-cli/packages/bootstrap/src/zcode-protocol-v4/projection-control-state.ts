@@ -1,3 +1,4 @@
+import type { AvailabilityContext } from "./projection-state.js";
 // ProductProjection —— CLI 权威投影第二 reducer。
 // 输入：CLI 事件日志（SessionEvent，权威事实源）；输出：ConversationDelta[]。
 // 快照推进复用协议规范 apply（applyConversationDeltas）——投影演进与 delta 流
@@ -84,7 +85,7 @@ export function deriveContext(
     goal?: GoalState | null;
     queue?: ConversationSnapshot["queue"];
   },
-) {
+): AvailabilityContext {
   const goal = overrides.goal === undefined ? this.snapshot.goal : overrides.goal;
   const queue = overrides.queue ?? this.snapshot.queue;
   return {

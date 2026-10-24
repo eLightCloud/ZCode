@@ -22,7 +22,7 @@ import type { Logger, SessionId } from "@zcode/contracts";
 
 import { resolveSessionModelContextWindow } from "./workspace-model-runtime.js";
 
-import { listSessionSubagents, readSessionContextUsage } from "./server-operations.js";
+import { listSessionSubagents, readSessionContextUsage } from "./protocol-session-queries.js";
 
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 

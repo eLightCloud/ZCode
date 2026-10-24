@@ -18,8 +18,18 @@ export function assertRemoteTaskDirectories(
   project: VirtualProject | null | undefined,
   workspacePath: string,
   additionalDirectories: readonly string[] = [],
+  nativeWorkspace?: { root: string; workspaceIdentity?: string },
 ): void {
   if (!ownerHostId || ownerHostId === "local") return;
+  // 普通会话不是目录项目。只接收持库装配登记的准确 namespace，不能从客户端路径扩权。
+  if (
+    !project &&
+    nativeWorkspace &&
+    workspacePath === nativeWorkspace.root &&
+    !nativeWorkspace.workspaceIdentity?.trim() &&
+    additionalDirectories.length === 0
+  )
+    return;
   if (!project) throw new Error("project.remote-project-required");
   assertRemoteProjectRoots(
     ownerHostId,

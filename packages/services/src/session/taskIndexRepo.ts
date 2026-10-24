@@ -357,7 +357,15 @@ export class TaskIndexRepo {
 
   async getProjectRepository() {
     await this.ensureReady();
-    return projectStorage.repository(this.getDatabase(), this.storageHostId);
+    const root = getConversationWorkspaceDir();
+    const purpose = this.getDatabase()
+      .prepare("SELECT purpose FROM conversation_workspace_purpose WHERE workspace_key=?")
+      .get(resolveWorkspaceKey({ workspacePath: root })) as { purpose: string } | undefined;
+    return projectStorage.repository(
+      this.getDatabase(),
+      this.storageHostId,
+      purpose?.purpose === "conversation" ? root : undefined,
+    );
   }
 
   async ensureReady(): Promise<void> {
@@ -706,7 +714,11 @@ export class TaskIndexRepo {
   }
 
   private enqueueWrite<T>(
-    params: { workspacePath: string; workspaceIdentity?: string; taskId: string },
+    params: {
+      workspacePath: string;
+      workspaceIdentity?: string;
+      taskId: string;
+    },
     operation: () => Promise<T> | T,
   ): Promise<T> {
     const key = this.writeKey(params);
@@ -916,7 +928,10 @@ export class TaskIndexRepo {
     const rows = this.getDatabase()
       .prepare("SELECT * FROM tasks WHERE workspace_key=?")
       .all(workspaceKey(target)) as unknown as TaskIndexRow[];
-    return rows.map((row) => ({ meta: rowToMeta(row), handoffPending: row.handoff_pending ?? 0 }));
+    return rows.map((row) => ({
+      meta: rowToMeta(row),
+      handoffPending: row.handoff_pending ?? 0,
+    }));
   }
 
   /** CLI 确认 child 后移除旧版本误建的派生行，不修改会话正文或 CLI deleted。 */
@@ -1002,7 +1017,8 @@ export class TaskIndexRepo {
           titleOverridden: existing?.title_overridden === 1,
         });
       const source = params.titleSource ?? "default";
-      db.prepare(`UPDATE tasks SET
+      db.prepare(
+        `UPDATE tasks SET
           cli_title=CASE WHEN cli_title_source='custom' AND ?<>'custom' THEN cli_title ELSE ? END,
           cli_title_source=CASE WHEN cli_title_source='custom' AND ?<>'custom' THEN cli_title_source ELSE ? END,
           cli_created_at=?,cli_updated_at=max(coalesce(cli_updated_at,0),?),
@@ -1011,7 +1027,8 @@ export class TaskIndexRepo {
           title_overridden=CASE WHEN (handoff_pending & 2)<>0 THEN title_overridden WHEN ?='custom' OR cli_title_source='custom' THEN 1 ELSE 0 END,
           updated_at=?,created_at=?,task_status=coalesce(?,task_status),deleted=max(deleted,?),
           handoff_pending=(handoff_pending & ~4) & CASE WHEN ?=1 THEN ~1 ELSE -1 END & CASE WHEN ?=title AND ?='custom' THEN ~2 ELSE -1 END
-          WHERE workspace_key=? AND task_id=?`).run(
+          WHERE workspace_key=? AND task_id=?`,
+      ).run(
         source,
         params.meta.title,
         source,
@@ -1131,9 +1148,11 @@ export class TaskIndexRepo {
           typeof params.patch.unreadAt === "number"
             ? Math.max(params.patch.unreadAt, row.last_unread_at + 1, (row.unread_at ?? 0) + 1)
             : null;
-        db.prepare(`UPDATE tasks SET pinned=coalesce(?,pinned),archived=coalesce(?,archived),
+        db.prepare(
+          `UPDATE tasks SET pinned=coalesce(?,pinned),archived=coalesce(?,archived),
           unread_at=CASE WHEN ? THEN ? ELSE unread_at END,
-          last_unread_at=max(last_unread_at,coalesce(?,0)) WHERE workspace_key=? AND task_id=?`).run(
+          last_unread_at=max(last_unread_at,coalesce(?,0)) WHERE workspace_key=? AND task_id=?`,
+        ).run(
           params.patch.pinned === undefined ? null : Number(params.patch.pinned),
           params.patch.archived === undefined ? null : Number(params.patch.archived),
           Number(hasUnread),

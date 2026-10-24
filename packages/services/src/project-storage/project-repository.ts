@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -24,6 +25,7 @@ import {
   assertRemoteTaskDirectories,
 } from "#src/project-storage/remote-policy.js";
 
+const logger = createServiceLogger("projectRepository");
 const executionDirectoriesSchema = z.array(z.string().min(1)).max(256);
 
 function transaction<T>(db: DatabaseSync, body: () => T, write = true): T {
@@ -85,6 +87,7 @@ function resolveDirectories(
   db: DatabaseSync,
   task: ProjectTaskRef,
   ownerHostId = "local",
+  unprojectedWorkspaceRoot?: string,
 ): ProjectDirectories {
   const row = readTask(db, task);
   // 旧远端影子行仍可能保留；行与项目一致不代表当前 Host 有权加载其目录。
@@ -99,6 +102,12 @@ function resolveDirectories(
     typeof row?.execution_directories === "string"
       ? executionDirectoriesSchema.parse(JSON.parse(row.execution_directories))
       : [],
+    unprojectedWorkspaceRoot
+      ? {
+          root: unprojectedWorkspaceRoot,
+          workspaceIdentity: task.workspaceIdentity,
+        }
+      : undefined,
   );
   return {
     workspacePath,
@@ -155,6 +164,7 @@ export class ProjectRepository implements ProjectRepositoryContract {
   constructor(
     private readonly db: DatabaseSync,
     private readonly ownerHostId?: string,
+    private readonly unprojectedWorkspaceRoot?: string,
   ) {}
 
   archiveInactive(input: AutoArchiveInput): ProjectTaskRef[] {
@@ -165,9 +175,11 @@ export class ProjectRepository implements ProjectRepositoryContract {
       // 2026-09-15 裁决：纯按 CLI 最后活动时间归档，不再看 last_outcome 与未读；
       // 只有置顶和 syncer 观察到的运行中会话除外。旧判据把 error / 无结果的老会话永远留在列表里。
       const candidates = this.db
-        .prepare(`SELECT workspace_key,workspace_path,workspace_identity,task_id FROM tasks
+        .prepare(
+          `SELECT workspace_key,workspace_path,workspace_identity,task_id FROM tasks
         WHERE archived=0 AND pinned=0 AND deleted=0 AND coalesce(cli_deleted,0)=0
-        AND cli_updated_at < ? AND host_id=?`)
+        AND cli_updated_at < ? AND host_id=?`,
+        )
         .all(input.cutoff, this.ownerHostId ?? "local");
       const result: ProjectTaskRef[] = [];
       for (const row of candidates) {
@@ -202,9 +214,11 @@ export class ProjectRepository implements ProjectRepositoryContract {
       ...(options?.includeDeletedTasks
         ? {
             deletedTasks: this.db
-              .prepare(`
+              .prepare(
+                `
         SELECT task_id AS taskId,workspace_path AS workspacePath,workspace_identity AS workspaceIdentity,host_id AS hostId
-        FROM tasks WHERE host_id=? AND (deleted=1 OR coalesce(cli_deleted,0)=1)`)
+        FROM tasks WHERE host_id=? AND (deleted=1 OR coalesce(cli_deleted,0)=1)`,
+              )
               .all(this.ownerHostId ?? "local")
               .map((row) => ({
                 taskId: String(row.taskId),
@@ -270,10 +284,12 @@ export class ProjectRepository implements ProjectRepositoryContract {
       const now = Date.now();
       // 原先用 max(position)+1 导致新建项目落在末尾；同一 Host 写事务内取最小值减一，保留已有顺序。
       this.db
-        .prepare(`INSERT INTO projects(project_id,host_id,name,name_overridden,position,pinned,pinned_at,created_at,updated_at)
+        .prepare(
+          `INSERT INTO projects(project_id,host_id,name,name_overridden,position,pinned,pinned_at,created_at,updated_at)
         VALUES(?,?,?,?,(SELECT coalesce(min(position),1)-1 FROM projects WHERE host_id=?),?,?,?,?)
         ON CONFLICT(project_id) DO UPDATE SET name=excluded.name,name_overridden=excluded.name_overridden,
-        pinned=excluded.pinned,pinned_at=excluded.pinned_at,deleted=0,deleted_at=NULL,updated_at=excluded.updated_at`)
+        pinned=excluded.pinned,pinned_at=excluded.pinned_at,deleted=0,deleted_at=NULL,updated_at=excluded.updated_at`,
+        )
         .run(
           id,
           hostId,
@@ -366,7 +382,11 @@ export class ProjectRepository implements ProjectRepositoryContract {
   }
 
   resolveSessionDirectories(task: ProjectTaskRef): ProjectDirectories {
-    return transaction(this.db, () => resolveDirectories(this.db, task, this.ownerHostId), false);
+    return transaction(
+      this.db,
+      () => resolveDirectories(this.db, task, this.ownerHostId, this.unprojectedWorkspaceRoot),
+      false,
+    );
   }
 
   reserveCreatedTask(input: {
@@ -374,7 +394,7 @@ export class ProjectRepository implements ProjectRepositoryContract {
     projectId: string | null;
     additionalDirectories?: string[];
   }): ProjectDirectories {
-    return transaction(this.db, () => {
+    const result = transaction(this.db, () => {
       const key = resolveWorkspaceKey(input.task);
       const host = ensureHost(this.db, key, this.ownerHostId);
       if (host !== (this.ownerHostId ?? "local")) throw new Error("project.cross-host-move");
@@ -384,6 +404,12 @@ export class ProjectRepository implements ProjectRepositoryContract {
           input.projectId ? requireProject(this.db, input.projectId) : null,
           input.task.workspacePath,
           input.additionalDirectories,
+          this.unprojectedWorkspaceRoot
+            ? {
+                root: this.unprojectedWorkspaceRoot,
+                workspaceIdentity: input.task.workspaceIdentity,
+              }
+            : undefined,
         );
         if (input.projectId) {
           const project = requireProject(this.db, input.projectId);
@@ -398,8 +424,10 @@ export class ProjectRepository implements ProjectRepositoryContract {
         }
         // 创建归属必须先于 CLI 首发；空事实不是假会话，列表只读取已有 CLI 事实的行。
         this.db
-          .prepare(`INSERT INTO tasks(workspace_key,workspace_path,workspace_identity,task_id,created_at,updated_at,host_id,root_path,project_id,handoff_pending,execution_directories)
-          VALUES(?,?,?,?,0,0,?,?,?,?,?)`)
+          .prepare(
+            `INSERT INTO tasks(workspace_key,workspace_path,workspace_identity,task_id,created_at,updated_at,host_id,root_path,project_id,handoff_pending,execution_directories)
+          VALUES(?,?,?,?,0,0,?,?,?,?,?)`,
+          )
           .run(
             key,
             input.task.workspacePath,
@@ -414,7 +442,19 @@ export class ProjectRepository implements ProjectRepositoryContract {
               : JSON.stringify(executionDirectoriesSchema.parse(input.additionalDirectories)),
           );
       }
-      return resolveDirectories(this.db, input.task, this.ownerHostId);
+      return resolveDirectories(
+        this.db,
+        input.task,
+        this.ownerHostId,
+        this.unprojectedWorkspaceRoot,
+      );
     });
+    logger.info(undefined, "Task creation directories reserved", {
+      event: "project.task.reserve",
+      outcome: "ready",
+      taskId: input.task.taskId,
+      projectAssigned: result.projectId !== null,
+    });
+    return result;
   }
 }

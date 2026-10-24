@@ -67,5 +67,6 @@ export const projectStorage: ProjectStorageContract = {
     return result;
   },
   admitTaskIdentity,
-  repository: (db, hostId) => new ProjectRepository(db, hostId),
+  repository: (db, hostId, unprojectedWorkspaceRoot) =>
+    new ProjectRepository(db, hostId, unprojectedWorkspaceRoot),
 };

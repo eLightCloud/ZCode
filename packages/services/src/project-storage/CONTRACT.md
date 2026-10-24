@@ -29,6 +29,10 @@ Host 项目组织态的持久化升级。调用者持有 app SQLite 连接，CLI
 
 ## 2026-10-10 远程单目录合同
 
-本地仍允许 0..n roots；可信 ownerHostId 非 local 的持库宿主只允许恰好一个固定 root。远程创建必须有项目，prepareSession、reserveCreatedTask 与 moveTask 不得产生无归属或附加目录；根路径更新和缺 root 拖动在写事务中拒绝。客户端 hostId 不能改变持库身份。历史迁移数据不被裁剪，失败不得部分写入。
+本地仍允许 0..n roots；可信 ownerHostId 非 local 的持库宿主只允许恰好一个固定 root。远程目录项目创建必须有项目，prepareSession 与 moveTask 不得产生无归属或附加目录；根路径更新和缺 root 拖动在写事务中拒绝。客户端 hostId 不能改变持库身份。历史迁移数据不被裁剪，失败不得部分写入。
 
 启动入口复用 session 模块公开的旧 Repo 与迁移适配器：先 SQL 迁移并提交，再逐一 ensureReady/close，最后标记 prepared。Worker 必须注入旧 settings 以完成首次项目导入；进度复制迁移事实，失败不撤回已提交计数。storage-startup 子路径保持不变。
+
+## 原生无目录会话接合
+
+`repository` 的可信装配参数可登记一个 `unprojectedWorkspaceRoot`，仅用于原生无目录普通会话。TaskIndexRepo 只有在自己的持久用途记录确认该准确系统 namespace 后才提供此参数；浏览器/RPC 不能声明它，也不按路径猜测已有任务用途。仅准确 cwd、无 workspaceIdentity、无项目且无附加目录的创建/恢复可使用该根；仍核对持库 host。其他目录、别名 identity、附加目录以及移动均沿远端单 root 合同拒绝。预留仍由同一 ProjectRepository 事务写入，NULL project_id 保持真实组织态，不生成隐藏项目，不更改已发行迁移。

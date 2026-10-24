@@ -44,7 +44,14 @@ function result(
   state: ConversationRuntimeResult["state"],
   op = operation,
 ): ConversationRuntimeResult {
-  return { session, operation: op, state, generation: 1, version: "version-1", digest: null };
+  return {
+    session,
+    operation: op,
+    state,
+    generation: 1,
+    version: "version-1",
+    digest: null,
+  };
 }
 it("recovers an index-only close failure and leaves unrelated old guard ownership intact", async () => {
   await seed();
@@ -103,7 +110,9 @@ it("does not rebuild an index or re-adopt after activation ACK loss and subseque
   await seed();
   const capture = vi.fn(),
     adopt = vi.fn();
-  const runtime: ConversationRuntimePort = { control: async () => result("active") };
+  const runtime: ConversationRuntimePort = {
+    control: async () => result("active"),
+  };
   const host = createConversationRuntimeHost({
     runtime,
     index,
@@ -116,14 +125,27 @@ it("does not rebuild an index or re-adopt after activation ACK loss and subseque
   });
   if (!meta) throw new Error("fixture native facts missing");
   // After upstream title ownership migration, a real rename is a CLI fact.
-  await index.applyCliFacts({ meta: { ...meta, title: "New user title" }, titleSource: "custom" });
+  await index.applyCliFacts({
+    meta: { ...meta, title: "New user title" },
+    titleSource: "custom",
+  });
   await host.control({ kind: "apply", session, operation });
-  await host.control({ kind: "activate", session, operation, version: "version-1", generation: 1 });
+  await host.control({
+    kind: "activate",
+    session,
+    operation,
+    version: "version-1",
+    generation: 1,
+  });
   expect(capture).not.toHaveBeenCalled();
   expect(adopt).not.toHaveBeenCalled();
   expect(
-    (await index.getTaskMeta({ taskId: session, workspacePath: getConversationWorkspaceDir() }))
-      ?.title,
+    (
+      await index.getTaskMeta({
+        taskId: session,
+        workspacePath: getConversationWorkspaceDir(),
+      })
+    )?.title,
   ).toBe("New user title");
 });
 
@@ -177,4 +199,30 @@ it("creates a fresh target namespace through the existing File owner before priv
     prepareWorkspace: () => files.ensureConversationWorkspace(),
   });
   expect((await host.control({ kind: "read", session, operation })).state).toBe("closed");
+});
+
+it("remote native creation uses only the explicitly registered conversation namespace", async () => {
+  index.close();
+  index = new TaskIndexRepo(undefined, "remote:server:conversation");
+  const task = {
+    taskId: "native-new",
+    workspacePath: getConversationWorkspaceDir(),
+  };
+  const unregistered = await index.getProjectRepository();
+  expect(() => unregistered.reserveCreatedTask({ task, projectId: null })).toThrow(
+    "project.remote-project-required",
+  );
+  await index.registerConversationWorkspace();
+  const registered = await index.getProjectRepository();
+  expect(registered.reserveCreatedTask({ task, projectId: null })).toMatchObject({
+    projectId: null,
+    additionalDirectories: [],
+  });
+  expect(registered.resolveSessionDirectories(task).workspacePath).toBe(task.workspacePath);
+  expect(() =>
+    registered.reserveCreatedTask({
+      task: { taskId: "other", workspacePath: join(root, "user-project") },
+      projectId: null,
+    }),
+  ).toThrow("project.remote-project-required");
 });

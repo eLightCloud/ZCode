@@ -32,12 +32,20 @@ describe("remote project single-root authority", () => {
   it("rejects unclassified, foreign-root and extra-directory admission without inserting rows", async () => {
     const { repo, db } = await remoteFixture();
     const project = repo.saveProject({ roots: ["/a"] });
-    const task = { taskId: "new", workspacePath: "/a", workspaceIdentity: `${hostId}:/a` };
+    const task = {
+      taskId: "new",
+      workspacePath: "/a",
+      workspaceIdentity: `${hostId}:/a`,
+    };
     expect(() => repo.reserveCreatedTask({ task, projectId: null })).toThrow(
       "project.remote-project-required",
     );
     expect(() =>
-      repo.reserveCreatedTask({ task, projectId: project.id, additionalDirectories: ["/b"] }),
+      repo.reserveCreatedTask({
+        task,
+        projectId: project.id,
+        additionalDirectories: ["/b"],
+      }),
     ).toThrow("project.remote-single-root-required");
     expect(() =>
       repo.reserveCreatedTask({
@@ -59,7 +67,11 @@ describe("remote project single-root authority", () => {
     const first = repo.saveProject({ roots: ["/a"] });
     const same = repo.saveProject({ roots: ["/a"] });
     const other = repo.saveProject({ roots: ["/b"] });
-    const task = { taskId: "task", workspacePath: "/a", workspaceIdentity: `${hostId}:/a` };
+    const task = {
+      taskId: "task",
+      workspacePath: "/a",
+      workspaceIdentity: `${hostId}:/a`,
+    };
     repo.reserveCreatedTask({ task, projectId: first.id });
     expect(() => repo.moveTask({ task, projectId: other.id, addMissingRoot: true })).toThrow(
       "project.cwd-not-in-roots",
@@ -73,4 +85,43 @@ describe("remote project single-root authority", () => {
       additionalDirectories: [],
     });
   });
+});
+
+it("only trusted native namespace admission may remain unprojected on a remote owner", async () => {
+  const { db } = await remoteFixture();
+  const root = "/native-conversation";
+  const repo = port.repository(db, hostId, root);
+  for (const input of [
+    { task: { taskId: "other", workspacePath: "/other" }, projectId: null },
+    {
+      task: {
+        taskId: "alias",
+        workspacePath: root,
+        workspaceIdentity: "remote:alias",
+      },
+      projectId: null,
+    },
+    {
+      task: { taskId: "extra", workspacePath: root },
+      projectId: null,
+      additionalDirectories: ["/other"],
+    },
+  ])
+    expect(() => repo.reserveCreatedTask(input)).toThrow("project.remote-project-required");
+  expect(db.prepare("SELECT count(*) AS n FROM tasks").get()?.n).toBe(0);
+  const task = { taskId: "native", workspacePath: root };
+  expect(repo.reserveCreatedTask({ task, projectId: null })).toEqual({
+    workspacePath: root,
+    projectId: null,
+    additionalDirectories: [],
+  });
+  expect(repo.resolveSessionDirectories(task)).toEqual({
+    workspacePath: root,
+    projectId: null,
+    additionalDirectories: [],
+  });
+  expect(repo.readTree().projects).toEqual([]);
+  expect(() => port.repository(db, hostId).resolveSessionDirectories(task)).toThrow(
+    "project.remote-project-required",
+  );
 });

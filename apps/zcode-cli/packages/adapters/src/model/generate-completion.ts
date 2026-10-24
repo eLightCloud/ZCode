@@ -28,7 +28,8 @@ import { getGenerateTextResultMetadata, logGenerateTextDiagnostics } from "./run
 
 import { sanitizeModelNetworkHeaders } from "./runner-network-headers.js";
 
-import { ModelStatusContext, publishModelStatus } from "./runner-status.js";
+import { publishModelStatus } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 
 import type { ResolvedAiSdkModel } from "./runner-runtime.js";
 

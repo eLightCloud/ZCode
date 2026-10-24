@@ -6,7 +6,8 @@ import {
   ModelTransportKind as ModelTransportKindValue,
 } from "@zcode/contracts";
 
-import { type ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 import {
   isSuspiciousStreamDiagnostics,

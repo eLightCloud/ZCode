@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { auth, type FetchLike } from "@modelcontextprotocol/client";
 
-import type { Logger, McpOAuthConfig } from "@zcode/contracts";
+import type { Logger } from "@zcode/contracts";
 
 import {
   createLocalhostOAuthCallbackServer,
@@ -28,10 +28,8 @@ import {
   normalizeCallbackPath,
 } from "./oauth-interactive-provider.js";
 
-export type McpAuthorizationCodeOAuthConfig = Extract<
-  McpOAuthConfig,
-  { type: "authorization_code" }
->;
+import type { McpAuthorizationCodeOAuthConfig } from "./oauth-provider-support.js";
+export type { McpAuthorizationCodeOAuthConfig } from "./oauth-provider-support.js";
 
 /** 授权事务的全局寿命。与 caller 等待预算（session 15s）无关，由 caller 侧独立收口。 */
 export const MCP_OAUTH_AUTHORIZATION_TRANSACTION_TTL_MS = 5 * 60 * 1000;

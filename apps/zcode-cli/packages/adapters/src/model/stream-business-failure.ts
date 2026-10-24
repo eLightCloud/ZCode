@@ -1,6 +1,7 @@
 import { classifyModelFailure } from "./failure-classifier.js";
 
-import { StreamDiagnostics } from "./runner-diagnostics.js";
+
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 
 import { detectProviderBusinessFinishError } from "./provider-finish-business-error.js";
 

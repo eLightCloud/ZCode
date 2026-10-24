@@ -1,33 +1,18 @@
+import type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 import { summarizeRequestVerificationHeaders } from "@zcode/shared";
-
 import type { LanguageModelUsage } from "ai";
-
 import type { Logger, ModelUsage } from "@zcode/contracts";
-
-import { ModelErrorCode, ModelFailureReason as ModelFailureReasonValue } from "@zcode/contracts";
-import { AiSdkModelAdapterError } from "./errors.js";
-
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
-
+import { ModelFailureReason as ModelFailureReasonValue } from "@zcode/contracts";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { detectProviderBusinessFinishError } from "./provider-finish-business-error.js";
-
 import type { AiSdkGenerateTextResult } from "./runner-runtime.js";
-
 import { normalizeUsage } from "./runner-normalization.js";
-
 import { asRecord, stringProperty } from "./runner-record.js";
+import { modelStatusContextToLogContext } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
+import { isSuspiciousModelCompletion, objectKeys, summarizeModelUsage, summarizeProviderBody, summarizeScalar, summarizeStreamChunk, toLogError } from "./runner-diagnostic-fields.js";
 
-import { modelStatusContextToLogContext, type ModelStatusContext } from "./runner-status.js";
-
-import {
-  isSuspiciousModelCompletion,
-  objectKeys,
-  summarizeModelUsage,
-  summarizeProviderBody,
-  summarizeScalar,
-  summarizeStreamChunk,
-  toLogError,
-} from "./runner-diagnostic-fields.js";
+export type { StreamDiagnostics } from "./stream-diagnostics-contract.js";
 
 export {
   isSuspiciousStreamDiagnostics,
@@ -46,21 +31,6 @@ type GenerateTextResultWithMetadata = AiSdkGenerateTextResult & {
   };
   steps?: unknown[];
 };
-
-export interface StreamDiagnostics {
-  chunkCounts: Record<string, number>;
-  errorChunkCount: number;
-  finishReason?: string;
-  lastChunkType?: string;
-  lastErrorChunk?: unknown;
-  lastFinishChunk?: unknown;
-  rawFinishReason?: unknown;
-  reasoningDeltaChars: number;
-  hasReasoningContent: boolean;
-  textDeltaChars: number;
-  toolCallCount: number;
-  usage?: ModelUsage;
-}
 
 export function createStreamDiagnostics(): StreamDiagnostics {
   return {

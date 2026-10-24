@@ -9,7 +9,8 @@ import {
 
 import { classifyModelFailure, inspectProviderFailure } from "./failure-classifier.js";
 
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 
 import { getResponseHeaders, unwrapRetryError } from "./failure-inspection.js";
 

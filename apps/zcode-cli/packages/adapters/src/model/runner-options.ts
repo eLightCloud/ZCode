@@ -10,7 +10,8 @@ import type {
   AiSdkStreamTextOptions,
   ResolvedAiSdkModel,
 } from "./runner-runtime.js";
-import { createModelRequestAttributionHeaders, type ModelStatusContext } from "./runner-status.js";
+import { createModelRequestAttributionHeaders } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 import { withoutModelQuerySourceHeader } from "./model-request-headers.js";
 
 type ExperimentalIncludeWithResponseBody = {

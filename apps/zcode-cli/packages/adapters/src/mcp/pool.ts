@@ -1,39 +1,17 @@
-import type { Logger, McpConnectOptions, McpPort, McpServerConfig } from "@zcode/contracts";
-
-import type { McpTelemetryTracker } from "./telemetry.js";
+import type { McpConnectionPool, McpConnectionPoolOptions } from "./pool-contract.js";
+export type {
+  CreateMcpAdapterForPoolInput,
+  McpConnectionContext,
+  McpConnectionPoolOptions,
+  McpConnectionPool,
+} from "./pool-contract.js";
+import type { McpConnectOptions, McpServerConfig } from "@zcode/contracts";
 
 import type { PoolEntry } from "./pool-contract.js";
 
 import { createPooledMcpLeaseFactory } from "./pool-lease.js";
 
 const DEFAULT_IDLE_GRACE_MS = 30_000;
-
-export interface CreateMcpAdapterForPoolInput {
-  connectionContext: McpConnectionContext;
-  config: McpServerConfig;
-  serverName: string;
-  workingDirectory?: string;
-}
-
-export interface McpConnectionContext {
-  mcpConnectionId: string;
-  mcpIsolation: "session" | "workspace";
-  sessionId?: string;
-  workspaceKey?: string;
-}
-
-export interface McpConnectionPoolOptions {
-  createAdapter(input: CreateMcpAdapterForPoolInput): McpPort;
-  idleGraceMs?: number;
-  logger?: Logger;
-  telemetry?: McpTelemetryTracker;
-}
-
-export interface McpConnectionPool {
-  acquireLease(options?: { leaseId?: string; sessionId?: string }): McpPort;
-  close(): Promise<void>;
-  stats(): { activeConnections: number; pendingCloseConnections: number };
-}
 
 export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpConnectionPool {
   const entries = new Map<string, PoolEntry>();

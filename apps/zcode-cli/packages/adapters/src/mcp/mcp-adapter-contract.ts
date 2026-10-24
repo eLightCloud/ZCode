@@ -21,9 +21,9 @@ import type {
 
 import { type NetworkEgressEnvPolicy } from "./network.js";
 
-import { type McpOAuthRuntimeOptions } from "./oauth.js";
+import { type McpOAuthRuntimeOptions } from "./oauth-provider-support.js";
 
-import { type McpConnectionContext } from "./pool.js";
+import { type McpConnectionContext } from "./pool-contract.js";
 
 import type { McpTelemetryTracker } from "./telemetry.js";
 

@@ -1,5 +1,6 @@
 import type { AiSdkModelTextRequest, AiSdkStreamTextResult } from "./runner-runtime.js";
-import type { ModelStatusContext } from "./runner-status.js";
+
+import type { ModelStatusContext } from "./model-status-context.js";
 
 import type { TextStreamPart, ToolSet } from "ai";
 

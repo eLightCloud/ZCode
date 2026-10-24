@@ -1,6 +1,7 @@
 import { ModelErrorCode, ModelFailureReason, type Logger } from "@zcode/contracts";
 import { isProviderBusinessError } from "./model-execution.js";
-import { findProviderBusinessError, type ClassifiedModelFailure } from "./failure-classifier.js";
+import { findProviderBusinessError } from "./failure-classifier.js";
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { readMappedAiSdkProviderBusinessError } from "./failure-ai-sdk-provider-error.js";
 import { unwrapRetryError } from "./failure-inspection.js";
 import {
@@ -9,7 +10,8 @@ import {
   type ModelErrorSource as ModelErrorSourceType,
 } from "./errors.js";
 import type { ResolvedAiSdkModelRetryOptions } from "./retry-policy.js";
-import { modelStatusContextToLogContext, type ModelStatusContext } from "./runner-status.js";
+import { modelStatusContextToLogContext } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 import { modelFailureAttributionFields } from "./runner-telemetry.js";
 
 const MAX_REASONABLE_RETRY_AFTER_MS = 5 * 60_000;

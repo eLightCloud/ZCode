@@ -1,8 +1,10 @@
 import { ModelErrorCode, ModelFailureReason, ModelRetryReason } from "@zcode/contracts";
 import type { Logger, ModelStatusSink } from "@zcode/contracts";
-import type { ClassifiedModelFailure } from "./failure-classifier.js";
+
+import type { ClassifiedModelFailure } from "./failure-contract.js";
 import { calculateRetryDelay, logRetryDelayDecision, sleep } from "./runner-retry.js";
-import { publishModelStatus, type ModelStatusContext } from "./runner-status.js";
+import { publishModelStatus } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 import type { ResolvedAiSdkModelRetryOptions } from "./retry-policy.js";
 
 export const EMPTY_COMPLETION_MAX_RETRIES = 1;

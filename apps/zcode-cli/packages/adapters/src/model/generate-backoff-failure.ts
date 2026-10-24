@@ -6,7 +6,8 @@ import { sanitizeModelNetworkHeaders } from "./runner-network-headers.js";
 
 import { toAdapterError } from "./runner-retry.js";
 
-import { ModelStatusContext, publishModelStatus } from "./runner-status.js";
+import { publishModelStatus } from "./runner-status.js";
+import type { ModelStatusContext } from "./model-status-context.js";
 
 import { modelFailureStatusFields } from "./runner-telemetry.js";
 

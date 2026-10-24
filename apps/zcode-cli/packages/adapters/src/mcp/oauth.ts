@@ -1,15 +1,11 @@
+import type { ZCodeMcpAuthorizationCodeProviderMethodsContext } from "./oauth-provider-context.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { ZCodeMcpAuthorizationCodeProviderApi } from "./oauth-provider-api.js";
 import type * as implementation2 from "./oauth-provider-credentials.js";
 import { installZCodeMcpAuthorizationCodeProviderMethods } from "./oauth-provider-methods.js";
 import type * as implementation1 from "./oauth-provider-verifier.js";
 
-import type {
-  OAuthClientInformationMixed,
-  OAuthClientMetadata,
-  OAuthClientProvider,
-  OAuthTokens,
-} from "@modelcontextprotocol/client";
+import type { OAuthClientMetadata, OAuthClientProvider } from "@modelcontextprotocol/client";
 
 import type { Logger } from "@zcode/contracts";
 
@@ -22,8 +18,6 @@ import {
   createSharedZCodeCredentialStore,
   type SharedZCodeCredentialStore,
 } from "../auth/shared-credentials.js";
-
-import { type McpOAuthCanonicalCredentials } from "./oauth-credentials.js";
 
 import { type McpOAuthAuthorizationContext } from "./oauth-shared.js";
 
@@ -38,8 +32,6 @@ import type {
   McpAuthorizationCodeOAuthConfig,
   McpOAuthRuntimeOptions,
   McpOAuthSession,
-  StoredCredentialPair,
-  TransactionClientSource,
 } from "./oauth-provider-support.js";
 
 export { createCredentialKeyPrefix } from "./oauth-provider-support.js";
@@ -108,31 +100,31 @@ class ZCodeMcpAuthorizationCodeProvider implements OAuthClientProvider {
   declare invalidateCredentials: ZCodeMcpAuthorizationCodeProviderApi["invalidateCredentials"];
   declare close: ZCodeMcpAuthorizationCodeProviderApi["close"];
 
-  private readonly adapterInstanceId?: string;
+  private readonly adapterInstanceId?: ZCodeMcpAuthorizationCodeProviderMethodsContext["adapterInstanceId"];
   private readonly callbackServer: LocalhostOAuthCallbackServer;
-  private readonly config: McpAuthorizationCodeOAuthConfig;
-  private readonly credentialStore: SharedZCodeCredentialStore;
-  private readonly keyPrefix: string;
-  private readonly logger?: Logger;
+  private readonly config: ZCodeMcpAuthorizationCodeProviderMethodsContext["config"];
+  private readonly credentialStore: ZCodeMcpAuthorizationCodeProviderMethodsContext["credentialStore"];
+  private readonly keyPrefix: ZCodeMcpAuthorizationCodeProviderMethodsContext["keyPrefix"];
+  private readonly logger?: ZCodeMcpAuthorizationCodeProviderMethodsContext["logger"];
   private readonly onAuthorizationRequired?: (
     context: McpOAuthAuthorizationContext,
   ) => Promise<void> | void;
   private readonly openAuthorizationUrl?: (
     context: McpOAuthAuthorizationContext,
   ) => Promise<void> | void;
-  private readonly serverName: string;
-  private readonly stateValue: string;
-  private readonly transactionId: string;
-  private canonicalSnapshot?: CredentialSnapshot<McpOAuthCanonicalCredentials>;
-  private credentialSnapshotsLoaded = false;
-  private legacyClientSnapshot?: CredentialSnapshot<OAuthClientInformationMixed>;
-  private legacyTokensSnapshot?: CredentialSnapshot<OAuthTokens>;
-  private storedCredentialPair?: StoredCredentialPair;
-  private storedCredentialPairLoaded = false;
-  private pendingAuthorization = false;
-  private transactionClientInformation?: OAuthClientInformationMixed;
-  private transactionClientSource?: TransactionClientSource;
-  private verifierPersisted = false;
+  private readonly serverName: ZCodeMcpAuthorizationCodeProviderMethodsContext["serverName"];
+  private readonly stateValue: ZCodeMcpAuthorizationCodeProviderMethodsContext["stateValue"];
+  private readonly transactionId: ZCodeMcpAuthorizationCodeProviderMethodsContext["transactionId"];
+  private canonicalSnapshot?: ZCodeMcpAuthorizationCodeProviderMethodsContext["canonicalSnapshot"];
+  private credentialSnapshotsLoaded: ZCodeMcpAuthorizationCodeProviderMethodsContext["credentialSnapshotsLoaded"] = false;
+  private legacyClientSnapshot?: ZCodeMcpAuthorizationCodeProviderMethodsContext["legacyClientSnapshot"];
+  private legacyTokensSnapshot?: ZCodeMcpAuthorizationCodeProviderMethodsContext["legacyTokensSnapshot"];
+  private storedCredentialPair?: ZCodeMcpAuthorizationCodeProviderMethodsContext["storedCredentialPair"];
+  private storedCredentialPairLoaded: ZCodeMcpAuthorizationCodeProviderMethodsContext["storedCredentialPairLoaded"] = false;
+  private pendingAuthorization: ZCodeMcpAuthorizationCodeProviderMethodsContext["pendingAuthorization"] = false;
+  private transactionClientInformation?: ZCodeMcpAuthorizationCodeProviderMethodsContext["transactionClientInformation"];
+  private transactionClientSource?: ZCodeMcpAuthorizationCodeProviderMethodsContext["transactionClientSource"];
+  private verifierPersisted: ZCodeMcpAuthorizationCodeProviderMethodsContext["verifierPersisted"] = false;
 
   constructor(input: {
     adapterInstanceId?: string;
@@ -225,7 +217,5 @@ class ZCodeMcpAuthorizationCodeProvider implements OAuthClientProvider {
 
   declare private clearVerifier: OmitThisParameter<typeof implementation1.clearVerifier>;
 }
-
-export type InternalZCodeMcpAuthorizationCodeProvider = ZCodeMcpAuthorizationCodeProvider;
 
 installZCodeMcpAuthorizationCodeProviderMethods(ZCodeMcpAuthorizationCodeProvider.prototype);

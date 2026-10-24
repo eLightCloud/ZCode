@@ -24,7 +24,7 @@ import {
   type McpOAuthAuthorizationContext,
 } from "./oauth-shared.js";
 
-import type { McpAuthorizationCodeOAuthConfig } from "./oauth-interactive.js";
+import type { McpAuthorizationCodeOAuthConfig } from "./oauth-provider-support.js";
 
 /**
  * Phase 2 专用 OAuthClientProvider。

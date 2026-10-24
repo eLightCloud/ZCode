@@ -78,8 +78,10 @@ describe("desktop E2E container presets", () => {
       "utf-8",
     ).replaceAll("\r\n", "\n");
 
-    expect(dockerPlan).toContain(
-      "| Spec | 迁移状态 |\n| --- | --- |\n<!-- conversation-session-verified-table-end -->",
+    // 格式器会对齐 Markdown 表格并在 HTML marker 前加空行；准入合同是两列和原 marker，
+    // 不是列宽或换行间距，保留后续真实插入及去重断言。
+    expect(dockerPlan).toMatch(
+      /\|\s*Spec\s*\|\s*迁移状态\s*\|\n\|\s*-+\s*\|\s*-+\s*\|\n\s*<!-- conversation-session-verified-table-end -->/,
     );
 
     const spec = "./test/e2e/conversation-session/example.test.ts";

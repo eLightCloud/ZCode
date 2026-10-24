@@ -169,7 +169,21 @@ describe("fault matrix · B2 gate(2) — 3008 在 workflow 内是重试，不是
         }
 
         // 每个 3008 都作为可重试失败 + 一条 retry_scheduled{rate_limited} 报出。
-        expect(failed.length).toBe(rejected);
+        expect(
+          failed.length,
+          JSON.stringify({
+            rejected,
+            failures: failed.map((event) => ({
+              requestId: event.requestId,
+              attempt: event.attempt,
+              reason: event.reason,
+              errorCode: event.errorCode,
+              providerErrorCode: event.providerErrorCode,
+              errorPhase: event.errorPhase,
+              durationMs: event.durationMs,
+            })),
+          }),
+        ).toBe(rejected);
         expect(failed.every((event) => event.retryable === true)).toBe(true);
         expect(failed.every((event) => event.providerErrorCode === "3008")).toBe(true);
         expect(scheduled.length).toBe(rejected);

@@ -176,8 +176,19 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
     await prepareTasksIndexStorage(path, () => {});
     const db = new DatabaseSync(path);
     try {
+      // 还原到 0003 的真实表结构与账本，新增屏障表 / trigger 不能留在旧库夹具中。
       db.exec(
-        "DELETE FROM tasks_schema_migration WHERE id='0004_conversation_workspace_purpose'; DROP TABLE conversation_workspace_purpose",
+        `DROP TRIGGER conversation_index_actions_fenced;
+        DROP TABLE conversation_index_barriers;
+        DROP TABLE conversation_workspace_purpose;
+        DROP TABLE task_group_admissions;
+        DELETE FROM tasks_schema_migration WHERE id >= '0004';
+        ALTER TABLE automations DROP COLUMN project_id;
+        ALTER TABLE automations DROP COLUMN host_id;
+        ALTER TABLE automations DROP COLUMN additional_directories;
+        ALTER TABLE off_peak_tasks DROP COLUMN project_id;
+        ALTER TABLE off_peak_tasks DROP COLUMN host_id;
+        ALTER TABLE off_peak_tasks DROP COLUMN additional_directories`,
       );
     } finally {
       db.close();
@@ -188,9 +199,9 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
       phase: "ready",
       migration: {
         kind: "upgrade",
-        executedCount: 1,
-        committedCount: 1,
-        lastAppliedMigrationId: "0007_conversation_index_barrier",
+        executedCount: 4,
+        committedCount: 4,
+        lastAppliedMigrationId: "0003_official_glm_selection",
       },
     });
   } finally {

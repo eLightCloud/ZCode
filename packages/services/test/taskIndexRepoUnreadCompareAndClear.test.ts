@@ -184,8 +184,9 @@ describe("TaskIndexRepo unread compare-and-clear", () => {
     repo.close();
     const legacyDatabase = new DatabaseSync(getTasksIndexDatabasePath());
     legacyDatabase.exec("ALTER TABLE tasks DROP COLUMN last_unread_at");
+    // 新屏障属于新版 schema；旧库夹具必须连同 trigger / 表一起退回。
     legacyDatabase.exec(
-      "DELETE FROM tasks_schema_migration; DROP TABLE conversation_workspace_purpose",
+      "DROP TRIGGER conversation_index_actions_fenced; DROP TABLE conversation_index_barriers; DELETE FROM tasks_schema_migration; DROP TABLE conversation_workspace_purpose",
     );
     legacyDatabase.close();
     repo = new TaskIndexRepo();

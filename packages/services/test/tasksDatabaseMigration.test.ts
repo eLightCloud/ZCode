@@ -205,9 +205,9 @@ describe("DB109 App 库统一迁移", () => {
     const db = open();
     await migrate(db);
     db.exec(`DELETE FROM tasks_schema_migration;
-      DROP TABLE conversation_workspace_purpose;
       DROP TRIGGER conversation_index_actions_fenced;
       DROP TABLE conversation_index_barriers;
+      DROP TABLE conversation_workspace_purpose;
       ALTER TABLE automations DROP COLUMN model_selection;
       ALTER TABLE automations DROP COLUMN scheduled_run_count;
       INSERT INTO automations(automation_id,cron_expr,prompt,workspace_key,workspace_path,created_at,updated_at,model,provider,run_count)
@@ -273,10 +273,11 @@ describe("DB109 App 库统一迁移", () => {
     const workers: Worker[] = [];
     try {
       await migrate(db);
+      // 并发迁移夹具也必须回退真实的屏障 schema。
       db.exec(`DELETE FROM tasks_schema_migration;
+        DROP TRIGGER conversation_index_actions_fenced;
+        DROP TABLE conversation_index_barriers;
         DROP TABLE conversation_workspace_purpose;
-      DROP TRIGGER conversation_index_actions_fenced;
-      DROP TABLE conversation_index_barriers;
         INSERT INTO automations(automation_id,cron_expr,prompt,workspace_key,workspace_path,created_at,updated_at,model)
         VALUES('old','* * * * *','正文','ws','/ws',1,2,'proxy/model');
         CREATE TABLE migration_probe(value INTEGER);

@@ -10,6 +10,7 @@ export function createDesktopPlatform(options: {
 }): IPlatformService {
   return {
     canSelectFilePath: true,
+    canOpenLocalFiles: true,
     openFileDownload: (name) =>
       openBrowserFileDownload(name, desktopBrowserPlatformBridge.saveFile),
     pluginSandbox: createDesktopPluginSandboxPlatform(),

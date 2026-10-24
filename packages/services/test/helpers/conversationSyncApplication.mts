@@ -35,7 +35,9 @@ const owner = new pg.Pool({
   password: config.password,
 });
 await migrateConversationSync(owner);
-await owner.query("select set_config('sync_fixture.password',$1,false)", [config.runtimePassword]);
+await owner.query("select set_config('sync_fixture.password',$1,false)", [
+  config.runtimePassword,
+]);
 await owner.query(
   `do $$ begin execute format('create role sync_application_fixture login password %L nosuperuser nobypassrls', current_setting('sync_fixture.password')); end $$`,
 );
@@ -43,7 +45,9 @@ await owner.query("grant zcode_sync_runtime to sync_application_fixture");
 await owner.query(
   `do $$ begin execute format('create role sync_application_configuration login password %L nosuperuser nobypassrls', current_setting('sync_fixture.password')); end $$`,
 );
-await owner.query("grant zcode_sync_configurator to sync_application_configuration");
+await owner.query(
+  "grant zcode_sync_configurator to sync_application_configuration",
+);
 const pool = new pg.Pool({
   host: config.host,
   port: config.port,
@@ -72,7 +76,10 @@ const log = {
     return log;
   },
 };
-const configuration = createConversationSyncPolicyStore({ pool: configurationPool, logger: log });
+const configuration = createConversationSyncPolicyStore({
+  pool: configurationPool,
+  logger: log,
+});
 const previous = await configuration.read();
 await configuration.update(previous.revision, {
   enabled: true,
@@ -81,7 +88,11 @@ await configuration.update(previous.revision, {
   maxSubjectBytes: 4000000,
   maxVersionsPerSession: 100,
 });
-const store = createConversationSyncStore({ pool, policy: "managed", logger: log });
+const store = createConversationSyncStore({
+  pool,
+  policy: "managed",
+  logger: log,
+});
 const gateway = createConversationSyncGateway({
   store,
   proof: config.centerProof,
@@ -89,18 +100,35 @@ const gateway = createConversationSyncGateway({
   logger: log,
 });
 setDataBaseDir(config.root);
-const index = new TaskIndexRepo(undefined, undefined, "conversation");
+const index = new TaskIndexRepo(
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  "conversation",
+);
 await createFileService({
   onConversationWorkspaceEnsured: () => index.registerConversationWorkspace(),
 }).ensureConversationWorkspace();
-const source = createSqliteSessionStore({ dbPath: join(config.root, "source.sqlite") });
+const source = await createSqliteSessionStore({
+  dbPath: join(config.root, "source.sqlite"),
+});
 let captures = 0;
 const agent = {
   // This fixture is explicitly cold: no runtime or writer is created. The real
   // session/textCheckpoint admission barrier has separate protocol regression tests.
   async captureTextCheckpoint(params) {
     ++captures;
-    const value = await source.exportTextCheckpoint!({ sessionID: params.sessionId as SessionId });
+    const value = await source.exportTextCheckpoint!({
+      sessionID: params.sessionId as SessionId,
+    });
+    const stored = await source.getSession(params.sessionId as SessionId);
+    // 上游 CLI 独占标题和删除事实；夹具也必须从真实 store 捕获，不能由 Host 补造。
+    if (
+      !stored ||
+      (stored.titleSource !== "generated" && stored.titleSource !== "custom")
+    )
+      throw new Error("fixture_cli_facts_missing");
     return {
       dataBase64: Buffer.from(JSON.stringify(value)).toString("base64"),
       // Synthetic cold projection; the packaged test uses the real native projector.
@@ -115,9 +143,16 @@ const agent = {
           createdAt: value.session.time.created,
           updatedAt: value.session.time.updated,
         },
+        cliFacts: {
+          titleSource: stored.titleSource,
+          lastOutcome: stored.lastOutcome,
+          deleted: stored.time.deleted != null,
+        },
         searchableText: value.messages
           .flatMap((message) =>
-            message.parts.filter((part) => part.type === "text").map((part) => part.text),
+            message.parts
+              .filter((part) => part.type === "text")
+              .map((part) => part.text),
           )
           .join("\n"),
       },
@@ -138,7 +173,9 @@ const credentials = {
     credentialValues.delete(key);
   },
 };
-const { createConversationHost } = await import(pathToFileURL(config.hostModule).href);
+const { createConversationHost } = await import(
+  pathToFileURL(config.hostModule).href
+);
 let host = await createConversationHost({
   conversations,
   credentials,
@@ -183,9 +220,18 @@ async function seed(session: string, command: string) {
           agent: "build",
           time: { created: 1 },
           anchor: { sourceCommandId: command },
-          metadata: { conversationInputIntent: intent, inputClientId: "fixture" },
+          metadata: {
+            conversationInputIntent: intent,
+            inputClientId: "fixture",
+          },
         },
-        parts: [{ id: "user-part-" + session, type: "text", text: "SYNTHETIC_APP_PRIVATE_TEXT" }],
+        parts: [
+          {
+            id: "user-part-" + session,
+            type: "text",
+            text: "SYNTHETIC_APP_PRIVATE_TEXT",
+          },
+        ],
       },
       {
         info: {
@@ -197,18 +243,41 @@ async function seed(session: string, command: string) {
           time: { created: 1, completed: 2 },
           finish: "stop",
           cost: 0,
-          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          tokens: {
+            input: 1,
+            output: 1,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
         },
-        parts: [{ id: "assistant-part-" + session, type: "text", text: "Synthetic response" }],
+        parts: [
+          {
+            id: "assistant-part-" + session,
+            type: "text",
+            text: "Synthetic response",
+          },
+        ],
       },
     ],
     inputs: [],
   });
   await source.importTextCheckpoint!({
     checkpoint,
-    target: { projectID: "source" as ProjectId, directory: getConversationWorkspaceDir() },
+    target: {
+      projectID: "source" as ProjectId,
+      directory: getConversationWorkspaceDir(),
+    },
   });
-  await index.syncTaskMeta({
+  const stored = await source.updateSession({
+    id: session as SessionId,
+    titleSource: "generated",
+    lastOutcome: "completed",
+    timeUpdated: 2,
+  });
+  await index.applyCliFacts({
+    titleSource: stored.titleSource,
+    lastOutcome: stored.lastOutcome,
+    deleted: stored.time.deleted != null,
     meta: {
       taskId: session,
       traceId: "trace:" + session,
@@ -241,7 +310,10 @@ const server = createServer(async (request, response) => {
       result = { seeded: true };
     } else if (input.action === "policy") {
       const current = await configuration.read();
-      await configuration.update(current.revision, { ...current.policy, enabled: input.enabled });
+      await configuration.update(current.revision, {
+        ...current.policy,
+        enabled: input.enabled,
+      });
       result = { updated: true };
     } else if (input.action === "captures") result = { captures };
     else if (input.action === "index")
@@ -268,12 +340,29 @@ const server = createServer(async (request, response) => {
         logger: log,
       });
       result = { projectionRemoved: true };
-    } else if (input.action === "call") result = await host.call(input.method, input.input ?? {});
+    } else if (input.action === "call")
+      result = await host.call(input.method, input.input ?? {});
     else if (input.action === "rename") {
+      const stored = await source.updateSession({
+        id: input.session as SessionId,
+        title: "Synthetic renamed",
+        titleSource: "custom",
+      });
+      const meta = await index.getTaskMeta({
+        workspacePath: getConversationWorkspaceDir(),
+        taskId: input.session,
+      });
+      if (!meta) throw new Error("fixture_index_missing");
+      await index.applyCliFacts({
+        meta: { ...meta, title: stored.title, updatedAt: stored.time.updated },
+        titleSource: stored.titleSource,
+        lastOutcome: stored.lastOutcome,
+        deleted: stored.time.deleted != null,
+      });
       await index.updateTaskState({
         workspacePath: getConversationWorkspaceDir(),
         taskId: input.session,
-        patch: { title: "Synthetic renamed", titleOverridden: true, archived: true },
+        patch: { archived: true },
       });
       result = { renamed: true };
     } else if (input.action === "delete") {

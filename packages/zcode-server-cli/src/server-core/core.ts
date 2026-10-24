@@ -131,7 +131,7 @@ export async function runServerCore(generation: number): Promise<void> {
   };
   let shutdownStarted = false;
   const maintenance = new CoreMaintenance(maintenanceFile, http, localMaintenance,
-    () => shutdownStarted || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0,
+    () => shutdownStarted || !activitySource || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0,
     maintenanceOperation);
   process.on("message", (message: unknown) => {
     const parsed = coreCommandSchema.safeParse(message);
@@ -203,12 +203,12 @@ export async function runServerCore(generation: number): Promise<void> {
   process.on("message", (message: unknown) => {
     if (typeof message === "object" && message !== null && "command" in message
       && message.command === "shutdown-if-idle") {
-      if (shutdownStarted || !activitySource || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0
-        || !http.tryBeginIdleShutdown()) {
-        void send({ type: "idle-stop-blocked" });
-      } else {
-        void shutdown("idle");
-      }
+      // 条件停止沿同一个 residency owner 收口；零 turn 不能证明后台 / 审批已结束。
+      void maintenance.prepareIdleStop().then(prepared => {
+        if (shutdownStarted) return;
+        if (prepared) void shutdown("idle");
+        else void send({ type: "idle-stop-blocked" });
+      }, () => { void send({ type: "idle-stop-blocked" }); });
       return;
     }
   });

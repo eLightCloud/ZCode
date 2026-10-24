@@ -39,6 +39,24 @@ export class CoreMaintenance {
     return pending;
   }
 
+  prepareIdleStop(): Promise<boolean> {
+    const pending = this.tail.then(async () => {
+      if (this.operation || this.busy() || !this.lifecycle || !this.http.tryBeginIdleShutdown()) return false;
+      const operationId = randomUUID();
+      try {
+        const result = await this.lifecycle({ action: "begin", operationId });
+        if (result.state === "held" && result.operationId === operationId) return true;
+      } catch { /* 未确认不得停止；只允许准确操作收口后恢复接纳。 */ }
+      try {
+        const result = await this.lifecycle({ action: "cancel", operationId });
+        if (result.state === "released") this.http.resumeAfterMaintenance();
+      } catch { /* 释放未知时保留屏障，不能将回收升级为强杀。 */ }
+      return false;
+    });
+    this.tail = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
+
   private async persist(): Promise<void> {
     const temporary = this.path + "." + randomUUID() + ".tmp";
     if (this.operation) {

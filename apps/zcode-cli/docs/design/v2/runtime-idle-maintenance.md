@@ -29,6 +29,15 @@ calls even after disconnect; closing a socket is not proof its admitted service 
 Automation-enabled Core instances remain blocked until their scheduler has a verified pause
 contract. No forced stop, replay, data rewrite or migration is part of maintenance.
 
+Conditional idle stop also uses this same local retirement owner before the
+existing shutdown path. Zero foreground turns is only an early negative check.
+Known busy cancels that exact in-process attempt and reopens HTTP only after a
+confirmed release; unknown cleanup stays fenced. This terminal-stop admission
+does not write an external-dependency marker: the existing Core writer guard
+stays held through runtime cleanup and actual exit. Normal startup must not
+inherit a completed idle-stop operation. EC automatic stop requires both the
+idleStop and the new idleMaintenance capability contract; older proofs defer.
+
 The durable Server CLI entry currently advertises maintenance on POSIX platforms.
 Windows directory durability is not yet validated; it advertises no maintenance
 capability and rejects before closing admission. Other lifecycle commands retain

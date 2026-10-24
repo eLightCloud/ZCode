@@ -384,7 +384,10 @@ describe("AutomationRepo 调度状态机", () => {
 
     const db = new DatabaseSync(dbPath);
     db.exec("ALTER TABLE automations DROP COLUMN scheduled_run_count");
-    db.exec("DELETE FROM tasks_schema_migration; DROP TABLE conversation_workspace_purpose");
+    // 模拟真正的旧 schema：新 continuation 屏障表也必须移除，否则只有账本回退。
+    db.exec(
+      "DELETE FROM tasks_schema_migration; DROP TABLE conversation_workspace_purpose; DROP TABLE conversation_index_barriers; DROP TRIGGER conversation_index_actions_fenced",
+    );
     db.close();
 
     repo = new AutomationRepo(dbPath);

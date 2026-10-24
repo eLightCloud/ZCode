@@ -2097,10 +2097,18 @@ async function bootstrapWebApp() {
     // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
     const conversation = conversationSessionIdSchema.safeParse(params.get("conversation"));
     if (conversation.success) {
+      if (!services.projectService) throw new Error("project.service-unavailable");
       const workspace = await services.fileService.ensureConversationWorkspace();
+      // 续接仍归当前 Source Server；仅传路径会把 Composer 的 Host 误判为 local。
+      // 由已连接 owner 的公开解析入口提供身份，不从导航参数或路径猜测设备。
+      const directories = await services.projectService.resolveSessionDirectories({
+        workspacePath: workspace.path,
+        taskId: conversation.data,
+      });
       bootstrap = {
         ...bootstrap,
-        initialWorkspaceAbsPath: workspace.path,
+        initialWorkspaceAbsPath: directories.workspacePath,
+        initialWorkspaceIdentity: directories.workspaceIdentity,
         initialWorkspacePurpose: "conversation",
         initialTaskId: conversation.data,
         restoreSession: false,

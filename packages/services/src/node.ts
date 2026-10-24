@@ -14,6 +14,7 @@ export {
   prepareRemoteServerConnection,
 } from "#src/remote-projects/index.js";
 import {
+  bindRemoteProjectIdentities,
   createProjectService,
   createTaskAutoArchiveScheduler,
   IProjectService,
@@ -3341,6 +3342,18 @@ export async function createServerHostServices(options: {
     projectStorageHostId,
     sourceServerWorkspaceService,
   });
+  // 独立 Server 的直接 Web 也必须拿到稳定 Host 身份；只给 Desktop attachment
+  // 绑定会让 Web Composer 把同一路径误路由到 local。复用既有身份解析与项目门面。
+  services.register(
+    IProjectService,
+    bindRemoteProjectIdentities(services.get(IProjectService), async (workspacePath) => {
+      await sourceServerWorkspaceService.resolveWorkspace({ workspacePath });
+      return buildServerRemoteWorkspaceIdentity({
+        serverId: options.sourceServerId,
+        workspacePath,
+      });
+    }),
+  );
   return { services, workspaceIdentityMapper, migrationFailedPathCount };
 }
 

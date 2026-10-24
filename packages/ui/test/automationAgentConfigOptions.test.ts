@@ -53,6 +53,15 @@ describe("automation model/thought linkage", () => {
         labels: {},
         registrySelectionView: { revision: 1, providers: [] },
       }),
+    ).toEqual([]);
+  });
+  it("应用装配明确保留空系统 / 自定义分组", () => {
+    expect(
+      buildAutomationModelSelectGroups({
+        selectedProvider: "glm",
+        labels: { applicationGrouping: true },
+        registrySelectionView: { revision: 1, providers: [] },
+      }),
     ).toMatchObject([
       { key: "application-models:system", items: [] },
       { key: "application-models:personal", items: [] },

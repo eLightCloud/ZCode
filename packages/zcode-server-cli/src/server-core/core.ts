@@ -262,7 +262,7 @@ export async function runServerCore(generation: number): Promise<void> {
         });
     }, 10_000);
     startupCleanup.push(() => clearInterval(heartbeat));
-    shutdown = async (reason: string): Promise<void> => {
+    const shutdownCore = async (reason: string): Promise<void> => {
       if (shutdownStarted) return;
       shutdownStarted = true;
       disposeParentDisconnectHandler();
@@ -284,8 +284,9 @@ export async function runServerCore(generation: number): Promise<void> {
       // writer guard 保持到真实进程退出，不能在最后 IPC 回执前提前开放另一个 writer。
       process.exit(0);
     };
+    shutdown = shutdownCore;
     if (parentDisconnected || startupStopReason)
-      void shutdown(startupStopReason ?? "parent-disconnected");
+      void shutdownCore(startupStopReason ?? "parent-disconnected");
     process.on("message", (message: unknown) => {
       if (
         typeof message === "object" &&
@@ -297,7 +298,7 @@ export async function runServerCore(generation: number): Promise<void> {
         void maintenance.prepareIdleStop().then(
           (prepared) => {
             if (shutdownStarted) return;
-            if (prepared) void shutdown("idle");
+            if (prepared) void shutdownCore("idle");
             else void send({ type: "idle-stop-blocked" });
           },
           () => {
@@ -319,7 +320,7 @@ export async function runServerCore(generation: number): Promise<void> {
         cleanupError ??= failure;
       }
     }
-    createServiceLogger("server-core").error("Native Core startup failed", {
+    createServiceLogger("server-core").error(undefined, "Native Core startup failed", {
       event: "server.startup",
       outcome: "failed",
       generation,

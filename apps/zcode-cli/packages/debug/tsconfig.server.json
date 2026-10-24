@@ -5,7 +5,9 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "lib": ["ES2024"],
+    "lib": [
+      "ES2024"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noEmit": false,
@@ -17,8 +19,17 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2024",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "verbatimModuleSyntax": true
   },
-  "include": ["server", "scripts", "src/shared.ts"]
+  "include": [
+    "server",
+    "scripts",
+    "src/shared.ts",
+    "contract.ts",
+    "contract.example.ts",
+    "module.ts"
+  ]
 }

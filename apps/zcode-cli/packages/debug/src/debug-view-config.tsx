@@ -1,21 +1,8 @@
+import { type SourceInputs } from "./debug-client-state.js";
+export type { SourceInputs, ObservationEventState } from "./debug-client-state.js";
 import "vis-timeline/styles/vis-timeline-graph2d.min.css";
 
 import type { ContextSectionSource, ContextUsageSource, TraceSpanLane } from "./shared";
-
-export interface SourceInputs {
-  projectId: string;
-  logDir: string;
-  eventPath: string;
-  dbPath: string;
-  sessionId: string;
-}
-
-export interface ObservationEventState {
-  connected: boolean;
-  error: string | null;
-  lastChangeAt?: string;
-  watchedPathCount: number;
-}
 
 export const emptyInputs: SourceInputs = {
   projectId: "",

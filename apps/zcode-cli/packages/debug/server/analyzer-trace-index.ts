@@ -20,7 +20,7 @@ import {
   textFromDbParts,
 } from "./analyzer-value-fields.js";
 
-import { extractUsage } from "./analyzer-model-requests.js";
+import { extractUsage } from "./model-request-usage.js";
 
 export const DEFAULT_TRACE_LIMIT = 10;
 

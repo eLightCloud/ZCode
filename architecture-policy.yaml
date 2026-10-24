@@ -1305,6 +1305,42 @@ modules:
     layers:
       adapters: .
     owner: native-cli-entry
+  # cli-debug-observer：由 architecture:adopt 登记
+  - id: cli-debug-observer
+    roots:
+      - apps/zcode-cli/packages/debug
+    managed: true
+    requires:
+      - shared
+    publicEntrypoints:
+      - apps/zcode-cli/packages/debug/contract.ts
+      - apps/zcode-cli/packages/debug/server/analyzer.ts
+    layers:
+      adapters:
+        - .
+        - src/debug-data-hooks.tsx
+      contract:
+        - src/shared.ts
+        - server/types.ts
+      domain:
+        - server/observation-record-values.ts
+        - server/model-request-usage.ts
+        - server/analyzer-value-fields.ts
+        - server/analyzer-timeline.ts
+        - server/analyzer-cache.ts
+        - server/analyzer-spans.ts
+        - server/analyzer-context.ts
+        - server/analyzer-model-requests.ts
+        - src/network-request-index.ts
+      app: src/debug-client-state.ts
+      ui: src
+    owner: native-observability
+    layerOrder:
+      - contract
+      - domain
+      - app
+      - adapters
+      - ui
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

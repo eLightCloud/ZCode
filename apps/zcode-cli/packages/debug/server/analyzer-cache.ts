@@ -1,6 +1,6 @@
 import type { CacheReport, CacheSegment } from "../src/shared.js";
 
-import { isRecord, numberValue, stringValue } from "./sources.js";
+import { isRecord, numberValue, stringValue } from "./observation-record-values.js";
 
 import type { DbObservation, EventRecord, LoadedObservation } from "./types.js";
 
@@ -12,7 +12,7 @@ import {
   preview,
 } from "./analyzer-value-fields.js";
 
-import { extractUsage } from "./analyzer-model-requests.js";
+import { extractUsage } from "./model-request-usage.js";
 
 export function buildCacheReports(
   traceId: string,

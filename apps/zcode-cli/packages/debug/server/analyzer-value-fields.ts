@@ -6,11 +6,11 @@ import type {
   TokenMethod,
 } from "../src/shared.js";
 
-import { isRecord, stringValue } from "./sources.js";
+import { isRecord, stringValue } from "./observation-record-values.js";
 
 import type { DbMessageRecord, DbPartRecord, EventRecord, LogRecord } from "./types.js";
 
-import { extractUsage } from "./analyzer-model-requests.js";
+import { extractUsage } from "./model-request-usage.js";
 
 export function summarizeEvent(event: EventRecord): string {
   const payload = event.payload;

@@ -15,6 +15,7 @@ import {
 afterEach(cleanup);
 const labels: ConversationContinuationLabels = {
   target: "Target",
+  prepareTarget: "Prepare target",
   choose: "Choose whole copy",
   handoff: "Online handoff",
   offline: "Offline branch",
@@ -142,4 +143,23 @@ it("states offline branching risk and resumes a durable in-flight intent after r
     continuation.run.mock.calls[0]![0].operation,
   );
   await waitFor(() => expect(screen.queryByRole("button", { name: labels.open })).toBeNull());
+});
+
+it("prepares a platform location only after a separate user action, without choosing or sending", async () => {
+  const { reader, continuation } = fixture();
+  const options = await continuation.options();
+  continuation.options.mockClear();
+  continuation.options
+    .mockResolvedValueOnce({ ...options, targets: [] })
+    .mockResolvedValue(options);
+  const prepareTarget = vi.fn(async () => {});
+  reader.continuation = { ...continuation, prepareTarget };
+  render(createElement(ConversationContinuation, { reader, session: "s", version: "v", labels }));
+  await screen.findByRole("button", { name: labels.prepareTarget });
+  expect(prepareTarget).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: labels.prepareTarget }));
+  await screen.findByText("Test cloud");
+  expect(prepareTarget).toHaveBeenCalledWith("s", expect.any(AbortSignal));
+  expect(continuation.run).not.toHaveBeenCalled();
+  expect(screen.getByRole("combobox", { name: labels.target })).toBeTruthy();
 });

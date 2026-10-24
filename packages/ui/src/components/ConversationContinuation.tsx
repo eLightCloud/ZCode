@@ -5,6 +5,7 @@ import { Button } from "./ui/button.js";
 
 export interface ConversationContinuationLabels {
   target: string;
+  prepareTarget: string;
   choose: string;
   handoff: string;
   offline: string;
@@ -79,9 +80,15 @@ export function ConversationContinuation({
       )}
       {!state.pending && !state.busy && !["ready", "cancelled"].includes(result?.status ?? "") && (
         <>
+          {reader.continuation?.prepareTarget && (
+            <Button variant="outline" onClick={() => void state.prepareTarget()}>
+              {labels.prepareTarget}
+            </Button>
+          )}
           <label className="flex flex-col gap-2">
             {labels.target}
             <select
+              aria-label={labels.target}
               className="border-input bg-background min-h-11 rounded-md border px-3 text-mobile-input-safe"
               value={selected?.location ?? ""}
               onChange={(event) => {

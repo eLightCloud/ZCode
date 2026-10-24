@@ -85,6 +85,16 @@ export function useConversationContinuation(reader: ConversationHistoryReader, s
     error,
     busy,
     refresh,
+    prepareTarget: () =>
+      perform(async (signal) => {
+        if (!reader.continuation?.prepareTarget) throw new ConversationChoiceError("blocked");
+        await reader.continuation.prepareTarget(session, signal);
+        const value = await reader.continuation.options(session, signal);
+        if (signal.aborted) return;
+        setOptions(value);
+        intent.current = value.inflight;
+        setResult(null);
+      }),
     get pending() {
       return intent.current !== null;
     },

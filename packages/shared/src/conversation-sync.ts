@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { zcodeTaskMetaSchema } from "./validation.js";
+/** Native session IDs may become artifact directory segments after recovery. */
+export const conversationSessionIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9_.:-]+$/)
+  .refine((value) => value !== "." && value !== "..");
 
 export const conversationScopeSchema = z
   .object({
@@ -161,6 +168,8 @@ export class ConversationChoiceError extends Error {
 }
 export interface ConversationHistoryReader {
   continuation?: {
+    /** Optional platform provisioning intent; never sends business input or restores a body. */
+    prepareTarget?(session: string, signal: AbortSignal): Promise<void>;
     options(
       session: string,
       signal: AbortSignal,

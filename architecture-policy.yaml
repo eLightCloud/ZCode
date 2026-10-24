@@ -733,6 +733,21 @@ modules:
       ui: .
     owner: conversation
 
+  # cli-telemetry：由 architecture:adopt 登记
+  - id: cli-telemetry
+    roots:
+      - apps/zcode-cli/packages/telemetry/src
+      - apps/zcode-cli/packages/telemetry/vitest.config.ts
+    managed: true
+    requires:
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/telemetry/src/index.ts
+      - apps/zcode-cli/packages/telemetry/src/contract.ts
+    layers:
+      adapters: .
+    owner: observability
+
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。
   # 基于领先 staging 很多的分支开工时，merge-base 之前的"新增"文件不应被追溯。

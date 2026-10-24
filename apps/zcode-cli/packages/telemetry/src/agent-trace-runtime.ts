@@ -1,4 +1,5 @@
 import type { AgentExecutionTelemetryRuntimeApi } from "./trace-runtime-api.js";
+import type { AgentExecutionTelemetryRuntimeMethodsContext } from "./trace-runtime-context.js";
 import { installAgentExecutionTelemetryRuntimeMethods } from "./trace-runtime-methods.js";
 import type * as implementation2 from "./trace-runtime-model.js";
 import type * as implementation1 from "./trace-runtime-operations.js";
@@ -36,13 +37,13 @@ export interface AgentTraceRuntimeOptions extends WriterHealth {
 export class AgentExecutionTelemetryRuntime
   implements AgentExecutionTelemetryPort, ModelExecutionTelemetryPort
 {
-  private readonly activeWriters = new Set<TrackedWriter>();
+  private readonly activeWriters: AgentExecutionTelemetryRuntimeMethodsContext["activeWriters"] = new Set<TrackedWriter>();
   private capacityWarningActive = false;
-  private identity: TelemetryIdentitySnapshot;
+  private identity: AgentExecutionTelemetryRuntimeMethodsContext["identity"];
   private readonly maxActiveWriters: number;
-  private readonly tracer: Tracer;
-  private readonly health: WriterHealth;
-  private readonly metrics: AgentTelemetryMetricRecorder;
+  private readonly tracer: AgentExecutionTelemetryRuntimeMethodsContext["tracer"];
+  private readonly health: AgentExecutionTelemetryRuntimeMethodsContext["health"];
+  private readonly metrics: AgentExecutionTelemetryRuntimeMethodsContext["metrics"];
 
   constructor(options: AgentTraceRuntimeOptions) {
     this.tracer = options.tracer;

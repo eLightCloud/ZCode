@@ -281,3 +281,25 @@ it("binds every remote task directory through the existing workspace identity re
     "stable:/repo",
   ]);
 });
+
+it("uses the connected owner when Host is omitted while explicit local stays a different Host", async () => {
+  const task = { workspacePath: "/native-conversation", taskId: "existing" };
+  const resolve = vi.fn(() => ({
+    workspacePath: task.workspacePath,
+    projectId: null,
+    additionalDirectories: [],
+  }));
+  const service = createProjectService({
+    ownerHostId: "remote:server:connected",
+    workspaceDirectory: tmpdir(),
+    repository: async () =>
+      ({ resolveSessionDirectories: resolve }) as unknown as ProjectRepositoryContract,
+  });
+  await expect(service.resolveSessionDirectories(task)).resolves.toMatchObject({
+    workspacePath: task.workspacePath,
+  });
+  await expect(service.resolveSessionDirectories(task, "local")).rejects.toThrow(
+    "project.host-offline",
+  );
+  expect(resolve).toHaveBeenCalledExactlyOnceWith(task);
+});

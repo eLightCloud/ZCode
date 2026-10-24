@@ -2123,7 +2123,9 @@ export function SessionPane({
                 ? rootSessionId
                 : targetSessionId,
           },
-          recentScope.hostId,
+          // path-only 工作台的 base services 就是当前 owner；显式 local 会误指 Server 之外的 Host。
+          // 只有远程 identity 才传递其派生 Host，不能放松跨 Host 的校验。
+          workspaceIdentity ? recentScope.hostId : undefined,
         );
         recentScope = { ...recentScope, projectId: directories.projectId };
       }

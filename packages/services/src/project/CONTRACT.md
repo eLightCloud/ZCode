@@ -24,4 +24,3 @@ readDirectory 是项目选目录的 Host 路由入口：未指定 path 返回所
 
 未归类 Composer 可传 UUID draftId，目录由 Host 在 workspaceDirectory 下确定性派生；并发和重试只准备同一目录。reuseDraft 表示客户端已拿到该目录，缺失时报错，不重新 mkdir。无 draftId 的其他调用保持独立分配，远端仍要求项目；草稿和接纳记录不进入项目数据库。
 
-独立 Source Server 的 RPC 公开项目门面与 Desktop attachment 一样，经 bindRemoteProjectIdentities 在发布目录或树前完成所属 Host 的 canonical workspace 登记并返回稳定身份。内部持库调用仍使用原有 owner，不把客户端 local 解释为远端自身。直接 Web 显式进入已有会话先调用该公开目录解析，Composer 不得只按真实路径建立 local scope。

@@ -42,6 +42,6 @@ export const cliToolRuntimeModule = {
     "apps/zcode-cli/packages/core/src/tool/workflow-host-api.ts",
     "apps/zcode-cli/packages/core/src/mcp/index.ts",
     "apps/zcode-cli/packages/core/src/mcp/image-normalization.ts",
-    null,
+    "apps/zcode-cli/packages/core/src/tool/session-tools-api.ts",
   ],
 } as const;

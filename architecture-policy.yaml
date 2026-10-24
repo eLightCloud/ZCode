@@ -906,14 +906,16 @@ modules:
   - id: conversation-continuation-host
     roots:
       - packages/services/src/session/conversation-continuation-host
+      - packages/services/src/session/conversationSyncHost.ts
     managed: true
     requires:
       - services
       - session
       - shared
     publicEntrypoints:
-      - packages/services/src/session/conversation-continuation-host/index.ts
       - packages/services/src/session/conversation-continuation-host/contract.ts
+      - packages/services/src/session/conversationSyncHost.ts
+      - packages/services/src/session/conversation-continuation-host/index.ts
     layers:
       adapters: .
     owner: conversation
@@ -949,6 +951,7 @@ modules:
       - shared
       - zcode-cli
       - cli-app-assembly
+      - cli-plugin-management
     publicEntrypoints:
       - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/server.ts
       - apps/zcode-cli/packages/bootstrap/src/zcode-protocol/contract.ts
@@ -974,11 +977,11 @@ modules:
       - provider-node
       - shared
       - zcode-cli
+      - cli-plugin-management
     publicEntrypoints:
       - apps/zcode-cli/packages/bootstrap/src/app/app-option-types.ts
       - apps/zcode-cli/packages/bootstrap/src/app/artifact-store.ts
       - apps/zcode-cli/packages/bootstrap/src/app/browser-broker-port.ts
-      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugins.ts
       - apps/zcode-cli/packages/bootstrap/src/app/bundled-skills.ts
       - apps/zcode-cli/packages/bootstrap/src/app/contract.ts
       - apps/zcode-cli/packages/bootstrap/src/app/create-app.ts
@@ -987,7 +990,6 @@ modules:
       - apps/zcode-cli/packages/bootstrap/src/app/legacy-cli-personal-provider-config-importer.ts
       - apps/zcode-cli/packages/bootstrap/src/app/model-execution-context.ts
       - apps/zcode-cli/packages/bootstrap/src/app/node-repl-browser-broker.ts
-      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts
       - apps/zcode-cli/packages/bootstrap/src/app/paths.ts
       - apps/zcode-cli/packages/bootstrap/src/app/process-provider-registry-runtime.ts
       - apps/zcode-cli/packages/bootstrap/src/app/provider-registry-selection.ts
@@ -1182,6 +1184,7 @@ modules:
       - apps/zcode-cli/packages/core/src/tool
       - apps/zcode-cli/packages/core/tests/cli-tool-runtime
       - apps/zcode-cli/packages/core/src/mcp
+      - apps/zcode-cli/scripts/generate-bash-command-registry.mjs
     managed: true
     requires:
       - channel-reply-tool
@@ -1282,6 +1285,7 @@ modules:
         - read-file-state.ts
         - session-tools-api.ts
         - workflow-host-api.ts
+        - ../../../../scripts/generate-bash-command-registry.mjs
     owner: native-tools
     layerOrder:
       - app
@@ -1341,6 +1345,170 @@ modules:
       - app
       - adapters
       - ui
+  # cli-plugin-management：由 architecture:adopt 登记
+  - id: cli-plugin-management
+    roots:
+      - apps/zcode-cli/packages/bootstrap/src/plugin-management
+      - apps/zcode-cli/packages/bootstrap/tests/plugin-management-contract
+      - apps/zcode-cli/packages/bootstrap/src/plugin-configuration.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-context.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-installation.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-marketplace-mutations.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-operation-diagnostics.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-overview.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugin-validation.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugins-contracts.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugins.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugins.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugin-cache.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugin-marketplace.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugin-source.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-cache-fs.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-runtime.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-seed-lock.ts
+    managed: true
+    requires:
+      - cli-adapters
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/bootstrap/src/plugin-management/contract.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugins.ts
+      - apps/zcode-cli/packages/bootstrap/src/plugins-contracts.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/bundled-plugins.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts
+      - apps/zcode-cli/packages/bootstrap/src/app/official-plugin-runtime.ts
+    layers:
+      adapters: .
+      contract: ../plugins-contracts.ts
+      domain: ../app/official-plugin-definitions.ts
+    owner: native-plugins
+    layerOrder:
+      - contract
+      - domain
+      - app
+      - adapters
+  # conversation-native-protocol：由 architecture:adopt 登记
+  - id: conversation-native-protocol
+    roots:
+      - packages/shared/src/conversation-native-protocol
+      - packages/shared/test/conversation-native-protocol
+      - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-runtime.ts
+      - packages/shared/src/conversation-files.ts
+      - packages/shared/src/conversation-continuation.ts
+      - packages/shared/src/zcode-task-search-text.ts
+    managed: true
+    requires:
+      - shared
+    publicEntrypoints:
+      - packages/shared/src/conversation-native-protocol/contract.ts
+      - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-runtime.ts
+      - packages/shared/src/conversation-files.ts
+      - packages/shared/src/conversation-continuation.ts
+      - packages/shared/src/zcode-task-search-text.ts
+    layers:
+      domain: .
+    owner: conversation
+  # conversation-index-persistence：由 architecture:adopt 登记
+  - id: conversation-index-persistence
+    roots:
+      - packages/services/src/session/conversation-index-persistence
+      - packages/services/test/conversation-index-persistence
+      - packages/services/src/session/conversationSyncIndex.ts
+      - packages/services/src/session/tasksDatabase/conversation-barrier-v5.ts
+      - packages/services/src/session/tasksDatabase/conversation-classification-v4.ts
+    managed: true
+    requires:
+      - services
+      - session
+      - shared
+    publicEntrypoints:
+      - packages/services/src/session/conversation-index-persistence/contract.ts
+      - packages/services/src/session/conversationSyncIndex.ts
+      - packages/services/src/session/tasksDatabase/conversation-barrier-v5.ts
+      - packages/services/src/session/tasksDatabase/conversation-classification-v4.ts
+    layers:
+      adapters: .
+    owner: conversation-persistence
+  # native-runtime-maintenance：由 architecture:adopt 登记
+  - id: native-runtime-maintenance
+    roots:
+      - packages/zcode-server-cli/src/runtime/maintenance-contract
+      - packages/zcode-server-cli/test/maintenance-contract
+      - packages/shared/src/runtimeMaintenance.ts
+      - packages/services/src/zcode-agent/localRuntimeMaintenance.ts
+      - packages/zcode-server-cli/src/runtime/kernelFileLock.ts
+      - packages/zcode-server-cli/src/runtime/updateHandoff.ts
+      - packages/zcode-server-cli/src/server-core/maintenance.ts
+      - packages/zcode-server-cli/src/supervisor/coreMaintenanceRequest.ts
+    managed: true
+    requires:
+      - services
+      - shared
+      - zcode-server-cli
+    publicEntrypoints:
+      - packages/zcode-server-cli/src/runtime/maintenance-contract/contract.ts
+      - packages/shared/src/runtimeMaintenance.ts
+      - packages/services/src/zcode-agent/localRuntimeMaintenance.ts
+      - packages/zcode-server-cli/src/runtime/kernelFileLock.ts
+      - packages/zcode-server-cli/src/runtime/updateHandoff.ts
+      - packages/zcode-server-cli/src/server-core/maintenance.ts
+      - packages/zcode-server-cli/src/supervisor/coreMaintenanceRequest.ts
+    layers:
+      adapters: .
+      contract: ../../../../shared/src/runtimeMaintenance.ts
+    owner: native-platform
+    layerOrder:
+      - contract
+      - adapters
+  # conversation-workbench：由 architecture:adopt 登记
+  - id: conversation-workbench
+    roots:
+      - packages/ui/src/conversation-workbench
+      - packages/ui/test/conversation-workbench-contract
+      - packages/ui/src/components/ConversationContinuation.tsx
+      - packages/ui/src/components/ConversationHistory.tsx
+      - packages/ui/src/hooks/useConversationContinuation.ts
+      - packages/ui/src/hooks/useConversationHistory.ts
+    managed: true
+    requires:
+      - ui
+      - shared
+    publicEntrypoints:
+      - packages/ui/src/conversation-workbench/contract.ts
+      - packages/ui/src/components/ConversationContinuation.tsx
+      - packages/ui/src/components/ConversationHistory.tsx
+      - packages/ui/src/hooks/useConversationContinuation.ts
+      - packages/ui/src/hooks/useConversationHistory.ts
+    layers:
+      ui: .
+      app:
+        - ../hooks/useConversationContinuation.ts
+        - ../hooks/useConversationHistory.ts
+    owner: conversation
+    layerOrder:
+      - app
+      - ui
+  # workflow-model-choices：由 architecture:adopt 登记
+  - id: workflow-model-choices
+    roots:
+      - packages/ui/src/workflow-model-choices
+      - packages/ui/test/workflow-model-choices-contract
+      - packages/ui/src/components/workflow-timeline/useWorkflowSettingsModelChoices.ts
+    managed: true
+    requires:
+      - ui
+      - shared
+      - provider
+    publicEntrypoints:
+      - packages/ui/src/workflow-model-choices/contract.ts
+      - packages/ui/src/components/workflow-timeline/useWorkflowSettingsModelChoices.ts
+    layers:
+      app: .
+    owner: model-selection
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

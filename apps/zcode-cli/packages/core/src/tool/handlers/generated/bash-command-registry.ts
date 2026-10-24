@@ -1,4 +1,3 @@
-/* eslint-disable */
 // 此文件由 scripts/generate-bash-command-registry.mjs 确定性生成，请勿手改。
 // Source: @withfig/autocomplete@2.692.3 (ISC); hash: 1b0d34b4f4fadc4dafab139702e8687830396154c01f23c5a7d523cecd8dad03.
 // Skipped: imports=0, dynamicSubcommands=0, invalidNodes=0, loadSpecNodes=522.

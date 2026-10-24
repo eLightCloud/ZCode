@@ -331,3 +331,5 @@ export function createNodeToolArtifactStore(
 ): ToolArtifactStorePort {
   return new NodeToolArtifactStore(options);
 }
+
+export { getCliStorageRoot, getPluginStorageRoot } from "./cli-storage-layout.js";

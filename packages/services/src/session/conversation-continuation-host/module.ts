@@ -6,5 +6,9 @@ export const conversationContinuationHostModule = {
   id: "conversation-continuation-host",
   requires: ["services", "session", "shared"],
   provides: ["conversation-continuation-host"],
-  publicEntrypoints: ["index.ts", "contract.ts"],
+  publicEntrypoints: [
+    "packages/services/src/session/conversation-continuation-host/contract.ts",
+    "packages/services/src/session/conversationSyncHost.ts",
+    "packages/services/src/session/conversation-continuation-host/index.ts",
+  ],
 } as const;

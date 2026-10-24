@@ -16,7 +16,7 @@ import type { PluginLoadOutcome } from "@zcode/contracts";
 
 import { isOfficialMarketplaceId } from "@zcode/contracts";
 
-import { getCliStorageRoot, getPluginStorageRoot } from "./app/paths.js";
+import { getCliStorageRoot, getPluginStorageRoot } from "@zcode/adapters/storage";
 
 import type { ResolveZCodePluginsOptions } from "./plugins-contracts.js";
 

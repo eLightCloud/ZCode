@@ -5,7 +5,6 @@
 export const cliProtocolHostModule = {
   id: "cli-protocol-host",
   requires: [
-    "cli-app-assembly",
     "cli-adapters",
     "cli-session-execution",
     "cli-telemetry",
@@ -14,13 +13,15 @@ export const cliProtocolHostModule = {
     "provider",
     "shared",
     "zcode-cli",
+    "cli-app-assembly",
+    "cli-plugin-management",
   ],
   provides: ["cli-protocol-host"],
   publicEntrypoints: [
-    "server.ts",
-    "contract.ts",
-    "transport.ts",
-    "../zcode-protocol-v4/index.ts",
-    "../zcode-protocol-v4/replay.ts",
+    "apps/zcode-cli/packages/bootstrap/src/zcode-protocol/server.ts",
+    "apps/zcode-cli/packages/bootstrap/src/zcode-protocol/contract.ts",
+    "apps/zcode-cli/packages/bootstrap/src/zcode-protocol/transport.ts",
+    "apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/index.ts",
+    "apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/replay.ts",
   ],
 } as const;

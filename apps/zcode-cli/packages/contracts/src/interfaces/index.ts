@@ -28,3 +28,4 @@ export * from "./shared.js";
 
 export * from "./deliverable-store.port.js";
 export * from "./permission-full-access.js";
+export * from "./conversation-sync.js";

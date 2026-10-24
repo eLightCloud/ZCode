@@ -4,6 +4,10 @@
 
 import http from "node:http";
 import https from "node:https";
+
+/** Node server adapters share the existing HTTP infrastructure type boundary. */
+export type NodeHttpIncomingRequest = http.IncomingMessage;
+export type NodeHttpOutgoingResponse = http.ServerResponse;
 import { ProxyAgent } from "proxy-agent";
 import {
   createHttpClientError,

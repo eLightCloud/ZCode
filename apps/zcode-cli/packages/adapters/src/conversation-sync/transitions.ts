@@ -66,6 +66,29 @@ function nextBinding(state: SyncState, location: string, version: string) {
   state.pending = { location, generation: state.generation, version };
   state.active = null;
 }
+/** Private native continuation writer: all admission owners were actually settled.
+ * Return one state for the surrounding PG transaction; no intermediate fence is published.
+ */
+export function transitionContinuationSelection(
+  previous: SyncState,
+  command: Extract<SyncCommand, { kind: "select" }>,
+  versions: Map<string, VersionFacts>,
+): SyncState {
+  if (!previous.active) return transition(previous, command, versions);
+  requireRule(previous.revision === command.revision, "stale");
+  const base = transition(
+    previous,
+    {
+      kind: "fence",
+      revision: previous.revision,
+      location: previous.active.location,
+      generation: previous.active.generation,
+      sourceBarrier: true,
+    },
+    versions,
+  );
+  return transition(base, { ...command, revision: base.revision }, versions);
+}
 /** Pure native storage transitions. Runtime evidence is supplied by trusted assembly. */
 export function transition(
   previous: SyncState,

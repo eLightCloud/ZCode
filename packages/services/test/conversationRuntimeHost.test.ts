@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
 } from "@zcode/shared";
 import { setDataBaseDir, getConversationWorkspaceDir } from "#src/paths.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
+import { createFileService } from "#src/file/fileService.js";
 import { createConversationRuntimeHost } from "#src/session/conversationRuntimeHost.js";
 let root: string, index: TaskIndexRepo;
 beforeEach(async () => {
@@ -124,12 +125,54 @@ it("does not rebuild an index or re-adopt after activation ACK loss and subseque
   ).toBe("New user title");
 });
 
-it('allows the activation owner to read its persistent guard during verification',async()=>{
- await seed();let current=result('applied');
- const runtime:ConversationRuntimePort={async control(input){if(input.kind==='activate')current=result('active');return current;}};
- let host:ConversationRuntimePort;
- const verify=vi.fn(async()=>{expect((await host.control({kind:'read',session,operation})).state).toBe('applied');});
- host=createConversationRuntimeHost({runtime,index,agent:{captureTextCheckpoint:vi.fn()},beforeActivate:verify});
- expect((await host.control({kind:'activate',session,operation,version:'version-1',generation:1})).state).toBe('active');
- expect(verify).toHaveBeenCalledTimes(1);
+it("allows the activation owner to read its persistent guard during verification", async () => {
+  await seed();
+  let current = result("applied");
+  const runtime: ConversationRuntimePort = {
+    async control(input) {
+      if (input.kind === "activate") current = result("active");
+      return current;
+    },
+  };
+  let host: ConversationRuntimePort;
+  const verify = vi.fn(async () => {
+    expect((await host.control({ kind: "read", session, operation })).state).toBe("applied");
+  });
+  host = createConversationRuntimeHost({
+    runtime,
+    index,
+    agent: { captureTextCheckpoint: vi.fn() },
+    beforeActivate: verify,
+  });
+  expect(
+    (
+      await host.control({
+        kind: "activate",
+        session,
+        operation,
+        version: "version-1",
+        generation: 1,
+      })
+    ).state,
+  ).toBe("active");
+  expect(verify).toHaveBeenCalledTimes(1);
+});
+
+it("creates a fresh target namespace through the existing File owner before private Core access", async () => {
+  const files = createFileService({
+    onConversationWorkspaceEnsured: () => index.registerConversationWorkspace(),
+  });
+  const runtime: ConversationRuntimePort = {
+    async control() {
+      expect((await stat(getConversationWorkspaceDir())).isDirectory()).toBe(true);
+      return result("closed");
+    },
+  };
+  const host = createConversationRuntimeHost({
+    runtime,
+    index,
+    agent: { captureTextCheckpoint: vi.fn() },
+    prepareWorkspace: () => files.ensureConversationWorkspace(),
+  });
+  expect((await host.control({ kind: "read", session, operation })).state).toBe("closed");
 });

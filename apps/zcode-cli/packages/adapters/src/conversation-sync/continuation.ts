@@ -226,17 +226,6 @@ export function createConversationContinuation(options: {
       )
         return progress(input, "stale", "preparing", "changed");
       await stageRuntime(store, scope, target, input.session, input.operation, saved);
-      const fenced = await store.receipt(scope, input.session, step(input.operation, "fence"));
-      if (!fenced && state.active) {
-        await command(scope, input, "fence", {
-          kind: "fence",
-          revision: state.revision,
-          location: state.active.location,
-          generation: state.active.generation,
-          sourceBarrier: true,
-        });
-        state = await current(scope, input.session);
-      }
       const receipt = await command(scope, input, "select", {
         kind: "select",
         revision: state.revision,

@@ -85,9 +85,8 @@ export function createContinuationCancellation(
           local.operation !== operation ||
           !["active", "cancelled"].includes(local.state)
         ) {
-          // A central fence is never undone by cancelling a choice. Keep that former
-          // owner closed; a fresh whole-copy intent may reserve it after cancellation.
-          if (input.kind === "select" && !latest.active && location !== input.target) continue;
+          // Fence and selection commit atomically. Before that commit, cancellation
+          // restores each exact prior native guard, including an already read-only copy.
           await runtime.control({ kind: "cancel", session, operation });
         }
       } catch (error) {

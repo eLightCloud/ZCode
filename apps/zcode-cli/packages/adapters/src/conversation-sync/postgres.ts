@@ -21,7 +21,13 @@ import { continuationJournal } from "./continuation-journal.js";
 import { createConversationFileStore } from "./files.js";
 import { canonical, digest } from "./canonical.js";
 import { versionsFor, readVersion, assignedGenerations } from "./postgres-versions.js";
-import { initialState, transition, versionFacts, type VersionFacts } from "./transitions.js";
+import {
+  initialState,
+  transition,
+  transitionContinuationSelection,
+  versionFacts,
+  type VersionFacts,
+} from "./transitions.js";
 
 interface InjectedPolicy {
   policy?: never;
@@ -266,14 +272,17 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
               versions,
               limits,
             );
-          next = transition(
-            current,
-            request.command,
-            versions,
-            request.command.kind === "grant"
-              ? await assignedGenerations(client, request.session)
-              : undefined,
-          );
+          next =
+            intentOperation && request.command.kind === "select"
+              ? transitionContinuationSelection(current, request.command, versions)
+              : transition(
+                  current,
+                  request.command,
+                  versions,
+                  request.command.kind === "grant"
+                    ? await assignedGenerations(client, request.session)
+                    : undefined,
+                );
         }
         syncStateSchema.parse(next);
         const result = syncReceiptSchema.parse({

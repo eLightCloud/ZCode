@@ -19,7 +19,8 @@ import { TOPIC_RESOURCE_RELAY_CHANNEL } from "@zcode/shared";
 
 async function connectResourcePeer(base: string, onValidate: () => void) {
   const response = await fetch(`${base}/api/rpc-host-capability`, {
-    method: "POST", headers: { connection: "close" },
+    method: "POST",
+    headers: { connection: "close" },
   });
   const { capability } = (await response.json()) as { capability: string };
   const socket = new WebSocket(`${base.replace("http:", "ws:")}/ws/host`, {
@@ -122,21 +123,30 @@ describe("standalone Server Core ingress", () => {
   it("fences disconnected but unsettled RPC calls before reversible maintenance", async () => {
     let entered!: () => void;
     let finish!: () => void;
-    const started = new Promise<void>(resolve => { entered = resolve; });
-    const completed = new Promise<void>(resolve => { finish = resolve; });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const completed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const services = new ServiceCollection().register(IZCodeAgentService, {
-      queryConversationCommandsV4: async () => { entered(); await completed; return { results: [] }; },
+      queryConversationCommandsV4: async () => {
+        entered();
+        await completed;
+        return { results: [] };
+      },
     } as never);
     const server = await createCoreHttpServer(services);
     servers.push(server);
     const base = `http://${server.host}:${server.port}`;
     const peer = await connectResourcePeer(base, () => undefined);
-    const pending = peer.services.zcodeAgentService.queryConversationCommandsV4({ commands: [] } as never)
+    const pending = peer.services.zcodeAgentService
+      .queryConversationCommandsV4({ commands: [] } as never)
       .catch(() => undefined);
     try {
       await started;
       peer.dispose();
-      await new Promise<void>(resolve => setImmediate(resolve));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(server.tryBeginIdleShutdown()).toBe(false);
       finish();
       await pending;
@@ -144,7 +154,10 @@ describe("standalone Server Core ingress", () => {
       await expect(fetch(base + "/api/server-info")).rejects.toThrow();
       server.resumeAfterMaintenance();
       expect((await fetch(base + "/api/server-info")).status).toBe(200);
-    } finally { finish(); peer.dispose(); }
+    } finally {
+      finish();
+      peer.dispose();
+    }
   });
 
   it("isolates reverse resource requests between Desktop peers and excludes normal WebSocket clients", async () => {
@@ -384,7 +397,9 @@ it("atomically freezes idle ingress and refuses new requests", async () => {
     expect(server.tryBeginIdleShutdown()).toBe(true);
     expect(server.tryBeginIdleShutdown()).toBe(false);
     await expect(fetch(`http://127.0.0.1:${server.port}/api/server-info`)).rejects.toThrow();
-  } finally { await server.close(); }
+  } finally {
+    await server.close();
+  }
 });
 
 it("refuses idle shutdown while an accepted connection could admit more work", async () => {
@@ -395,8 +410,51 @@ it("refuses idle shutdown while an accepted connection could admit more work", a
   try {
     await once(socket, "connect");
     const received = once(socket, "data");
-    socket.write("GET /api/server-info HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n");
+    socket.write(
+      "GET /api/server-info HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n",
+    );
     await received;
     expect(server.tryBeginIdleShutdown()).toBe(false);
-  } finally { socket.destroy(); await server.close(); }
+  } finally {
+    socket.destroy();
+    await server.close();
+  }
+});
+
+it("requires the explicit instance credential for private continuation control even on loopback", async () => {
+  const operation = "735652bc-e825-449f-9f94-c1a449fe1cc7";
+  const control = vi.fn(async () => ({
+    session: "synthetic-session",
+    operation,
+    state: "closed" as const,
+    generation: 0,
+    version: null,
+    digest: null,
+  }));
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    host: "127.0.0.1",
+    authToken: "synthetic-instance-token",
+    continuation: { control },
+  });
+  try {
+    const url = `http://127.0.0.1:${server.port}/api/continuation-control`;
+    const body = JSON.stringify({ kind: "close", session: "synthetic-session", operation });
+    const denied = await fetch(url, {
+      method: "POST",
+      headers: { Cookie: "synthetic-browser-cookie", Connection: "close" },
+      body,
+    });
+    expect(denied.status).toBe(401);
+    expect(control).not.toHaveBeenCalled();
+    const accepted = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: "Bearer synthetic-instance-token", Connection: "close" },
+      body,
+    });
+    expect(accepted.status).toBe(200);
+    expect((await accepted.json()).state).toBe("closed");
+    expect(control).toHaveBeenCalledTimes(1);
+  } finally {
+    await server.close();
+  }
 });

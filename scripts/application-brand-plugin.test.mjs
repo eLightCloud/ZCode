@@ -1,5 +1,6 @@
 import { applicationRootPlugin } from "./application-root-plugin.mjs";
 import { test, after } from "node:test";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -133,4 +134,21 @@ test("application shell is selected at build time before Intl and remains option
     () => applicationRootPlugin({ ZCODE_APPLICATION_SHELL_MODULE: "relative.tsx" }),
     /shell-unavailable/,
   );
+});
+
+test("branded packaging applies display identity to the real package description", () => {
+  const script = `const config = (await import('./packages/desktop/electron-builder.config.js')).default; process.stdout.write(JSON.stringify(config.extraMetadata.description));`;
+  const value = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: new URL("..", import.meta.url),
+    env: {
+      ...process.env,
+      ZCODE_APPLICATION_NAME: "Example Product",
+      ZCODE_APPLICATION_ID: "com.example.product",
+      ZCODE_APPLICATION_EXECUTABLE: "example-product",
+      ZCODE_APPLICATION_PACKAGE: "example-product",
+      ZCODE_ENV: "production",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(JSON.parse(value), "Example Product Desktop App");
 });

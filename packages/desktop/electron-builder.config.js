@@ -571,6 +571,8 @@ export default {
     productName: desktopProductIdentity.productName,
     ...(process.env.ZCODE_APPLICATION_NAME
       ? {
+          // 安装包产品说明属于显示身份；原作者、NOTICE 与技术名称继续保留来源。
+          description: `${desktopProductIdentity.productName} Desktop App`,
           applicationBrand: {
             name: desktopProductIdentity.productName,
             id: desktopProductIdentity.appId,

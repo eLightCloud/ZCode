@@ -301,3 +301,26 @@ test("invalid layer path arrays fail policy loading instead of silently dropping
     });
   }
 });
+
+test("unmatched long parent roots cannot shadow a managed child owner or its rules", async () => {
+  const policy = `version: 1
+modules:
+  - id: parent
+    roots: [src/package, src/package/deep/unrelated/configuration-entry.ts]
+    managed: true
+    layers: { adapters: . }
+  - id: child
+    roots: [src/package/http]
+    managed: true
+    layers: { domain: . }
+`;
+  await fixture({
+    "architecture-policy.yaml": policy,
+    "src/package/http/domain.ts": 'import "node:fs";\n',
+    "src/package/deep/unrelated/configuration-entry.ts": "export {};\n",
+  }, async (cwd) => {
+    const { violations } = await checkArchitecture({ cwd });
+    const violation = violations.find(v => v.rule === "domain-io" && v.file === "src/package/http/domain.ts");
+    assert.equal(violation?.module, "child");
+  });
+});

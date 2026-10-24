@@ -173,15 +173,17 @@ export async function loadPolicy(cwd = process.cwd()) {
 }
 
 export function moduleForFile(file, policy) {
+  const matchingRootLength = (module) =>
+    Math.max(
+      ...module.roots
+        .filter((root) => file === root || file.startsWith(`${root}${path.sep}`))
+        .map((root) => root.length),
+    );
   const candidates = policy.modules
     .filter((module) =>
       module.roots.some((root) => file === root || file.startsWith(`${root}${path.sep}`)),
     )
-    .sort(
-      (a, b) =>
-        Math.max(...b.roots.map((root) => root.length)) -
-        Math.max(...a.roots.map((root) => root.length)),
-    );
+    .sort((a, b) => matchingRootLength(b) - matchingRootLength(a));
   return candidates[0] ?? null;
 }
 

@@ -6,6 +6,7 @@ import {
   conversationRuntimeResultSchema,
   conversationContentRequestSchema,
   conversationContentResultSchema,
+  conversationModelOptionSchema,
 } from "@zcode/shared";
 import type { ConversationRuntimeDirectory } from "./continuation-runtime-steps.js";
 import { createNativeResourceClient } from "./private-resource-client.js";
@@ -32,6 +33,7 @@ export function createConversationRuntimeDirectory(options: {
               location: z.string().min(1).max(128),
               label: z.string().max(256),
               instanceId: z.string().min(1).max(128).optional(),
+              models: z.array(conversationModelOptionSchema).max(500).optional(),
             })
             .strict(),
         )

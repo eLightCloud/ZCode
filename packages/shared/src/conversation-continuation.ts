@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { conversationSessionIdSchema } from "./conversation-sync.js";
+import { modelSelectionSchema } from "./model-selection.js";
+import { conversationModelOptionSchema } from "./conversation-runtime.js";
 const key = z
   .string()
   .min(1)
@@ -21,6 +23,7 @@ export const conversationContinuationIntentSchema = z
     version: key,
     revision,
     candidates: z.array(key).min(1).max(10000),
+    targetModel: modelSelectionSchema.optional(),
   })
   .strict();
 export type ConversationContinuationIntent = z.infer<typeof conversationContinuationIntentSchema>;
@@ -95,7 +98,12 @@ export const conversationContinuationOptionsSchema = z
     targets: z
       .array(
         z
-          .object({ location: key, label: z.string().max(256), instanceId: key.optional() })
+          .object({
+            location: key,
+            label: z.string().max(256),
+            instanceId: key.optional(),
+            models: z.array(conversationModelOptionSchema).max(500).optional(),
+          })
           .strict(),
       )
       .max(100),

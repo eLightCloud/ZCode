@@ -11,12 +11,14 @@ import {
   ConversationRuntimeError,
   type ConversationRuntimePort,
   type ConversationRuntimeResult,
+  type ModelSelection,
+  type ConversationModelOption,
 } from "@zcode/shared";
 import { captureRegisteredFiles } from "./registered-files.js";
 import { canonical, digest } from "./canonical.js";
 
 export interface ConversationRuntimeDirectory {
-  list(scope: SyncScope): Promise<Array<{ location: string; label: string; instanceId?: string }>>;
+  list(scope: SyncScope): Promise<Array<{ location: string; label: string; instanceId?: string; models?: ConversationModelOption[] }>>;
   runtime(scope: SyncScope, location: string): Promise<ConversationRuntimePort>;
 }
 export function continuationOperation(operation: string, step: string): string {
@@ -160,6 +162,7 @@ export async function stageRuntime(
   operation: string,
   version: SyncVersion,
   branchMode: "primary" | "offline" = "primary",
+  targetModel?: ModelSelection,
 ) {
   if (
     !version.checkpoint ||
@@ -186,6 +189,7 @@ export async function stageRuntime(
     branchMode,
     management: version.management,
     ...(version.files?.length ? { files: version.files } : {}),
-    dataBase64: Buffer.from(JSON.stringify(version.checkpoint)).toString("base64"),
+    dataBase64: Buffer.from(JSON.stringify(targetModel
+      ? { ...version.checkpoint, modelSelection: targetModel } : version.checkpoint)).toString("base64"),
   });
 }

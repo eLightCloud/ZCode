@@ -10,7 +10,7 @@ import {
 import { setDataBaseDir, getConversationWorkspaceDir } from "#src/paths.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { createFileService } from "#src/file/fileService.js";
-import { createConversationRuntimeHost } from "#src/session/conversationRuntimeHost.js";
+import { createConversationRuntimeHost } from "#src/session/conversation-continuation-host/index.js";
 let root: string, index: TaskIndexRepo;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "continuation-index-"));

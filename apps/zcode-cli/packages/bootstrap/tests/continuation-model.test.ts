@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import type { ModelSelectionFacade } from "@zcode/provider";
+import type { ModelSelection } from "@zcode/contracts";
 import { continuationModelValidator } from "../src/zcode-protocol/continuation-model.js";
 const selection = { providerId: "personal", modelId: "same-model" };
 function validator(
   supportsImage: boolean,
-  effective = selection,
+  effective: ModelSelection = selection,
   selectionIssue: unknown = undefined,
+  supportsText = true,
 ) {
   return continuationModelValidator({
     getView: () => ({
@@ -17,7 +19,7 @@ function validator(
           models: [
             {
               modelId: "same-model",
-              config: { properties: { inputFormat: { supportsText: true, supportsImage } } },
+              config: { properties: { inputFormat: { supportsText, supportsImage } } },
             },
           ],
         },
@@ -36,5 +38,12 @@ describe("continuation capability uses the exact target provider view", () => {
       false,
     );
     expect(validator(true, selection, { code: "disabled" })(selection)).toBe(false);
+  });
+  it("does not silently normalize a different reasoning choice", () => {
+    const requested={...selection,options:{reasoningLevel:"high"}};
+    expect(validator(true,{...selection,options:{reasoningLevel:"disabled"}})(requested)).toBe(false);
+  });
+  it("requires target text input capability even without attachments", () => {
+    expect(validator(true, selection, undefined, false)(selection)).toBe(false);
   });
 });

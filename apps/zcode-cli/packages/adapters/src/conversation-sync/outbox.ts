@@ -1,5 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
+import { chmodSync } from "node:fs";
+import { outboxControlIdentity } from "./outbox-control-identity.js";
+import type { NativeControlIdentityView } from "./contract.js";
 import {
   ConversationSyncError,
   syncReceiptSchema,
@@ -15,6 +18,8 @@ import { canonical, digest } from "./canonical.js";
 
 export interface ConversationSyncOutbox {
   location(): string;
+  controlIdentity(enroll?: boolean): NativeControlIdentityView;
+  signControlChallenge(nonce: string): string;
   bindInput(scope: SyncScope, command: string, session: string | null): void;
   ownsSession(scope: SyncScope, session: string, command?: string): boolean;
   stage(scope: SyncScope, request: SyncRequest): void;
@@ -41,7 +46,7 @@ export interface ConversationSyncOutbox {
   close(): void;
 }
 const OUTBOX_APPLICATION_ID = 0x5a435359;
-const OUTBOX_SCHEMA_VERSION = 4;
+const OUTBOX_SCHEMA_VERSION = 5;
 const OUTBOX_BUSY_TIMEOUT_MS = 5000;
 
 /** Separate native sync metadata file; never opens or migrates a session/plugin database. */
@@ -52,7 +57,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     const application = Number(db.prepare("pragma application_id").get()?.application_id);
     const tables = db.prepare("select name from sqlite_master where type='table'").all();
     if (
-      ![0, 1, 2, 3, OUTBOX_SCHEMA_VERSION].includes(version) ||
+      ![0, 1, 2, 3, 4, OUTBOX_SCHEMA_VERSION].includes(version) ||
       (version === 0 && (tables.length > 0 || application !== 0)) ||
       (version > 0 && application !== OUTBOX_APPLICATION_ID)
     )
@@ -62,6 +67,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
   try {
     db.exec(`pragma busy_timeout=${OUTBOX_BUSY_TIMEOUT_MS}`);
     ownedVersion();
+    if (path !== ":memory:") chmodSync(path, 0o600);
     // 首次多 Host 打开时切换 journal_mode 需要额外独占锁，可能与另一个迁移写锁互等。
     // 迁移保留原 journal 模式；FULL + 原子事务满足 outbox 持久性，无需在每次打开时改 WAL。
     db.exec("pragma synchronous = FULL");
@@ -91,6 +97,9 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       db.exec(`create table sync_bases(tenant text not null,subject text not null,session text not null,
       version text not null,generation integer not null,after_sequence integer not null,operation text not null,mode text not null,primary key(tenant,subject,session));
       pragma user_version=4;`);
+    if (version < 5)
+      db.exec(`create table sync_control_identity(singleton integer primary key check(singleton=1), private_key text not null);
+      pragma user_version=5;`);
     db.prepare(
       "insert into sync_installation(singleton,location) values(1,?) on conflict do nothing",
     ).run("host:" + randomUUID());
@@ -125,6 +134,8 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     return row ? Number(row.cursor) : 0;
   }
   return {
+    controlIdentity: (enroll) => outboxControlIdentity(db).prepare(enroll),
+    signControlChallenge: (nonce) => outboxControlIdentity(db).sign(nonce),
     location: () =>
       String(
         db.prepare("select location from sync_installation where singleton=1").get()!.location,

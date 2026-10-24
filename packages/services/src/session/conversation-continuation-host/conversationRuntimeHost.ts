@@ -1,20 +1,12 @@
 import type { ConversationRuntimePort, ConversationRuntimeCommand } from "@zcode/shared";
 import { conversationIndexProjectionSchema, conversationRuntimeResultSchema } from "@zcode/shared";
-import type { TaskIndexRepo } from "./taskIndexRepo.js";
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
-import { getConversationWorkspaceDir } from "../paths.js";
+import type { ConversationRuntimeHostOptions } from "./contract.js";
+import { getConversationWorkspaceDir } from "../../paths.js";
 
 /** Native Host joins two existing owners. Neither index nor Core receives a second queue. */
-export function createConversationRuntimeHost(options: {
-  runtime: ConversationRuntimePort;
-  index: TaskIndexRepo;
-  agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
-  prepareWorkspace?: () => Promise<unknown>;
-  captureBase?: (session: string) => Promise<{ baseVersion: string | null }>;
-  beforeActivate?: (
-    input: Extract<ConversationRuntimeCommand, { kind: "activate" | "cancel" | "activateOffline" }>,
-  ) => Promise<void>;
-}): ConversationRuntimePort {
+export function createConversationRuntimeHost(
+  options: ConversationRuntimeHostOptions,
+): ConversationRuntimePort {
   const tails = new Map<string, Promise<unknown>>();
   async function run(input: ConversationRuntimeCommand) {
     const target = {
@@ -170,6 +162,7 @@ export function createConversationRuntimeHost(options: {
     return value;
   }
   return {
+    models: options.models,
     content: options.runtime.content
       ? async (input) => {
           await options.prepareWorkspace?.();

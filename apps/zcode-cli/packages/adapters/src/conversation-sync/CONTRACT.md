@@ -1,0 +1,18 @@
+# 原生会话同步适配
+
+唯一公开入口为现有 `@zcode/adapters/conversation-sync`。原生 contracts 拥有
+正文 / 版本 / 请求的严格 schema；本模块实现原生 PG 事务、隔离 outbox、
+固定对象字节和 continuation 编排，不接收浏览器自报的停止或恢复证明。
+
+- PG writer 拥有候选、选择和原意图；Core / Host 拥有接纳屏障和恢复。
+  outbox 的真实回执与接续锚点不同，不能用锚点伪造 ACK。
+- 同一操作的完整指纹固定；未知结果重查原操作，不能换候选、模型或输入。
+  断线不是停止证明，离线分支不提升当前主头，历史工具不重放。
+- 本机持钥身份由 outbox writer 在原事务中登记；尚有未确认上传禁止换绑。
+  旧存储委托可续发以补原上传，不因此获得控制权。私钥不进入公开合同。
+- 工厂沿 index 复用现有 facade，管理策略、数据角色及资格保持分离。
+  跨主体、未知格式和能力缺失均拒绝；不引入第二队列或企业执行 writer。
+
+私有 HTTP、Host 出站控制及字节存储仅是适配。Desktop continuous 与 Web
+replayable 的接纳仍由同一 Core 实现；schema / RLS、取消与未知 ACK、真实
+打包恢复、离线分支及独立迁移分别由对应回归证明。

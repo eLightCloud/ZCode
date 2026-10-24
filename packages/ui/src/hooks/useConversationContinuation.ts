@@ -5,6 +5,8 @@ import {
   type ConversationContinuationIntent,
   type ConversationContinuationOptions,
   type ConversationContinuationResult,
+  conversationContinuationIntentSchema,
+  type ModelSelection,
 } from "@zcode/shared";
 import { logger } from "../logger.js";
 
@@ -98,9 +100,14 @@ export function useConversationContinuation(reader: ConversationHistoryReader, s
     get pending() {
       return intent.current !== null;
     },
-    start(kind: ConversationContinuationIntent["kind"], target: string, version: string) {
+    start(
+      kind: ConversationContinuationIntent["kind"],
+      target: string,
+      version: string,
+      targetModel?: ModelSelection,
+    ) {
       if (!options || intent.current || busy) return;
-      const input = {
+      const input = conversationContinuationIntentSchema.parse({
         session,
         operation: crypto.randomUUID(),
         kind,
@@ -108,7 +115,8 @@ export function useConversationContinuation(reader: ConversationHistoryReader, s
         version,
         revision: options.revision,
         candidates: [...options.candidates],
-      };
+        ...(targetModel ? { targetModel } : {}),
+      });
       intent.current = input;
       return submit(input);
     },

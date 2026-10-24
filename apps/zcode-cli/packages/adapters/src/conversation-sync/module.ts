@@ -1,10 +1,10 @@
-/**
- * conversation-sync 模块清单（architecture-governance managed 模块）。
- * 层：adapters。修改 requires 时同步更新 architecture-policy.yaml（检查器会校验两者一致）。
- */
+/** Native sync's own integration fixtures consume the same storage and sync public facades. */
 export const conversationSyncModule = {
   id: "conversation-sync",
-  requires: ["cli-network", "shared", "zcode-cli"],
+  requires: ["cli-network", "shared", "zcode-cli", "cli-adapters"],
   provides: ["conversation-sync"],
-  publicEntrypoints: ["index.ts", "contract.ts"],
+  publicEntrypoints: [
+    "apps/zcode-cli/packages/adapters/src/conversation-sync/index.ts",
+    "apps/zcode-cli/packages/adapters/src/conversation-sync/contract.ts",
+  ],
 } as const;

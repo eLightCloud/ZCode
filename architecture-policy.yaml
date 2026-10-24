@@ -908,11 +908,24 @@ modules:
   - id: conversation-sync
     roots:
       - apps/zcode-cli/packages/adapters/src/conversation-sync
+      - apps/zcode-cli/packages/adapters/checks/helpers/native-source.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-outbox.mts
+      - apps/zcode-cli/packages/adapters/checks/conversation-sync-pg.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-capacity.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-continuation.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-deletion-choice.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-fixture.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-http.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-managed.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-outbox-concurrent.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-restore.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-transitions.mts
     managed: true
     requires:
       - cli-network
       - shared
       - zcode-cli
+      - cli-adapters
     publicEntrypoints:
       - apps/zcode-cli/packages/adapters/src/conversation-sync/index.ts
       - apps/zcode-cli/packages/adapters/src/conversation-sync/contract.ts

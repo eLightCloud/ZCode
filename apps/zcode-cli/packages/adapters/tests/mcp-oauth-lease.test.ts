@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSharedZCodeCredentialStore } from "../src/auth/shared-credentials.js";
 import {
@@ -68,6 +68,21 @@ async function writeForeignLease(leasePath: string, pid: number): Promise<void> 
 }
 
 describe("MCP OAuth authorization lease", () => {
+  it("creates a fresh credential directory before acquiring the first lease", async () => {
+    const credentialsPath = join(dirname(await createCredentialsPath()), "fresh", "credentials.json");
+    const input = { credentialsFilePath: credentialsPath, keyPrefix: KEY_PREFIX };
+    const first = await tryAcquireAuthorizationLease(input);
+    try {
+      expect(first).toBeDefined();
+      expect(await tryAcquireAuthorizationLease(input)).toBeUndefined();
+    } finally {
+      await first?.release();
+    }
+    const next = await tryAcquireAuthorizationLease(input);
+    expect(next).toBeDefined();
+    await next?.release();
+  });
+
   it("uses a lease path whose basename is legal on Windows", async () => {
     const credentialsPath = await createCredentialsPath();
     const leasePath = resolveAuthorizationLeasePath(credentialsPath, KEY_PREFIX);

@@ -17,7 +17,9 @@ it("preserves location and original input ownership across Host restarts", async
     expect(() => outbox.bindInput(second, "original", null)).toThrow();
     expect(outbox.ownsSession(second, "session", "original")).toBe(false);
     expect(outbox.ownsSession(first, "session", "original")).toBe(true);
-    outbox.bindInput(second, "later-input", "session");
+    expect(() => outbox.bindInput(second, "later-input", "session")).toThrow("scope");
+    outbox.bindInput(second, "later-input", "other-session");
+    expect(outbox.ownsSession(second, "other-session", "later-input")).toBe(true);
     expect(outbox.ownsSession(second, "session", "later-input")).toBe(false);
     outbox.close();
     outbox = createConversationSyncOutbox(path);

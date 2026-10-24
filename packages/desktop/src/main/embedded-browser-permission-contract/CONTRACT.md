@@ -10,5 +10,4 @@ Electron request/check → 标准 origin → 同一授权记录 → 允许 / 拒
 
 设备选项与持久化通过已有 desktop 模块完成。本模块不改变权限清理、主窗口路由或跨进程协议。回归见 `packages/desktop/test/embeddedBrowserPermissionPolicy.test.ts` 和 `packages/desktop/test/e2e/browser-permission-prompt.test.ts`。
 
-
 权限策略、main/renderer 决策转发和持久站点选择继续归本组件；原 bridge 保留请求身份、取消与超时拒绝，store 保留原文件格式与序列写入。站点设置页仅经原 useBrowserSitePermissions hook 读取和提交，不能自行授予权限。新增根只是将既有实现纳入受管，不改授权、选择期限或持久 writer。

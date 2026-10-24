@@ -171,15 +171,14 @@ export function importTextCheckpoint(
           JSON.stringify(checkpoint.session.revert),
           sessionID,
         );
-      if (checkpoint.session.lastOutcome)
-        db.prepare(
-          "update session set last_outcome=?,last_outcome_input_id=?,last_outcome_at=? where id=?",
-        ).run(
-          checkpoint.session.lastOutcome,
-          checkpoint.session.lastOutcomeInputId ?? null,
-          checkpoint.session.lastOutcomeAt ?? null,
-          sessionID,
-        );
+      db.prepare(
+        "update session set last_outcome=?,last_outcome_input_id=?,last_outcome_at=? where id=?",
+      ).run(
+        checkpoint.session.lastOutcome ?? null,
+        checkpoint.session.lastOutcomeInputId ?? null,
+        checkpoint.session.lastOutcomeAt ?? null,
+        sessionID,
+      );
       for (const { info, parts } of checkpoint.messages) {
         saveMessageSync(db, {
           ...info,

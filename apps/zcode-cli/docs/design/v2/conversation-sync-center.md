@@ -398,6 +398,10 @@ An explicitly present `branchEffects: []` is a confirmed empty snapshot and must
 survive import and cold export. An absent field remains absent; neither form grants
 permission or clears another saved branch's resource effects.
 
+Whole-body replacement also replaces the terminal outcome tuple. A legacy
+checkpoint without outcome/input/time restores those columns as NULL; a previous
+target outcome must not turn the selected legacy body into a different v4 body.
+
 Format v4 preserves native settled compact timeline parts as well as boundary parts;
 only native system timeline messages may use maintenance finish values and a prior
 assistant parent. Ordinary model replies still require an earlier user parent.

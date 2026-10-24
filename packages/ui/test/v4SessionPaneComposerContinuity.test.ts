@@ -615,7 +615,8 @@ describe("SessionPane composer continuity", () => {
     });
     expect(servicesMock.projectService.resolveSessionDirectories).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: ownerId }),
-      expect.any(String),
+      // path-only 会话由当前 base services 的 owner 解析；显式 local 会误路由远端 Server。
+      undefined,
     );
     expect(conversationMock.sendCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: "sendText", sessionId: "session-1" }),

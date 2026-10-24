@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { indicatorHtml, indicatorWindowSize } from "../src/main/windowsCuaOperationIndicatorContent.js";
+import {
+  indicatorHtml,
+  indicatorWindowSize,
+} from "../src/main/windowsCuaOperationIndicatorContent.js";
 import { buildWindowsOpenFolderRegistryOperations } from "../src/main/desktopWindowsOpenFolderContextMenu.js";
 import { resolveCuaPermissionPanelMessages } from "../src/renderer/cuaPermissionPanelMessages.js";
 
@@ -10,10 +13,16 @@ describe("application branding in system surfaces", () => {
     const html = indicatorHtml("en-US", name);
     expect(html).toContain("Example &amp; Product &lt;Desktop&gt;");
     expect(html).not.toContain("ZCode is controlling");
-    expect(indicatorWindowSize("en-US", name).width).toBeGreaterThan(indicatorWindowSize("en-US").width);
+    expect(indicatorWindowSize("en-US", name).width).toBeGreaterThan(
+      indicatorWindowSize("en-US").width,
+    );
   });
   it("brands Explorer labels while retaining executable targets and registry ownership", () => {
-    const operations = buildWindowsOpenFolderRegistryOperations({ executablePath: "C:\\Apps\\Example.exe", locale: "en-US", applicationName: "Example Product" });
+    const operations = buildWindowsOpenFolderRegistryOperations({
+      executablePath: "C:\\Apps\\Example.exe",
+      locale: "en-US",
+      applicationName: "Example Product",
+    });
     expect(operations[0]?.args).toContain("Open in Example Product");
     expect(operations[0]?.args[1]).toContain("ZCode.OpenInZCode");
     expect(operations[3]?.args).toContain('"C:\\Apps\\Example.exe" --open-workspace "%1"');

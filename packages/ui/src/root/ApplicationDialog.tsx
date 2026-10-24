@@ -22,7 +22,10 @@ export function ApplicationDialog({
       }}
     >
       <DialogContent
-        className={cn("max-h-[85dvh] w-[min(64rem,calc(100vw-2rem))] max-w-none overflow-auto p-0", className)}
+        className={cn(
+          "max-h-[85dvh] w-[min(64rem,calc(100vw-2rem))] max-w-none overflow-auto p-0",
+          className,
+        )}
         aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>

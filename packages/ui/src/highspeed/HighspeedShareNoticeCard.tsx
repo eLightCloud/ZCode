@@ -74,7 +74,11 @@ export function HighspeedShareNoticeCard({
             data-highspeed-card-background="dark"
           />
           <div className="highspeed-sidebar-share-card__content">
-            <div className="highspeed-sidebar-share-card__title" role="img" aria-label={intl.formatMessage({ id: "application.name" })}>
+            <div
+              className="highspeed-sidebar-share-card__title"
+              role="img"
+              aria-label={intl.formatMessage({ id: "application.name" })}
+            >
               <ZCodeWordmarkLogo className="highspeed-sidebar-share-card__wordmark" />
             </div>
             <Button

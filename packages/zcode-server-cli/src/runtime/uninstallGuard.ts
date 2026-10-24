@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { DataRootLock, type DataRootLockInspection } from "./lock.js";
 import type { ServerLayout } from "./paths.js";
 
-export async function acquireUninstallLock(layout: ServerLayout): Promise<Pick<DataRootLock, "release">> {
+export async function acquireUninstallLock(
+  layout: ServerLayout,
+): Promise<Pick<DataRootLock, "release">> {
   const lock = new DataRootLock(layout.lockFile);
   const inspection = await lock.inspect();
   if (inspection.state === "active") {
@@ -21,9 +23,15 @@ export async function acquireUninstallLock(layout: ServerLayout): Promise<Pick<D
     await lock.release();
     throw error;
   }
-  return { release: async () => {
-    try { await writer.release(); } finally { await lock.release(); }
-  } };
+  return {
+    release: async () => {
+      try {
+        await writer.release();
+      } finally {
+        await lock.release();
+      }
+    },
+  };
 }
 
 export async function removeRunContentsExceptLock(layout: ServerLayout): Promise<void> {

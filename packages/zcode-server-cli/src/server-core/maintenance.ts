@@ -16,7 +16,10 @@ export async function readMaintenanceOperation(path: string): Promise<string | n
     if (typeof marker !== "object" || marker === null || !("operationId" in marker)) {
       throw new Error("Invalid maintenance marker");
     }
-    return runtimeMaintenanceParamsSchema.parse({ action: "status", operationId: marker.operationId }).operationId;
+    return runtimeMaintenanceParamsSchema.parse({
+      action: "status",
+      operationId: marker.operationId,
+    }).operationId;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
     throw error;
@@ -35,25 +38,36 @@ export class CoreMaintenance {
 
   handle(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
     const pending = this.tail.then(() => this.run(runtimeMaintenanceParamsSchema.parse(input)));
-    this.tail = pending.then(() => undefined, () => undefined);
+    this.tail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
     return pending;
   }
 
   prepareIdleStop(): Promise<boolean> {
     const pending = this.tail.then(async () => {
-      if (this.operation || this.busy() || !this.lifecycle || !this.http.tryBeginIdleShutdown()) return false;
+      if (this.operation || this.busy() || !this.lifecycle || !this.http.tryBeginIdleShutdown())
+        return false;
       const operationId = randomUUID();
       try {
         const result = await this.lifecycle({ action: "begin", operationId });
         if (result.state === "held" && result.operationId === operationId) return true;
-      } catch { /* 未确认不得停止；只允许准确操作收口后恢复接纳。 */ }
+      } catch {
+        /* 未确认不得停止；只允许准确操作收口后恢复接纳。 */
+      }
       try {
         const result = await this.lifecycle({ action: "cancel", operationId });
         if (result.state === "released") this.http.resumeAfterMaintenance();
-      } catch { /* 释放未知时保留屏障，不能将回收升级为强杀。 */ }
+      } catch {
+        /* 释放未知时保留屏障，不能将回收升级为强杀。 */
+      }
       return false;
     });
-    this.tail = pending.then(() => undefined, () => undefined);
+    this.tail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
     return pending;
   }
 
@@ -64,22 +78,35 @@ export class CoreMaintenance {
       try {
         await stream.writeFile(JSON.stringify({ operationId: this.operation }));
         await stream.sync();
-      } finally { await stream.close(); }
-      try { await rename(temporary, this.path); }
-      finally { await unlink(temporary).catch(error => {
-        if (error?.code !== "ENOENT") throw error;
-      }); }
+      } finally {
+        await stream.close();
+      }
+      try {
+        await rename(temporary, this.path);
+      } finally {
+        await unlink(temporary).catch((error) => {
+          if (error?.code !== "ENOENT") throw error;
+        });
+      }
     } else {
-      await unlink(this.path).catch(error => { if (error?.code !== "ENOENT") throw error; });
+      await unlink(this.path).catch((error) => {
+        if (error?.code !== "ENOENT") throw error;
+      });
     }
     const directory = await open(dirname(this.path), "r");
-    try { await directory.sync(); } finally { await directory.close(); }
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   }
 
   private async run(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
-    const blocked = (reasonCode: "native_activity" | "operation_conflict" | "unconfirmed"):
-    RuntimeMaintenanceResult => ({ operationId: this.operation, state: "blocked", reasonCode });
-    if (this.operation && this.operation !== input.operationId) return blocked("operation_conflict");
+    const blocked = (
+      reasonCode: "native_activity" | "operation_conflict" | "unconfirmed",
+    ): RuntimeMaintenanceResult => ({ operationId: this.operation, state: "blocked", reasonCode });
+    if (this.operation && this.operation !== input.operationId)
+      return blocked("operation_conflict");
     if (!this.lifecycle) return blocked("unconfirmed");
     if (input.action === "begin" && this.operation === null) {
       if (this.busy() || !this.http.tryBeginIdleShutdown()) return blocked("native_activity");
@@ -91,8 +118,12 @@ export class CoreMaintenance {
       if (result.state !== "released") return blocked(result.reasonCode ?? "unconfirmed");
       const operation = this.operation;
       this.operation = null;
-      try { await this.persist(); }
-      catch (error) { this.operation = operation; throw error; }
+      try {
+        await this.persist();
+      } catch (error) {
+        this.operation = operation;
+        throw error;
+      }
       this.http.resumeAfterMaintenance();
       return result;
     }

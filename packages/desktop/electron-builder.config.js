@@ -22,7 +22,10 @@ import {
   resolveDesktopProductIdentity,
 } from "./scripts/desktop-product-identity.mjs";
 import { createWindowsPowerShellSecurityArgs } from "./scripts/powershell-command.mjs";
-import { isSharpRequiredByComputerUse, verifyStagedSharp } from "./scripts/sharp-package-assets.mjs";
+import {
+  isSharpRequiredByComputerUse,
+  verifyStagedSharp,
+} from "./scripts/sharp-package-assets.mjs";
 import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
@@ -71,7 +74,8 @@ const runtimeModuleLookupRoots = [
   resolve(desktopPackageRoot, "node_modules", ".pnpm", "node_modules"),
   resolve(workspaceRoot, "node_modules", ".pnpm", "node_modules"),
 ];
-const applicationIconDir = process.env.ZCODE_APPLICATION_ICON_DIR || resolve(import.meta.dirname, "build");
+const applicationIconDir =
+  process.env.ZCODE_APPLICATION_ICON_DIR || resolve(import.meta.dirname, "build");
 const desktopDistDir = process.env.ZCODE_DESKTOP_DIST_DIR || "dist";
 const bundledCuaHelperSource = resolve(
   desktopPackageRoot,
@@ -565,10 +569,15 @@ export default {
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
     productName: desktopProductIdentity.productName,
-    ...(process.env.ZCODE_APPLICATION_NAME ? { applicationBrand: {
-      name: desktopProductIdentity.productName, id: desktopProductIdentity.appId,
-      attribution: process.env.ZCODE_APPLICATION_ATTRIBUTION,
-    } } : {}),
+    ...(process.env.ZCODE_APPLICATION_NAME
+      ? {
+          applicationBrand: {
+            name: desktopProductIdentity.productName,
+            id: desktopProductIdentity.appId,
+            attribution: process.env.ZCODE_APPLICATION_ATTRIBUTION,
+          },
+        }
+      : {}),
     homepage: "https://zcode.z.ai",
     author: {
       name: desktopProductIdentity.productName,

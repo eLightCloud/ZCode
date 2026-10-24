@@ -15,7 +15,14 @@ afterEach(() => {
 describe("desktopFinderOpenFolderWorkflow", () => {
   it("uses the assembly name in Finder without changing the stable workflow identity", () => {
     const homeDir = createTempHome();
-    installFinderOpenFolderWorkflow({ platform: "darwin", locale: "en-US", applicationName: "Example Product", homeDir, logger: { info: vi.fn(), warn: vi.fn() }, refreshServicesIndex: vi.fn() });
+    installFinderOpenFolderWorkflow({
+      platform: "darwin",
+      locale: "en-US",
+      applicationName: "Example Product",
+      homeDir,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      refreshServicesIndex: vi.fn(),
+    });
     const info = readInfoPlist(homeDir);
     expect(info).toContain("Open in Example Product");
     expect(info).toContain("dev.zcode.app.finder-open-workflow");

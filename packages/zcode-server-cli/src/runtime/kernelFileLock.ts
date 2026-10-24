@@ -20,17 +20,26 @@ try {
 `;
 
 export async function tryAcquireKernelFileLock(path: string): Promise<Worker | null> {
-  const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(program)}`), { workerData: path, execArgv: [] });
+  const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(program)}`), {
+    workerData: path,
+    execArgv: [],
+  });
   try {
-    const result = await new Promise<{ state: string; code?: string; errcode?: number }>((resolve, reject) => {
-      worker.once("error", reject);
-      worker.once("exit", () => reject(new Error("Server lock worker exited before acquisition")));
-      worker.once("message", resolve);
-    });
+    const result = await new Promise<{ state: string; code?: string; errcode?: number }>(
+      (resolve, reject) => {
+        worker.once("error", reject);
+        worker.once("exit", () =>
+          reject(new Error("Server lock worker exited before acquisition")),
+        );
+        worker.once("message", resolve);
+      },
+    );
     if (result.state === "acquired") return worker;
     await worker.terminate();
     if (result.state === "busy") return null;
-    throw new Error(`Cannot acquire Server kernel lock (code=${result.code ?? "unknown"}, sqlite=${result.errcode ?? "unknown"})`);
+    throw new Error(
+      `Cannot acquire Server kernel lock (code=${result.code ?? "unknown"}, sqlite=${result.errcode ?? "unknown"})`,
+    );
   } catch (error) {
     await worker.terminate();
     throw error;
@@ -45,13 +54,25 @@ export async function releaseKernelFileLock(worker: Worker): Promise<void> {
       worker.off("exit", finish);
       worker.off("error", fail);
     };
-    const finish = (): void => { cleanup(); resolve(); };
-    const fail = (error: Error): void => { cleanup(); reject(error); };
+    const finish = (): void => {
+      cleanup();
+      resolve();
+    };
+    const fail = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
     worker.once("exit", finish);
     worker.once("error", fail);
     // 正常关闭由同一 worker 的 SQLite owner 完成；异常无响应才终止，不删除 guard。
-    const terminate = (): void => { void worker.terminate().then(finish, fail); };
+    const terminate = (): void => {
+      void worker.terminate().then(finish, fail);
+    };
     const timer = setTimeout(terminate, 1000);
-    try { worker.postMessage("release"); } catch { terminate(); }
+    try {
+      worker.postMessage("release");
+    } catch {
+      terminate();
+    }
   });
 }

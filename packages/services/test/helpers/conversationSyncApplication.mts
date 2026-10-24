@@ -35,9 +35,7 @@ const owner = new pg.Pool({
   password: config.password,
 });
 await migrateConversationSync(owner);
-await owner.query("select set_config('sync_fixture.password',$1,false)", [
-  config.runtimePassword,
-]);
+await owner.query("select set_config('sync_fixture.password',$1,false)", [config.runtimePassword]);
 await owner.query(
   `do $$ begin execute format('create role sync_application_fixture login password %L nosuperuser nobypassrls', current_setting('sync_fixture.password')); end $$`,
 );
@@ -45,9 +43,7 @@ await owner.query("grant zcode_sync_runtime to sync_application_fixture");
 await owner.query(
   `do $$ begin execute format('create role sync_application_configuration login password %L nosuperuser nobypassrls', current_setting('sync_fixture.password')); end $$`,
 );
-await owner.query(
-  "grant zcode_sync_configurator to sync_application_configuration",
-);
+await owner.query("grant zcode_sync_configurator to sync_application_configuration");
 const pool = new pg.Pool({
   host: config.host,
   port: config.port,
@@ -100,13 +96,7 @@ const gateway = createConversationSyncGateway({
   logger: log,
 });
 setDataBaseDir(config.root);
-const index = new TaskIndexRepo(
-  undefined,
-  undefined,
-  undefined,
-  undefined,
-  "conversation",
-);
+const index = new TaskIndexRepo(undefined, undefined, undefined, undefined, "conversation");
 await createFileService({
   onConversationWorkspaceEnsured: () => index.registerConversationWorkspace(),
 }).ensureConversationWorkspace();
@@ -124,10 +114,7 @@ const agent = {
     });
     const stored = await source.getSession(params.sessionId as SessionId);
     // 上游 CLI 独占标题和删除事实；夹具也必须从真实 store 捕获，不能由 Host 补造。
-    if (
-      !stored ||
-      (stored.titleSource !== "generated" && stored.titleSource !== "custom")
-    )
+    if (!stored || (stored.titleSource !== "generated" && stored.titleSource !== "custom"))
       throw new Error("fixture_cli_facts_missing");
     return {
       dataBase64: Buffer.from(JSON.stringify(value)).toString("base64"),
@@ -150,9 +137,7 @@ const agent = {
         },
         searchableText: value.messages
           .flatMap((message) =>
-            message.parts
-              .filter((part) => part.type === "text")
-              .map((part) => part.text),
+            message.parts.filter((part) => part.type === "text").map((part) => part.text),
           )
           .join("\n"),
       },
@@ -173,9 +158,7 @@ const credentials = {
     credentialValues.delete(key);
   },
 };
-const { createConversationHost } = await import(
-  pathToFileURL(config.hostModule).href
-);
+const { createConversationHost } = await import(pathToFileURL(config.hostModule).href);
 let host = await createConversationHost({
   conversations,
   credentials,
@@ -340,8 +323,7 @@ const server = createServer(async (request, response) => {
         logger: log,
       });
       result = { projectionRemoved: true };
-    } else if (input.action === "call")
-      result = await host.call(input.method, input.input ?? {});
+    } else if (input.action === "call") result = await host.call(input.method, input.input ?? {});
     else if (input.action === "rename") {
       const stored = await source.updateSession({
         id: input.session as SessionId,

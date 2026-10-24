@@ -9,81 +9,140 @@ import type { LocalRuntimeMaintenance } from "@zcode/shared";
 
 async function fixture(run: (path: string) => Promise<void>) {
   const folder = await mkdtemp(join(tmpdir(), "zcode-maintenance-"));
-  try { await run(join(folder, "operation.json")); }
-  finally { await rm(folder, { recursive: true, force: true }); }
+  try {
+    await run(join(folder, "operation.json"));
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
 }
 
-it("retains Core admission and durable operation until exact release", async () => fixture(async path => {
-  const operationId = randomUUID();
-  const http = { tryBeginIdleShutdown: vi.fn(() => true), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle: LocalRuntimeMaintenance = async input => ({ state: input.action === "cancel" ? "released" : "held",
-    operationId: input.action === "cancel" ? null : input.operationId });
-  const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
-  expect(await owner.handle({ action: "begin", operationId })).toEqual({ state: "held", operationId });
-  expect(await readMaintenanceOperation(path)).toBe(operationId);
-  expect(http.tryBeginIdleShutdown).toHaveBeenCalledOnce();
-  expect(await owner.handle({ action: "cancel", operationId: randomUUID() }))
-    .toMatchObject({ state: "blocked", reasonCode: "operation_conflict" });
-  expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
-  // A restarted Core uses initiallyPaused and cannot silently discard the durable operation.
-  const restarted = new CoreMaintenance(path, http, lifecycle, () => false, await readMaintenanceOperation(path));
-  expect((await restarted.handle({ action: "begin", operationId })).state).toBe("held");
-  expect(http.tryBeginIdleShutdown).toHaveBeenCalledOnce();
-  expect(await restarted.handle({ action: "cancel", operationId })).toEqual({ operationId: null, state: "released" });
-  expect(await readMaintenanceOperation(path)).toBeNull();
-  expect(http.resumeAfterMaintenance).toHaveBeenCalledOnce();
-}));
+it("retains Core admission and durable operation until exact release", async () =>
+  fixture(async (path) => {
+    const operationId = randomUUID();
+    const http = {
+      tryBeginIdleShutdown: vi.fn(() => true),
+      resumeAfterMaintenance: vi.fn(),
+    } as unknown as CoreHttpServer;
+    const lifecycle: LocalRuntimeMaintenance = async (input) => ({
+      state: input.action === "cancel" ? "released" : "held",
+      operationId: input.action === "cancel" ? null : input.operationId,
+    });
+    const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
+    expect(await owner.handle({ action: "begin", operationId })).toEqual({
+      state: "held",
+      operationId,
+    });
+    expect(await readMaintenanceOperation(path)).toBe(operationId);
+    expect(http.tryBeginIdleShutdown).toHaveBeenCalledOnce();
+    expect(await owner.handle({ action: "cancel", operationId: randomUUID() })).toMatchObject({
+      state: "blocked",
+      reasonCode: "operation_conflict",
+    });
+    expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
+    // A restarted Core uses initiallyPaused and cannot silently discard the durable operation.
+    const restarted = new CoreMaintenance(
+      path,
+      http,
+      lifecycle,
+      () => false,
+      await readMaintenanceOperation(path),
+    );
+    expect((await restarted.handle({ action: "begin", operationId })).state).toBe("held");
+    expect(http.tryBeginIdleShutdown).toHaveBeenCalledOnce();
+    expect(await restarted.handle({ action: "cancel", operationId })).toEqual({
+      operationId: null,
+      state: "released",
+    });
+    expect(await readMaintenanceOperation(path)).toBeNull();
+    expect(http.resumeAfterMaintenance).toHaveBeenCalledOnce();
+  }));
 
-it("busy or automation never pauses HTTP or invokes the runtime owner", async () => fixture(async path => {
-  const http = { tryBeginIdleShutdown: vi.fn(() => true), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle = vi.fn<LocalRuntimeMaintenance>();
-  const owner = new CoreMaintenance(path, http, lifecycle, () => true, null);
-  expect(await owner.handle({ action: "begin", operationId: randomUUID() }))
-    .toMatchObject({ state: "blocked", reasonCode: "native_activity" });
-  expect(http.tryBeginIdleShutdown).not.toHaveBeenCalled();
-  expect(lifecycle).not.toHaveBeenCalled();
-  expect(await readMaintenanceOperation(path)).toBeNull();
-}));
+it("busy or automation never pauses HTTP or invokes the runtime owner", async () =>
+  fixture(async (path) => {
+    const http = {
+      tryBeginIdleShutdown: vi.fn(() => true),
+      resumeAfterMaintenance: vi.fn(),
+    } as unknown as CoreHttpServer;
+    const lifecycle = vi.fn<LocalRuntimeMaintenance>();
+    const owner = new CoreMaintenance(path, http, lifecycle, () => true, null);
+    expect(await owner.handle({ action: "begin", operationId: randomUUID() })).toMatchObject({
+      state: "blocked",
+      reasonCode: "native_activity",
+    });
+    expect(http.tryBeginIdleShutdown).not.toHaveBeenCalled();
+    expect(lifecycle).not.toHaveBeenCalled();
+    expect(await readMaintenanceOperation(path)).toBeNull();
+  }));
 
-it("unknown runtime retirement stays fenced and cannot become a successful cancellation", async () => fixture(async path => {
-  const operationId = randomUUID();
-  const http = { tryBeginIdleShutdown: vi.fn(() => true), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle: LocalRuntimeMaintenance = async () => ({ state: "blocked", operationId, reasonCode: "unconfirmed" });
-  const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
-  expect((await owner.handle({ action: "begin", operationId })).state).toBe("blocked");
-  expect((await owner.handle({ action: "cancel", operationId })).state).toBe("blocked");
-  expect(await readMaintenanceOperation(path)).toBe(operationId);
-  expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
-}));
+it("unknown runtime retirement stays fenced and cannot become a successful cancellation", async () =>
+  fixture(async (path) => {
+    const operationId = randomUUID();
+    const http = {
+      tryBeginIdleShutdown: vi.fn(() => true),
+      resumeAfterMaintenance: vi.fn(),
+    } as unknown as CoreHttpServer;
+    const lifecycle: LocalRuntimeMaintenance = async () => ({
+      state: "blocked",
+      operationId,
+      reasonCode: "unconfirmed",
+    });
+    const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
+    expect((await owner.handle({ action: "begin", operationId })).state).toBe("blocked");
+    expect((await owner.handle({ action: "cancel", operationId })).state).toBe("blocked");
+    expect(await readMaintenanceOperation(path)).toBe(operationId);
+    expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
+  }));
 
-it.each(["native_activity", "unconfirmed"] as const)("idle stop preserves %s owner facts", async reasonCode => fixture(async path => {
-  const http = { tryBeginIdleShutdown: vi.fn(() => true), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle = vi.fn<LocalRuntimeMaintenance>(async input => input.action === "cancel" && reasonCode === "native_activity"
-    ? { state: "released", operationId: null }
-    : { state: "blocked", operationId: input.operationId, reasonCode });
-  const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
-  expect(await owner.prepareIdleStop()).toBe(false);
-  expect(lifecycle.mock.calls.map(([input]) => input.action)).toEqual(["begin", "cancel"]);
-  expect(lifecycle.mock.calls[0]![0].operationId).toBe(lifecycle.mock.calls[1]![0].operationId);
-  expect(http.resumeAfterMaintenance).toHaveBeenCalledTimes(reasonCode === "native_activity" ? 1 : 0);
-  expect(await readMaintenanceOperation(path)).toBeNull();
-}));
+it.each(["native_activity", "unconfirmed"] as const)(
+  "idle stop preserves %s owner facts",
+  async (reasonCode) =>
+    fixture(async (path) => {
+      const http = {
+        tryBeginIdleShutdown: vi.fn(() => true),
+        resumeAfterMaintenance: vi.fn(),
+      } as unknown as CoreHttpServer;
+      const lifecycle = vi.fn<LocalRuntimeMaintenance>(async (input) =>
+        input.action === "cancel" && reasonCode === "native_activity"
+          ? { state: "released", operationId: null }
+          : { state: "blocked", operationId: input.operationId, reasonCode },
+      );
+      const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
+      expect(await owner.prepareIdleStop()).toBe(false);
+      expect(lifecycle.mock.calls.map(([input]) => input.action)).toEqual(["begin", "cancel"]);
+      expect(lifecycle.mock.calls[0]![0].operationId).toBe(lifecycle.mock.calls[1]![0].operationId);
+      expect(http.resumeAfterMaintenance).toHaveBeenCalledTimes(
+        reasonCode === "native_activity" ? 1 : 0,
+      );
+      expect(await readMaintenanceOperation(path)).toBeNull();
+    }),
+);
 
-it("idle stop retains the owner barrier through shutdown without a restart marker", async () => fixture(async path => {
-  const http = { tryBeginIdleShutdown: vi.fn(() => true), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle = vi.fn<LocalRuntimeMaintenance>(async input => ({ state: "held", operationId: input.operationId }));
-  const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
-  expect(await owner.prepareIdleStop()).toBe(true);
-  expect(lifecycle.mock.calls.map(([input]) => input.action)).toEqual(["begin"]);
-  expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
-  expect(await readMaintenanceOperation(path)).toBeNull();
-}));
+it("idle stop retains the owner barrier through shutdown without a restart marker", async () =>
+  fixture(async (path) => {
+    const http = {
+      tryBeginIdleShutdown: vi.fn(() => true),
+      resumeAfterMaintenance: vi.fn(),
+    } as unknown as CoreHttpServer;
+    const lifecycle = vi.fn<LocalRuntimeMaintenance>(async (input) => ({
+      state: "held",
+      operationId: input.operationId,
+    }));
+    const owner = new CoreMaintenance(path, http, lifecycle, () => false, null);
+    expect(await owner.prepareIdleStop()).toBe(true);
+    expect(lifecycle.mock.calls.map(([input]) => input.action)).toEqual(["begin"]);
+    expect(http.resumeAfterMaintenance).not.toHaveBeenCalled();
+    expect(await readMaintenanceOperation(path)).toBeNull();
+  }));
 
-it("idle stop with known activity does not close admission", async () => fixture(async path => {
-  const http = { tryBeginIdleShutdown: vi.fn(), resumeAfterMaintenance: vi.fn() } as unknown as CoreHttpServer;
-  const lifecycle = vi.fn<LocalRuntimeMaintenance>();
-  const owner = new CoreMaintenance(path, http, lifecycle, () => true, null);
-  expect(await owner.prepareIdleStop()).toBe(false);
-  expect(http.tryBeginIdleShutdown).not.toHaveBeenCalled();
-  expect(lifecycle).not.toHaveBeenCalled();
-}));
+it("idle stop with known activity does not close admission", async () =>
+  fixture(async (path) => {
+    const http = {
+      tryBeginIdleShutdown: vi.fn(),
+      resumeAfterMaintenance: vi.fn(),
+    } as unknown as CoreHttpServer;
+    const lifecycle = vi.fn<LocalRuntimeMaintenance>();
+    const owner = new CoreMaintenance(path, http, lifecycle, () => true, null);
+    expect(await owner.prepareIdleStop()).toBe(false);
+    expect(http.tryBeginIdleShutdown).not.toHaveBeenCalled();
+    expect(lifecycle).not.toHaveBeenCalled();
+  }));

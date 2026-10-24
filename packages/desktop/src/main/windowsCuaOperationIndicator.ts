@@ -170,7 +170,10 @@ export function createWindowsCuaOperationIndicator(
   }
 
   function positionWindow(target: WindowsCuaOperationIndicatorWindow): void {
-    const { width, height } = indicatorWindowSize(options.getLocale(), options.getApplicationName?.());
+    const { width, height } = indicatorWindowSize(
+      options.getLocale(),
+      options.getApplicationName?.(),
+    );
     const point = getCursorScreenPoint();
     const { workArea } = getDisplayNearestPoint(point);
     target.setBounds({
@@ -239,7 +242,10 @@ export function createWindowsCuaOperationIndicator(
 
     let created: WindowsCuaOperationIndicatorWindow | null = null;
     try {
-      const { width, height } = indicatorWindowSize(options.getLocale(), options.getApplicationName?.());
+      const { width, height } = indicatorWindowSize(
+        options.getLocale(),
+        options.getApplicationName?.(),
+      );
       created = createWindow({
         width,
         height,

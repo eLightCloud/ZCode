@@ -9,8 +9,10 @@ import {
 import type { ZCodeAgentProcessManager } from "./zcodeAgentProcessManager.js";
 import type { ZCodeProtocolClient } from "./zcodeProtocolClient.js";
 
-type Manager = Pick<ZCodeAgentProcessManager,
-  "holdLocalMaintenance" | "releaseLocalMaintenance" | "listManagedProcesses">;
+type Manager = Pick<
+  ZCodeAgentProcessManager,
+  "holdLocalMaintenance" | "releaseLocalMaintenance" | "listManagedProcesses"
+>;
 
 /** Local constructor capability, deliberately absent from remotely exposed AgentService methods. */
 export function createLocalRuntimeMaintenance(
@@ -19,29 +21,43 @@ export function createLocalRuntimeMaintenance(
 ): LocalRuntimeMaintenance {
   let active: { operationId: string; clients: Set<ZCodeProtocolClient> } | undefined;
   let tail: Promise<unknown> = Promise.resolve();
-  const blocked = (reasonCode: "native_activity" | "operation_conflict" | "unconfirmed"):
-  RuntimeMaintenanceResult => ({ operationId: active?.operationId ?? null, state: "blocked", reasonCode });
-  const call = (client: ZCodeProtocolClient, input: RuntimeMaintenanceParams) => client.request(
-    zcodeProtocolMethods.processIdleMaintenance, input, runtimeMaintenanceResultSchema,
-    { lifecycle: "observation", timeoutMs: 10_000 },
-  );
+  const blocked = (
+    reasonCode: "native_activity" | "operation_conflict" | "unconfirmed",
+  ): RuntimeMaintenanceResult => ({
+    operationId: active?.operationId ?? null,
+    state: "blocked",
+    reasonCode,
+  });
+  const call = (client: ZCodeProtocolClient, input: RuntimeMaintenanceParams) =>
+    client.request(
+      zcodeProtocolMethods.processIdleMaintenance,
+      input,
+      runtimeMaintenanceResultSchema,
+      { lifecycle: "observation", timeoutMs: 10_000 },
+    );
   async function run(raw: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
     const input = runtimeMaintenanceParamsSchema.parse(raw);
     if (active && active.operationId !== input.operationId) return blocked("operation_conflict");
     if (input.action === "cancel") {
       if (!active) return { operationId: null, state: "released" };
-      if (managers.some(manager => !manager.holdLocalMaintenance(input.operationId))) {
+      if (managers.some((manager) => !manager.holdLocalMaintenance(input.operationId))) {
         return blocked("unconfirmed");
       }
-      const live = new Set(managers.flatMap(manager => manager.listManagedProcesses()).map(runtime => runtime.client));
+      const live = new Set(
+        managers
+          .flatMap((manager) => manager.listManagedProcesses())
+          .map((runtime) => runtime.client),
+      );
       for (const client of active.clients) {
         // Manager guard also accounts for retired-but-not-yet-exited owned processes.
         if (!live.has(client)) continue;
         try {
           if ((await call(client, input)).state !== "released") return blocked("unconfirmed");
-        } catch { return blocked("unconfirmed"); }
+        } catch {
+          return blocked("unconfirmed");
+        }
       }
-      if (managers.some(manager => !manager.releaseLocalMaintenance(input.operationId))) {
+      if (managers.some((manager) => !manager.releaseLocalMaintenance(input.operationId))) {
         return blocked("unconfirmed");
       }
       active = undefined;
@@ -60,12 +76,19 @@ export function createLocalRuntimeMaintenance(
       }
       active = { operationId: input.operationId, clients: new Set() };
     }
-    if (hasWaitingStartup() || managers.some(manager => !manager.holdLocalMaintenance(input.operationId))) {
+    if (
+      hasWaitingStartup() ||
+      managers.some((manager) => !manager.holdLocalMaintenance(input.operationId))
+    ) {
       return blocked("native_activity");
     }
-    for (const runtime of managers.flatMap(manager => manager.listManagedProcesses())) {
+    for (const runtime of managers.flatMap((manager) => manager.listManagedProcesses())) {
       const client = runtime.client;
-      if (client.isDisposed || client.storageStartup.isWaiting || client.pendingOperationRequestCount) {
+      if (
+        client.isDisposed ||
+        client.storageStartup.isWaiting ||
+        client.pendingOperationRequestCount
+      ) {
         return blocked("native_activity");
       }
       try {
@@ -81,18 +104,26 @@ export function createLocalRuntimeMaintenance(
         } else if (status.state !== "held" || status.operationId !== input.operationId) {
           return blocked("unconfirmed");
         }
-      } catch { return blocked("unconfirmed"); }
+      } catch {
+        return blocked("unconfirmed");
+      }
     }
     // A process can retire while an awaited CLI response is in flight. The
     // manager owns OS-exit/cleanup evidence, including entries no longer in its map.
-    if (hasWaitingStartup() || managers.some(manager => !manager.holdLocalMaintenance(input.operationId))) {
+    if (
+      hasWaitingStartup() ||
+      managers.some((manager) => !manager.holdLocalMaintenance(input.operationId))
+    ) {
       return blocked("unconfirmed");
     }
     return { operationId: input.operationId, state: "held" };
   }
   return (input) => {
     const pending = tail.then(() => run(input));
-    tail = pending.then(() => undefined, () => undefined);
+    tail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
     return pending;
   };
 }

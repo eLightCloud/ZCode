@@ -9,21 +9,41 @@ it("disconnect cancellation does not settle an admitted service operation", asyn
   const client = new ChannelClient(clientProtocol);
   let entered!: () => void;
   let finish!: () => void;
-  const started = new Promise<void>(resolve => { entered = resolve; });
-  const completed = new Promise<void>(resolve => { finish = resolve; });
-  server.registerChannel("work", { call: async () => { entered(); await completed; return undefined; },
-    listen: () => Event.None });
-  const pending = client.getChannel("work").call("run").catch(() => undefined);
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const completed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  server.registerChannel("work", {
+    call: async () => {
+      entered();
+      await completed;
+      return undefined;
+    },
+    listen: () => Event.None,
+  });
+  const pending = client
+    .getChannel("work")
+    .call("run")
+    .catch(() => undefined);
   try {
     await started;
     client.dispose();
     server.dispose();
     let settled = false;
-    const retirement = server.whenCallsSettled().then(() => { settled = true; });
+    const retirement = server.whenCallsSettled().then(() => {
+      settled = true;
+    });
     await Promise.resolve();
     expect(settled).toBe(false);
     finish();
     await retirement;
     expect(settled).toBe(true);
-  } finally { finish(); client.dispose(); server.dispose(); await pending; }
+  } finally {
+    finish();
+    client.dispose();
+    server.dispose();
+    await pending;
+  }
 });

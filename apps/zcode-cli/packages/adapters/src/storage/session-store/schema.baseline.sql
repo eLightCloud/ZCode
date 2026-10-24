@@ -181,7 +181,7 @@ CREATE TABLE session (
         time_compacting integer,
         time_archived integer
       , task_type text not null default 'interactive', title_source text not null default 'first_input'
-        check(title_source in ('default', 'first_input', 'generated', 'custom')), title_message_id text, time_title_updated integer, trace_id text, time_deleted integer, last_outcome text);
+        check(title_source in ('default', 'first_input', 'generated', 'custom')), title_message_id text, time_title_updated integer, trace_id text, time_deleted integer, last_outcome text, last_outcome_input_id text, last_outcome_at integer);
 
 CREATE TABLE session_continuation (
   session_id text primary key,
@@ -568,3 +568,39 @@ CREATE TRIGGER part_sequence_autofill
         )
         where id = new.id;
       end;
+
+CREATE TRIGGER portable_context_message_delete before delete on message begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_message_insert before insert on message begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_message_update before update on message begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_part_delete before delete on part begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_part_insert before insert on part begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_part_update before update on part begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_delete before delete on session begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_entry_delete before delete on session_entry begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_entry_insert before insert on session_entry begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_entry_update before update on session_entry begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_input_delete before delete on session_input begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_input_insert before insert on session_input begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_input_update before update on session_input begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_insert before insert on session begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_session_update before update on session begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_todo_delete before delete on todo begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_todo_insert before insert on todo begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;
+
+CREATE TRIGGER portable_context_todo_update before update on todo begin select case when zcode_portable_context_version()<4 then raise(abort,'portable context writer required') end; end;

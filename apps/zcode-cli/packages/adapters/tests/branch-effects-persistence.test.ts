@@ -1,12 +1,80 @@
 import { createSqliteSessionStore } from "../src/storage/session-store.js";
 import { checkpoint } from "../checks/sync-fixture.mjs";
-import type { ProjectId, SessionId } from "@zcode/contracts";
+import type { ProjectId, SessionId, TextCheckpoint } from "@zcode/contracts";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { checkpointEffectReferences, textCheckpointSchema } from "@zcode/contracts";
+
+it("keeps an explicitly empty effect snapshot identical through offline apply and cold restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "empty-effects-continuation-"));
+  const source = await createSqliteSessionStore({ dbPath: join(root, "source.sqlite") });
+  const targetPath = join(root, "target.sqlite");
+  let target = await createSqliteSessionStore({ dbPath: targetPath });
+  const location = { directory: root, projectID: "synthetic" as ProjectId };
+  const original = checkpoint("empty-effects-session");
+  let current: TextCheckpoint = {
+    ...original,
+    version: 4,
+    session: { ...original.session, lastOutcome: "completed" },
+  };
+  const session = current.session.id;
+  try {
+    for (const [store, branchMode] of [
+      [source, "primary"],
+      [target, "offline"],
+    ] as const) {
+      const operation = randomUUID();
+      await store.controlContinuation({ kind: "close", session, operation }, location);
+      await store.controlContinuation(
+        {
+          kind: "stage",
+          session,
+          operation,
+          branchMode,
+          management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+          dataBase64: Buffer.from(JSON.stringify(current)).toString("base64"),
+        },
+        location,
+      );
+      await store.controlContinuation({ kind: "apply", session, operation }, location);
+      expect(
+        JSON.parse(
+          JSON.stringify(await store.exportTextCheckpoint({ sessionID: session as SessionId })),
+        ),
+      ).toEqual(current);
+      await store.controlContinuation(
+        branchMode === "offline"
+          ? { kind: "activateOffline", session, operation, generation: 0, version: "chosen" }
+          : { kind: "activate", session, operation, generation: 1, version: "chosen" },
+        location,
+      );
+      if (branchMode === "primary") {
+        await store.controlContinuation(
+          { kind: "effects", session, operation, generation: 1, revision: 5, effects: [] },
+          location,
+        );
+        current = JSON.parse(
+          JSON.stringify(await store.exportTextCheckpoint({ sessionID: session as SessionId })),
+        );
+        expect(current.branchEffects).toEqual([]);
+      }
+    }
+    target.close();
+    target = await createSqliteSessionStore({ dbPath: targetPath });
+    expect(
+      JSON.parse(
+        JSON.stringify(await target.exportTextCheckpoint({ sessionID: session as SessionId })),
+      ),
+    ).toEqual(current);
+  } finally {
+    source.close();
+    target.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it("does not invent an external effect for a rejected check, while preserving real execution uncertainty", () => {
   const original = checkpoint("not-started-session");

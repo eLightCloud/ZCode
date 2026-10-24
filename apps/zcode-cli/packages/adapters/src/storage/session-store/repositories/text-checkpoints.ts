@@ -144,7 +144,7 @@ export function importTextCheckpoint(
             checkpoint.modelSelectionEntryId,
             ...(checkpoint.execution ? [checkpoint.execution.id] : []),
             ...(checkpoint.commandFacts ?? []).map((fact) => fact.id),
-            ...(checkpoint.branchEffects?.length ? ["branch-effects:" + sessionID] : []),
+            ...(checkpoint.branchEffects !== undefined ? ["branch-effects:" + sessionID] : []),
           ].flat(),
         ],
         ["session_input", checkpoint.inputs.map((input) => input.id)],
@@ -215,7 +215,7 @@ export function importTextCheckpoint(
         data: checkpoint.modelSelection,
         touchSession: false,
       });
-      if (checkpoint.branchEffects?.length)
+      if (checkpoint.branchEffects !== undefined)
         saveSessionEntry(db, {
           id: "branch-effects:" + sessionID,
           sessionID,

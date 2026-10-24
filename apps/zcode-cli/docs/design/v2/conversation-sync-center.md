@@ -394,6 +394,10 @@ workspace snapshots and file rewind remain subject to registered dependency proo
 A child inherits original account attribution only from an already attributed native
 parent in the same installation. Unknown legacy attribution requires explicit review.
 
+An explicitly present `branchEffects: []` is a confirmed empty snapshot and must
+survive import and cold export. An absent field remains absent; neither form grants
+permission or clears another saved branch's resource effects.
+
 Format v4 preserves native settled compact timeline parts as well as boundary parts;
 only native system timeline messages may use maintenance finish values and a prior
 assistant parent. Ordinary model replies still require an earlier user parent.

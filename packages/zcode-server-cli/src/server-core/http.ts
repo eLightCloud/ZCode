@@ -44,6 +44,7 @@ import {
   conversationRuntimeCommandSchema,
   conversationContentRequestSchema,
   conversationRuntimeIdentitySchema,
+  conversationRuntimeErrorCode,
   type ConversationRuntimePort,
 } from "@zcode/shared";
 import { createHostCapabilityStore, type HostCapabilityStore } from "./hostCapability.js";
@@ -407,15 +408,7 @@ export async function createCoreHttpServer(
       });
       return context.json(result);
     } catch (error) {
-      const code =
-        error &&
-        typeof error === "object" &&
-        "data" in error &&
-        error.data &&
-        typeof error.data === "object" &&
-        "code" in error.data
-          ? String(error.data.code)
-          : "blocked";
+      const code = conversationRuntimeErrorCode(error);
       log.warn(undefined, "Continuation control rejected", {
         event: "conversation.continuation.control",
         ...identity,

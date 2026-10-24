@@ -733,6 +733,36 @@ modules:
       ui: .
     owner: conversation
 
+  # conversation-sync：原生既有组件的明确 owner / public facade
+  - id: conversation-sync
+    roots:
+      - apps/zcode-cli/packages/adapters/src/conversation-sync
+    managed: true
+    requires:
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/adapters/src/conversation-sync/index.ts
+      - apps/zcode-cli/packages/adapters/src/conversation-sync/contract.ts
+    layers:
+      adapters: .
+    owner: conversation
+  # conversation-continuation-host：原生既有组件的明确 owner / public facade
+  - id: conversation-continuation-host
+    roots:
+      - packages/services/src/session/conversation-continuation-host
+    managed: true
+    requires:
+      - services
+      - session
+      - shared
+    publicEntrypoints:
+      - packages/services/src/session/conversation-continuation-host/index.ts
+      - packages/services/src/session/conversation-continuation-host/contract.ts
+    layers:
+      adapters: .
+    owner: conversation
+
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。
   # 基于领先 staging 很多的分支开工时，merge-base 之前的"新增"文件不应被追溯。

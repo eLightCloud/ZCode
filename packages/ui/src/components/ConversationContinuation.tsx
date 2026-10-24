@@ -1,9 +1,17 @@
 import { useState } from "react";
-import type { ConversationHistoryReader, ConversationContinuationIntent } from "@zcode/shared";
+import type {
+  ConversationHistoryReader,
+  ConversationContinuationIntent,
+  ModelSelection,
+} from "@zcode/shared";
 import { useConversationContinuation } from "../hooks/useConversationContinuation.js";
 import { Button } from "./ui/button.js";
 
 export interface ConversationContinuationLabels {
+  model: string;
+  keepModel: string;
+  modelWarning: string;
+  capability: string;
   target: string;
   prepareTarget: string;
   choose: string;
@@ -41,10 +49,15 @@ export function ConversationContinuation({
 }) {
   const state = useConversationContinuation(reader, session);
   const [target, setTarget] = useState("");
+  const [model, setModel] = useState<ModelSelection | null>(null);
   const [confirm, setConfirm] = useState<ConversationContinuationIntent["kind"] | null>(null);
   const options = state.options,
     selected = options?.targets.find((value) => value.location === target) ?? options?.targets[0];
   const readyTarget = options?.targets.find((value) => value.location === state.result?.location);
+  const chosenModel = selected?.models?.find(
+    (value) => JSON.stringify(value.selection) === JSON.stringify(model),
+  );
+  const modelUnavailable = model !== null && !chosenModel;
   const result = state.result;
   const message = state.error
     ? state.error === "stale"
@@ -62,11 +75,13 @@ export function ConversationContinuation({
               ? labels.forwardOnly
               : result?.status === "stale"
                 ? labels.stale
-                : result?.reason === "busy"
-                  ? labels.busy
-                  : result
-                    ? labels.waiting
-                    : null;
+                : result?.reason === "capability"
+                  ? labels.capability
+                  : result?.reason === "busy"
+                    ? labels.busy
+                    : result
+                      ? labels.waiting
+                      : null;
   return (
     <div
       className="border-border space-y-3 rounded-md border p-3 text-ui-base"
@@ -89,10 +104,11 @@ export function ConversationContinuation({
             {labels.target}
             <select
               aria-label={labels.target}
-              className="border-input bg-background min-h-11 rounded-md border px-3 text-mobile-input-safe"
+              className="border-input bg-background min-h-11 min-w-0 w-full rounded-md border px-3 text-mobile-input-safe"
               value={selected?.location ?? ""}
               onChange={(event) => {
                 setTarget(event.target.value);
+                setModel(null);
                 setConfirm(null);
               }}
             >
@@ -103,6 +119,36 @@ export function ConversationContinuation({
               ))}
             </select>
           </label>
+          {!!selected?.models?.length && (
+            <label className="flex flex-col gap-2">
+              {labels.model}
+              <select
+                aria-label={labels.model}
+                className="border-input bg-background min-h-11 min-w-0 w-full rounded-md border px-3 text-mobile-input-safe"
+                value={model ? JSON.stringify(model) : ""}
+                onChange={(event) => {
+                  setModel(
+                    selected.models?.find(
+                      (value) => JSON.stringify(value.selection) === event.target.value,
+                    )?.selection ?? null,
+                  );
+                  setConfirm(null);
+                }}
+              >
+                <option value="">{labels.keepModel}</option>
+                {selected.models.map((value) => (
+                  <option
+                    key={JSON.stringify(value.selection)}
+                    value={JSON.stringify(value.selection)}
+                  >
+                    {value.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-muted-foreground text-ui-caption">{labels.modelWarning}</span>
+            </label>
+          )}
+          {modelUnavailable && <p role="alert">{labels.unavailable}</p>}
           {confirm ? (
             <div
               role="group"
@@ -113,18 +159,24 @@ export function ConversationContinuation({
               }}
             >
               <p>{confirm === "offline" ? labels.offlineWarning : labels.warning}</p>
+              {chosenModel && (
+                <p>
+                  {labels.model}: {chosenModel.label}
+                </p>
+              )}
               <div className="flex flex-wrap gap-3">
                 <Button autoFocus variant="outline" onClick={() => setConfirm(null)}>
                   {labels.back}
                 </Button>
                 <Button
-                  disabled={!selected}
+                  disabled={!selected || modelUnavailable}
                   onClick={() => {
                     if (selected) {
                       void state.start(
                         confirm,
                         selected.location,
                         confirm === "handoff" ? options!.active!.version : version,
+                        chosenModel?.selection,
                       );
                       setConfirm(null);
                     }

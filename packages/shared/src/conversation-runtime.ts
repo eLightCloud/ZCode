@@ -2,6 +2,16 @@ import { z } from "zod";
 import { conversationSessionIdSchema, conversationIndexFactsSchema } from "./conversation-sync.js";
 import { conversationScopeSchema } from "./conversation-sync.js";
 import { conversationFileSchema } from "./conversation-files.js";
+import { modelSelectionSchema } from "./model-selection.js";
+
+/** Safe current choices, projected by the target's native model facade. */
+export const conversationModelOptionSchema = z
+  .object({
+    label: z.string().min(1).max(256),
+    selection: modelSelectionSchema,
+  })
+  .strict();
+export type ConversationModelOption = z.infer<typeof conversationModelOptionSchema>;
 
 const session = conversationSessionIdSchema;
 // Version and location references are opaque SQL identities, never directory segments.
@@ -85,13 +95,18 @@ export const conversationRuntimeResultSchema = z
   .strict();
 export type ConversationRuntimeResult = z.infer<typeof conversationRuntimeResultSchema>;
 export interface ConversationRuntimePort {
+  models?(): Promise<ConversationModelOption[]>;
   content?(
     input: import("./conversation-files.js").ConversationContentRequest,
   ): Promise<import("./conversation-files.js").ConversationContentResult>;
   control(input: ConversationRuntimeCommand): Promise<ConversationRuntimeResult>;
 }
 export const conversationRuntimeIdentitySchema = z
-  .object({ location: reference, scope: conversationScopeSchema })
+  .object({
+    location: reference,
+    scope: conversationScopeSchema,
+    models: z.array(conversationModelOptionSchema).max(500).optional(),
+  })
   .strict();
 export const conversationCaptureBaseSchema = z
   .object({ baseVersion: reference.nullable() })
@@ -100,4 +115,20 @@ export class ConversationRuntimeError extends Error {
   constructor(readonly code: string) {
     super("Native continuation: " + code);
   }
+}
+
+/** The JSON-RPC envelope code is numeric; native domain codes live in data.code. */
+export function conversationRuntimeErrorCode(error: unknown): string {
+  const nested =
+    error &&
+    typeof error === "object" &&
+    "data" in error &&
+    error.data &&
+    typeof error.data === "object" &&
+    "code" in error.data
+      ? error.data.code
+      : undefined;
+  const direct = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  const code = typeof nested === "string" ? nested : direct;
+  return typeof code === "string" && /^[a-z_]{1,64}$/.test(code) ? code : "unavailable";
 }

@@ -1,5 +1,6 @@
 import type { ModelSelection } from "@zcode/contracts";
 import type { ModelSelectionFacade } from "@zcode/provider";
+import { isDeepStrictEqual } from "node:util";
 /** Current native provider view owns capability checks; there is no replacement-model fallback. */
 export function continuationModelValidator(
   modelSelectionFacade: Pick<ModelSelectionFacade, "getView">,
@@ -29,6 +30,8 @@ export function continuationModelValidator(
       !view.selectionIssue &&
       view.effectiveSelection.providerId === selection.providerId &&
       view.effectiveSelection.modelId === selection.modelId &&
+      isDeepStrictEqual(view.effectiveSelection, selection) &&
+      format?.supportsText === true &&
       filesSupported
     );
   };

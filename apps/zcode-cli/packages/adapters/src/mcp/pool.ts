@@ -17,34 +17,45 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
   const entries = new Map<string, PoolEntry>();
   const idleGraceMs = options.idleGraceMs ?? DEFAULT_IDLE_GRACE_MS;
   const logger = options.logger?.child({ module: "adapters.mcp.pool" });
-  const poolState: { closed: boolean; leaseSequence: number } = { closed: false, leaseSequence: 0 };
+  const poolState: { closed: boolean; leaseSequence: number; closePromise?: Promise<void> } = {
+    closed: false,
+    leaseSequence: 0,
+  };
+  const closingEntries = new Set<Promise<void>>();
 
-  const closeEntry = async (entry: PoolEntry): Promise<void> => {
+  const closeEntry = (entry: PoolEntry): Promise<void> => {
+    if (entry.closing) return entry.closing;
     const startedAt = Date.now();
     if (entry.closeTimer) clearTimeout(entry.closeTimer);
     entry.closeTimer = undefined;
     if (entries.get(entry.key) === entry) entries.delete(entry.key);
-    try {
-      await entry.adapter.close();
-      logger?.info("MCP pooled connection closed", {
-        ...entry.connectionContext,
-        durationMs: Date.now() - startedAt,
-        event: "mcp.pool.connection.closed",
-        mcpServerName: entry.serverName,
-        status: "completed",
-      });
-    } catch (error) {
-      logger?.warn("MCP pooled connection close failed", {
-        ...entry.connectionContext,
-        error: error instanceof Error ? error.message : String(error),
-        event: "mcp.pool.connection.close.failed",
-        mcpServerName: entry.serverName,
-      });
-    } finally {
-      options.telemetry?.unregisterConnection({
-        connectionId: entry.connectionContext.mcpConnectionId,
-      });
-    }
+    const closing = Promise.resolve().then(async () => {
+      try {
+        await entry.adapter.close();
+        logger?.info("MCP pooled connection closed", {
+          ...entry.connectionContext,
+          durationMs: Date.now() - startedAt,
+          event: "mcp.pool.connection.closed",
+          mcpServerName: entry.serverName,
+          status: "completed",
+        });
+      } catch (error) {
+        logger?.warn("MCP pooled connection close failed", {
+          ...entry.connectionContext,
+          error: error instanceof Error ? error.message : String(error),
+          event: "mcp.pool.connection.close.failed",
+          mcpServerName: entry.serverName,
+        });
+      } finally {
+        options.telemetry?.unregisterConnection({
+          connectionId: entry.connectionContext.mcpConnectionId,
+        });
+        closingEntries.delete(closing);
+      }
+    });
+    entry.closing = closing;
+    closingEntries.add(closing);
+    return closing;
   };
 
   const scheduleClose = (entry: PoolEntry): void => {
@@ -123,16 +134,20 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
     options,
     logger,
     scheduleClose,
+    closeEntry,
     revalidateEntry,
   );
 
   return {
     acquireLease,
     async close(): Promise<void> {
-      poolState.closed = true;
-      const pending = [...entries.values()];
-      entries.clear();
-      await Promise.all(pending.map(closeEntry));
+      if (!poolState.closePromise) {
+        poolState.closed = true;
+        for (const entry of [...entries.values()]) closeEntry(entry);
+        // final lease close 已将 entry 摘出可复用索引，仍须等同一批 adapter 完成。
+        poolState.closePromise = Promise.all([...closingEntries]).then(() => undefined);
+      }
+      await poolState.closePromise;
     },
     stats() {
       return {

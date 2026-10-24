@@ -20,11 +20,12 @@ import type { McpConnectionPoolOptions } from "./pool-contract.js";
 import { connectionKey, createConnectionContext } from "./pool-identity.js";
 
 export function createPooledMcpLeaseFactory(
-  poolState: { closed: boolean; leaseSequence: number },
+  poolState: { closed: boolean; leaseSequence: number; closePromise?: Promise<void> },
   entries: Map<string, PoolEntry>,
   options: McpConnectionPoolOptions,
   logger: Logger | undefined,
   scheduleClose: (entry: PoolEntry) => void,
+  closeEntry: (entry: PoolEntry) => Promise<void>,
   revalidateEntry: (
     entry: PoolEntry,
     config: McpServerConfig,
@@ -47,6 +48,7 @@ export function createPooledMcpLeaseFactory(
       }
     };
     let leaseClosed = false;
+    let closePromise: Promise<void> | undefined;
     let sessionStartupReported = false;
 
     const requireEntry = (serverName: string): PoolEntry => {
@@ -56,7 +58,7 @@ export function createPooledMcpLeaseFactory(
       return entry;
     };
 
-    const release = (serverName: string): void => {
+    const release = (serverName: string, final = false): Promise<void> | void => {
       const key = leased.get(serverName);
       if (!key) return;
       leased.delete(serverName);
@@ -76,7 +78,12 @@ export function createPooledMcpLeaseFactory(
         refCount: entry.refs.size,
         ...(sessionId ? { sessionId } : {}),
       });
-      if (entry.refs.size === 0) scheduleClose(entry);
+      if (entry.refs.size === 0) {
+        // session key 含唯一 lease 序号；最终关闭后永远不能复用，延迟退出只会与冷恢复叠加。
+        // 仍开放 lease 的 disconnect/config replace 与 workspace 共享连接保留原宽限期。
+        if (final && entry.connectionContext.mcpIsolation === "session") return closeEntry(entry);
+        scheduleClose(entry);
+      }
     };
 
     const acquire = async (
@@ -84,6 +91,7 @@ export function createPooledMcpLeaseFactory(
       config: McpServerConfig,
       connectOptions: McpConnectOptions = {},
     ): Promise<McpServerStatus> => {
+      if (leaseClosed || poolState.closed) throw new Error("MCP connection lease is closed");
       const key = connectionKey({
         config,
         connectOptions,
@@ -310,9 +318,14 @@ export function createPooledMcpLeaseFactory(
         return released;
       },
       async close(): Promise<void> {
-        if (leaseClosed) return;
-        leaseClosed = true;
-        for (const serverName of [...leased.keys()]) release(serverName);
+        if (!closePromise) {
+          leaseClosed = true;
+          closePromise = Promise.all([
+            ...[...leased.keys()].map((serverName) => release(serverName, true)),
+            poolState.closePromise,
+          ]).then(() => undefined);
+        }
+        await closePromise;
       },
       async connectConfiguredServers(
         servers: Record<string, McpServerConfig>,

@@ -9,6 +9,7 @@ export function createConversationRuntimeHost(options: {
   runtime: ConversationRuntimePort;
   index: TaskIndexRepo;
   agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
+  prepareWorkspace?: () => Promise<unknown>;
   captureBase?: (session: string) => Promise<{ baseVersion: string | null }>;
   beforeActivate?: (
     input: Extract<ConversationRuntimeCommand, { kind: "activate" | "cancel" | "activateOffline" }>,
@@ -169,8 +170,14 @@ export function createConversationRuntimeHost(options: {
     return value;
   }
   return {
-    content: options.runtime.content ? (input) => options.runtime.content!(input) : undefined,
-    control(input) {
+    content: options.runtime.content
+      ? async (input) => {
+          await options.prepareWorkspace?.();
+          return options.runtime.content!(input);
+        }
+      : undefined,
+    async control(input) {
+      await options.prepareWorkspace?.();
       // Activation's owner verification reads the same persistent guard. Read-only Core
       // queries must not queue behind the Host mutation whose verification requested them.
       if (input.kind === "read") return options.runtime.control(input);

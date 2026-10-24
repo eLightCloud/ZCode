@@ -815,3 +815,41 @@ it("keeps a disconnected continuation request in the native idle drain until it 
     await server.close();
   }
 });
+
+it("requires the explicit instance credential for private continuation control even on loopback", async () => {
+  const operation = "735652bc-e825-449f-9f94-c1a449fe1cc7";
+  const control = vi.fn(async () => ({
+    session: "synthetic-session",
+    operation,
+    state: "closed" as const,
+    generation: 0,
+    version: null,
+    digest: null,
+  }));
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    host: "127.0.0.1",
+    authToken: "synthetic-instance-token",
+    continuation: { control },
+  });
+  try {
+    const url = `http://127.0.0.1:${server.port}/api/continuation-control`;
+    const body = JSON.stringify({ kind: "close", session: "synthetic-session", operation });
+    const denied = await fetch(url, {
+      method: "POST",
+      headers: { Cookie: "synthetic-browser-cookie", Connection: "close" },
+      body,
+    });
+    expect(denied.status).toBe(401);
+    expect(control).not.toHaveBeenCalled();
+    const accepted = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: "Bearer synthetic-instance-token", Connection: "close" },
+      body,
+    });
+    expect(accepted.status).toBe(200);
+    expect((await accepted.json()).state).toBe("closed");
+    expect(control).toHaveBeenCalledTimes(1);
+  } finally {
+    await server.close();
+  }
+});

@@ -13,6 +13,7 @@ import {
 import {
   initialState,
   transition as applyTransition,
+  transitionContinuationSelection,
   versionFacts,
 } from "../src/conversation-sync/transitions.js";
 import { canonical, digest } from "../src/conversation-sync/canonical.js";
@@ -312,4 +313,33 @@ describe("native sync metadata migration boundary", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
+
+it("keeps ordinary selection fenced and publishes only the atomic trusted choice state", () => {
+  const { state, versions } = live();
+  versions.set("base", {
+    ...versions.get("base")!,
+    checkpoint: checkpoint("atomic-session"),
+    management: { titleOverride: null, pinned: false, archived: false, deleted: false },
+  });
+  const facts = new Map([...versions].map(([id, value]) => [id, versionFacts(value)]));
+  const choice = {
+    kind: "select" as const,
+    revision: state.revision,
+    candidates: ["base"],
+    version: "base",
+    location: "cloud",
+    recoveryVerified: true,
+  };
+  expect(() => applyTransition(state, choice, facts)).toThrow();
+  const original = structuredClone(state);
+  expect(() =>
+    transitionContinuationSelection(state, { ...choice, candidates: ["unseen"] }, facts),
+  ).toThrow();
+  expect(state).toEqual(original);
+  const next = transitionContinuationSelection(state, choice, facts);
+  expect(next.active).toBeNull();
+  expect(next.pending?.location).toBe("cloud");
+  expect(next.generation).toBeGreaterThan(state.generation);
+  expect(state).toEqual(original);
 });

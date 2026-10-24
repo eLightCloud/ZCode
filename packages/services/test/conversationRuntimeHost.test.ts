@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
 } from "@zcode/shared";
 import { setDataBaseDir, getConversationWorkspaceDir } from "#src/paths.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
+import { createFileService } from "#src/file/fileService.js";
 import { createConversationRuntimeHost } from "#src/session/conversationRuntimeHost.js";
 let root: string, index: TaskIndexRepo;
 beforeEach(async () => {
@@ -157,4 +158,23 @@ it("allows the activation owner to read its persistent guard during verification
     ).state,
   ).toBe("active");
   expect(verify).toHaveBeenCalledTimes(1);
+});
+
+it("creates a fresh target namespace through the existing File owner before private Core access", async () => {
+  const files = createFileService({
+    onConversationWorkspaceEnsured: () => index.registerConversationWorkspace(),
+  });
+  const runtime: ConversationRuntimePort = {
+    async control() {
+      expect((await stat(getConversationWorkspaceDir())).isDirectory()).toBe(true);
+      return result("closed");
+    },
+  };
+  const host = createConversationRuntimeHost({
+    runtime,
+    index,
+    agent: { captureTextCheckpoint: vi.fn() },
+    prepareWorkspace: () => files.ensureConversationWorkspace(),
+  });
+  expect((await host.control({ kind: "read", session, operation })).state).toBe("closed");
 });

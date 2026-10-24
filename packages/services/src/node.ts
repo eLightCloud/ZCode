@@ -3071,6 +3071,7 @@ export function createLocalServices(options: {
         runtime: conversationRuntime,
         index: taskIndexRepo,
         agent: zcodeAgentService,
+        prepareWorkspace: () => fileService.ensureConversationWorkspace(),
         ...(process.env["ZCODE_APPLICATION_HOST_MODULE"]
           ? {
               captureBase: async (session) => {

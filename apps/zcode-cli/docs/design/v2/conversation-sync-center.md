@@ -301,3 +301,17 @@ uses `cliFacts` from the same native capture and reuses the CLI-fact writer with
 held Host transaction; missing facts do not authorize activation. Private continuation
 HTTP requests remain covered by the existing Core pending-call drain after disconnect.
 These engineering changes do not close the unfinished continuation feature gates.
+
+Whole-copy continuation settles every known admission location, including ready
+unmanaged offline intents that have not produced another checkpoint. Saved version
+origin alone is not the current runtime owner. The native journal uses a server
+ordinal to remember those offline admissions until a primary choice closes them.
+A previously fenced offline copy cannot use generation zero to reopen itself.
+
+For the trusted `executeContinuation` selection only, fencing the current active
+binding and selecting the exact observed candidates share one PostgreSQL transaction
+with the forward-only intent marker. The ordinary storage selection still refuses
+an active owner. Cancellation therefore has no intermediate committed-fence gap:
+before commit restore exact prior native guards; after commit finish activation.
+Read-only guard queries bypass Host mutation serialization so owner verification
+cannot wait on the activation that invoked it. Core SQLite remains the authority.

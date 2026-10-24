@@ -219,6 +219,25 @@ it("remote native creation uses only the explicitly registered conversation name
     additionalDirectories: [],
   });
   expect(registered.resolveSessionDirectories(task).workspacePath).toBe(task.workspacePath);
+  // 上游先预留空行，再交 CLI 事实；空预留不能被误当成未知来源的旧会话。
+  await index.applyCliFacts({
+    meta: {
+      ...task,
+      traceId: "synthetic",
+      title: "Native new",
+      createdAt: 1,
+      updatedAt: 2,
+      provider: "glm",
+      mode: "build",
+      status: "completed",
+    },
+  });
+  await expect(index.withConversationSyncFacts(task, async (facts) => facts)).resolves.toEqual({
+    titleOverride: null,
+    archived: false,
+    deleted: false,
+    pinned: false,
+  });
   expect(() =>
     registered.reserveCreatedTask({
       task: { taskId: "other", workspacePath: join(root, "user-project") },

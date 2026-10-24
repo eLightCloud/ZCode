@@ -780,7 +780,10 @@ export class TaskIndexRepo {
     record.meta = preserveConversationPurpose(
       this.getDatabase(),
       record.meta,
-      previous?.meta_json ?? null,
+      // 上游的创建预留尚无 CLI 事实；它不是需保留未知用途的存量会话。
+      previous && !(previous.cli_created_at == null && previous.created_at === 0)
+        ? previous.meta_json
+        : null,
     );
     const database = this.getDatabase();
     const ownTransaction = !database.isTransaction;

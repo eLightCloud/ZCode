@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -260,6 +260,10 @@ describe("DB109：配置可失效，回滚和再升级的内容读取不可报�
     store.close();
     store = undefined;
     const beforeRejectedWrite = db.prepare("SELECT * FROM message ORDER BY id").all();
+    const backupsBefore = (await readdir(root)).filter((name) => name.includes(".bak-")).sort();
+    const taskReader = new DatabaseSync(taskPath, { readOnly: true });
+    const taskRowsBefore = taskReader.prepare("SELECT * FROM tasks ORDER BY task_id").all();
+    taskReader.close();
     await expect(
       exec(process.execPath, [
         restoreScript,
@@ -270,7 +274,32 @@ describe("DB109：配置可失效，回滚和再升级的内容读取不可报�
         "--cli-db",
         path,
       ]),
-    ).rejects.toMatchObject({ stderr: expect.stringContaining("zcode_portable_context_version") });
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("legacy_restore_target_requires_current_writer"),
+    });
+    expect((await readdir(root)).filter((name) => name.includes(".bak-")).sort()).toEqual(
+      backupsBefore,
+    );
+    const taskAfter = new DatabaseSync(taskPath, { readOnly: true });
+    try {
+      expect(taskAfter.prepare("SELECT * FROM tasks ORDER BY task_id").all()).toEqual(taskRowsBefore);
+    } finally {
+      taskAfter.close();
+    }
+    const dry = await exec(process.execPath, [
+      restoreScript,
+      "--snapshot",
+      snapshot,
+      "--cli-db",
+      path,
+      "--task-index",
+      taskPath,
+      "--dry-run",
+    ]);
+    expect(dry.stdout).toContain("Dry run mode: no writes performed.");
+    expect((await readdir(root)).filter((name) => name.includes(".bak-")).sort()).toEqual(
+      backupsBefore,
+    );
     expect(db.prepare("SELECT * FROM message ORDER BY id").all()).toEqual(beforeRejectedWrite);
     store = await createSqliteSessionStore({ dbPath: path });
     expect(readOld()).toEqual(old);

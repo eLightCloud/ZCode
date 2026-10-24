@@ -13,6 +13,7 @@
  */
 
 import { copyFileSync, existsSync, readFileSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -69,6 +70,37 @@ function backupDb(path) {
   const backupPath = `${path}.bak-${stamp}`;
   copyFileSync(path, backupPath);
   return backupPath;
+}
+
+function checkLegacyWriterTarget(path) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    const ledger = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migration'")
+      .get();
+    const newer =
+      ledger && db.prepare("SELECT 1 FROM schema_migration WHERE id >= '0026' LIMIT 1").get();
+    const protectedContext = db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='trigger' AND name LIKE 'portable_context_%' LIMIT 1",
+      )
+      .get();
+    if (newer || protectedContext) {
+      const code = "legacy_restore_target_requires_current_writer";
+      console.error(
+        JSON.stringify({
+          event: "legacy.restore.rejected",
+          event_schema_version: 1,
+          run_id: randomUUID(),
+          code,
+          outcome: "blocked",
+        }),
+      );
+      throw Object.assign(new Error(code), { code });
+    }
+  } finally {
+    db.close();
+  }
 }
 
 function projectIdFromPath(workspacePath) {
@@ -593,6 +625,8 @@ function main() {
 
   ensureExistingDb(args.taskIndexPath, "Task index");
   ensureExistingDb(args.cliDbPath, "CLI DB");
+  // This legacy writer cannot preserve v4 portable context. Refuse before any backup or write.
+  checkLegacyWriterTarget(args.cliDbPath);
   const taskBackupPath = backupDb(args.taskIndexPath);
   const cliBackupPath = backupDb(args.cliDbPath);
   console.log(`Backed up task index: ${taskBackupPath}`);

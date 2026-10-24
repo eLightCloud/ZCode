@@ -8,7 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { getConversationWorkspaceDir } from "#src/paths.js";
-import type { ConversationIndexFacts } from "@zcode/shared";
+import { conversationIndexFactsSchema, type ConversationIndexFacts } from "@zcode/shared";
 import {
   isRemoteWorkspaceIdentity,
   normalizeAgentProviderToZCodeAgent,
@@ -1075,6 +1075,69 @@ export class TaskIndexRepo {
         capture,
       }),
     );
+  }
+
+  /** Create-only recovery; the same transaction protects against another Host's seed/write. */
+  async rebuildConversationIndex(params: {
+    meta: ZCodeTaskMeta;
+    management: ConversationIndexFacts;
+    searchableText: string;
+    isCurrent(): boolean;
+  }): Promise<ZCodeTaskMeta> {
+    const facts = conversationIndexFactsSchema.parse(params.management);
+    const meta = zcodeTaskMetaSchema.strict().parse(params.meta);
+    if (
+      facts.pinned === undefined ||
+      meta.workspacePurpose !== "conversation" ||
+      meta.workspaceIdentity ||
+      meta.workspacePath !== getConversationWorkspaceDir() ||
+      meta.provider !== "glm" ||
+      meta.forkedFromTaskId ||
+      meta.cronAutomationId ||
+      meta.offPeakTaskId ||
+      meta.migrationSource ||
+      meta.repairState ||
+      meta.target
+    )
+      throw new Error("conversation_sync_rebuild_ineligible");
+    await this.ensureReady();
+    return this.enqueueWrite(meta, () => {
+      const db = this.getDatabase();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (!params.isCurrent()) throw new Error("conversation_sync_identity_changed");
+        // 恢复只补缺行；跨窗口先到的用户状态不得被中心旧快照覆盖。
+        if (this.getTaskRow(meta)) throw new Error("conversation_sync_index_exists");
+        const persisted = this.writeRecord({
+          meta: {
+            ...meta,
+            title: facts.titleOverride ?? meta.title,
+            titleOverridden: facts.titleOverride !== null,
+          },
+          titleOverridden: facts.titleOverride !== null,
+          pinned: facts.pinned === true,
+          archived: facts.archived,
+          deleted: facts.deleted,
+          searchableText: params.searchableText,
+        });
+        this.initializeGroupedTaskAtTopReady(meta);
+        db.exec("COMMIT");
+        logger.info(undefined, "Conversation index rebuilt", {
+          event: "conversation.sync.index",
+          sessionId: meta.taskId,
+          outcome: "rebuilt",
+        });
+        return persisted;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        logger.warn(undefined, "Conversation index rebuild rejected", {
+          event: "conversation.sync.index",
+          sessionId: meta.taskId,
+          outcome: "rejected",
+        });
+        throw error;
+      }
+    });
   }
 
   private getTaskRow(params: {

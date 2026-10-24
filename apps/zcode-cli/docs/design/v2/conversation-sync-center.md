@@ -177,6 +177,26 @@ unknown and need explicit migration evidence; registration never relabels them.
 The tasks database adds a separate additive migration; session/plugin stores and
 historical migration checksums stay untouched.
 
+## Rebuilding a lost target index
+
+The trusted Host may rebuild a missing index row from its native read snapshot
+and the exact center version's complete management capsule. The native checkpoint
+must equal the saved text package. The opt-in `session/textCheckpointIndex` RPC
+returns a minimal cold index projection; the existing `session/textCheckpoint`
+response stays unchanged for strict older readers. The new RPC rejects a resident
+App and verifies the stored session directory and absent workspace identity inside
+the same short read barrier. It never resumes an App or synchronizes providers. Native
+message/title/model conversion and the shared search projector are reused; target paths are rebound.
+One immediate index transaction creates the row, unique management facts and
+group order. A concurrently created or edited row rejects; recovery cannot overwrite
+local user actions. Unknown legacy capsules (including missing pin) reject. The
+operation neither imports/runs a session nor grants execution eligibility. A
+tombstone masks an existing native session only when its surviving native text
+equals the tombstone's saved text ancestor. Unknown ancestry or newer unsaved local
+text rejects instead of hiding that data. This projection repair does not import
+a recovery package; an absent deleted session needs no visible index row. The application fetches the
+version under revalidated original identity; browser input supplies only IDs.
+
 ```mermaid
 sequenceDiagram
   participant B as Browser history

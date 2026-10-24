@@ -659,7 +659,9 @@ export interface IZCodeAgentService {
   getAppUsageStats(params: ZCodeAgentAppUsageParams): Promise<AppUsageSnapshot>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
-  captureTextCheckpoint(params: ZCodeAgentSessionTarget): Promise<{ dataBase64: string }>;
+  captureTextCheckpoint(
+    params: ZCodeAgentSessionTarget & { includeIndexProjection?: boolean },
+  ): Promise<import("@zcode/shared").ConversationCheckpointResult>;
   readSessionMessages(
     params: ZCodeAgentReadSessionMessagesParams,
   ): Promise<ZCodeMessageWithParts[]>;

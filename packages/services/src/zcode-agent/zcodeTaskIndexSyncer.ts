@@ -3,7 +3,7 @@ import { repairSubagentTaskIndex } from "#src/zcode-agent/repairSubagentTaskInde
 import {
   deriveZCodeTaskStatusFromSessionSnapshot,
   generateTraceId,
-  getZCodeUserVisibleMessages,
+  buildZCodeTaskSearchText,
   isZCodeGoalContinuationReminderText,
   isZCodeModelOnlySyntheticUserMessage,
   resolveWorkspaceKey,
@@ -13,7 +13,6 @@ import {
   type ZCodeTaskGoal,
   type ZCodeTaskMode,
   type ZCodeTaskMeta,
-  type ZCodeMessagePart,
   type ZCodeSessionMode,
   type ZCodeSessionStateSnapshot,
   type ZCodeWorkspaceEvent,
@@ -1679,7 +1678,7 @@ export function createZCodeTaskIndexSyncer(
     if (snapshot.session.sessionKind === "subagent_child") return meta;
     // 同时把 snapshot.messages 里可见的聊天正文索引下去，
     // 让 TaskSearchDialog 正文搜索能命中；旧 sqlite 行下次到这里时自然回填。
-    const searchableText = buildSearchableTextFromSnapshot(snapshot);
+    const searchableText = buildZCodeTaskSearchText(snapshot);
     // desktop-continuous 首发若先提交 task row、再补 grouped sort_order，
     // sessions-index 会在两次写之间把缺序 task 暴露给 Renderer，产生先到底部再回顶部的跳动。
     const { meta: persisted, initializedGroupedOrder } = options?.moveGroupedTaskToTop
@@ -1896,45 +1895,6 @@ function hasUserVisibleContent(snapshot: ZCodeSessionStateSnapshot): boolean {
     if (isZCodeModelOnlySyntheticUserMessage(message)) return false;
     return message.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
   });
-}
-
-const TASK_SEARCH_TEXT_MAX_CHARS = 200_000;
-
-// 全局会话搜索只索引默认可见的聊天正文，不包含思考过程、tool 调用和 compaction 折叠区。
-// assistant 的 parts 可能既有历史正文又有 latest 正文，这里只取最后一段 text part，
-// 与 UI 默认折叠后展示的范围一致。
-function buildSearchableTextFromSnapshot(snapshot: ZCodeSessionStateSnapshot): string {
-  const parts: string[] = [];
-  let total = 0;
-  // /goal 自动续跑会把内部 system-reminder 作为 runtime user turn 持久化；
-  // 这条内容是 model-only 输入，不是用户可见 query，不能写进侧边栏搜索正文。
-  for (const message of getZCodeUserVisibleMessages(snapshot.messages, {
-    target: snapshot.projection.target,
-  })) {
-    const textParts = message.parts.filter(
-      (part): part is Extract<ZCodeMessagePart, { type: "text" }> => part.type === "text",
-    );
-    if (textParts.length === 0) {
-      continue;
-    }
-    const chosen = message.info.role === "assistant" ? textParts.slice(-1) : textParts;
-    for (const part of chosen) {
-      const content = part.text.trim();
-      if (!content) {
-        continue;
-      }
-      parts.push(content);
-      total += content.length;
-      if (total >= TASK_SEARCH_TEXT_MAX_CHARS) {
-        break;
-      }
-    }
-    if (total >= TASK_SEARCH_TEXT_MAX_CHARS) {
-      break;
-    }
-  }
-  // 关键业务逻辑：上限截断，避免长任务把 tasks-index.sqlite 放大到影响启动和列表查询。
-  return parts.join("\n").slice(0, TASK_SEARCH_TEXT_MAX_CHARS);
 }
 
 function fromZCodeMode(mode: ZCodeSessionMode): ZCodeTaskMode {

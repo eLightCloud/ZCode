@@ -18,6 +18,7 @@ export interface ConversationSyncOutbox {
   stage(scope: SyncScope, request: SyncRequest): void;
   pending(scope: SyncScope): SyncRequest[];
   latest(scope: SyncScope, session: string): SyncRequest | null;
+  knownSessions(scope: SyncScope): string[];
   acknowledge(scope: SyncScope, receipt: SyncReceipt): void;
   watermark(scope: SyncScope, session: string): SyncReceipt | null;
   /** Cursor and staged versions share one SQLite transaction; caller re-scans after source commit. */
@@ -159,6 +160,14 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       return saved.tenant === tenant && saved.subject === subject;
     },
     stage,
+    knownSessions(scope) {
+      return db
+        .prepare(
+          "select distinct session from sync_outbox where tenant=? and subject=? order by session",
+        )
+        .all(...scopeValues(scope))
+        .map((row) => String(row.session));
+    },
     pending(scope) {
       return db
         .prepare(

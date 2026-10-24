@@ -4110,7 +4110,9 @@ export function createZCodeAgentService(
       // 不调用 resume/模型同步/输入接纳，也不申请云端执行实例。
       const client = await getReadOnlyClient(params);
       return client.request(
-        zcodeProtocolMethods.sessionTextCheckpoint,
+        params.includeIndexProjection
+          ? zcodeProtocolMethods.sessionTextCheckpointIndex
+          : zcodeProtocolMethods.sessionTextCheckpoint,
         { sessionId: params.sessionId },
         conversationCheckpointResultSchema,
         { lifecycle: "observation", timeoutMs: 15000 },

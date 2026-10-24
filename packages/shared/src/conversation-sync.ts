@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zcodeTaskMetaSchema } from "./validation.js";
 
 export const conversationScopeSchema = z
   .object({
@@ -46,20 +47,47 @@ export const conversationIndexFactsSchema = z
 export type ConversationIndexFacts = z.infer<typeof conversationIndexFactsSchema>;
 
 /** Transport remains opaque; only the native checkpoint codec interprets its body. */
+export const conversationIndexProjectionSchema = z
+  .object({
+    meta: zcodeTaskMetaSchema
+      .pick({
+        taskId: true,
+        traceId: true,
+        title: true,
+        createdAt: true,
+        updatedAt: true,
+        mode: true,
+        model: true,
+        status: true,
+      })
+      .strict(),
+    searchableText: z.string().max(200000),
+  })
+  .strict();
 export const conversationCheckpointResultSchema = z
   .object({
     dataBase64: z
       .string()
       .min(1)
       .max(32 * 1024 * 1024),
+    indexProjection: conversationIndexProjectionSchema.optional(),
   })
   .strict();
 export const conversationCheckpointParamsSchema = z
   .object({ sessionId: z.string().min(1) })
   .strict();
+export type ConversationCheckpointResult = z.infer<typeof conversationCheckpointResultSchema>;
 export interface ConversationSyncHost {
   enumerate(): Promise<string[]>;
   capture(session: string): Promise<{ dataBase64: string; management: ConversationIndexFacts }>;
+  /** Trusted Host only. Rebuilds a missing projection, never imports or executes. */
+  rebuildIndex?(input: {
+    session: string;
+    /** Exact surviving native text; for a tombstone use its nearest saved text ancestor. */
+    dataBase64: string;
+    management: ConversationIndexFacts;
+    isCurrent(): boolean;
+  }): Promise<void>;
 }
 
 export const conversationHistoryItemSchema = z

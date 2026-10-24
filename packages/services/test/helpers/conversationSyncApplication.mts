@@ -1,5 +1,6 @@
 /** Synthetic integration fixture. Native stores/Host/center use their real implementations. */
 import { createServer } from "node:http";
+import { rm } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import pg from "pg";
@@ -14,8 +15,13 @@ import type { ProjectId, SessionId } from "@zcode/contracts";
 import { textCheckpointSchema } from "@zcode/contracts";
 import { TaskIndexRepo } from "../../src/session/taskIndexRepo.js";
 import { createConversationSyncHost } from "../../src/session/conversationSyncHost.js";
-import { setDataBaseDir, getConversationWorkspaceDir } from "../../src/paths.js";
+import {
+  setDataBaseDir,
+  getConversationWorkspaceDir,
+  getTasksIndexDatabasePath,
+} from "../../src/paths.js";
 import { createFileService } from "../../src/file/fileService.js";
+import type { IZCodeAgentService } from "../../src/zcode-agent/zcodeAgent.js";
 
 const chunks: Buffer[] = [];
 for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
@@ -83,30 +89,44 @@ const gateway = createConversationSyncGateway({
   logger: log,
 });
 setDataBaseDir(config.root);
-const index = new TaskIndexRepo();
+const index = new TaskIndexRepo(undefined, undefined, "conversation");
 await createFileService({
   onConversationWorkspaceEnsured: () => index.registerConversationWorkspace(),
 }).ensureConversationWorkspace();
 const source = createSqliteSessionStore({ dbPath: join(config.root, "source.sqlite") });
 let captures = 0;
-const conversations = createConversationSyncHost({
-  index,
-  agent: {
-    // This fixture is explicitly cold: no runtime or writer is created. The real
-    // session/textCheckpoint admission barrier has separate protocol regression tests.
-    async captureTextCheckpoint(params) {
-      ++captures;
-      return {
-        dataBase64: Buffer.from(
-          JSON.stringify(
-            await source.exportTextCheckpoint!({
-              sessionID: params.sessionId as SessionId,
-            }),
-          ),
-        ).toString("base64"),
-      };
-    },
+const agent = {
+  // This fixture is explicitly cold: no runtime or writer is created. The real
+  // session/textCheckpoint admission barrier has separate protocol regression tests.
+  async captureTextCheckpoint(params) {
+    ++captures;
+    const value = await source.exportTextCheckpoint!({ sessionID: params.sessionId as SessionId });
+    return {
+      dataBase64: Buffer.from(JSON.stringify(value)).toString("base64"),
+      // Synthetic cold projection; the packaged test uses the real native projector.
+      indexProjection: {
+        meta: {
+          taskId: value.session.id,
+          traceId: "trace:" + value.session.id,
+          title: value.session.title,
+          mode: "build",
+          status: "completed",
+          model: "synthetic:model",
+          createdAt: value.session.time.created,
+          updatedAt: value.session.time.updated,
+        },
+        searchableText: value.messages
+          .flatMap((message) =>
+            message.parts.filter((part) => part.type === "text").map((part) => part.text),
+          )
+          .join("\n"),
+      },
+    };
   },
+};
+let conversations = createConversationSyncHost({
+  index,
+  agent: agent as unknown as IZCodeAgentService,
 });
 const credentialValues = new Map<string, string>();
 const credentials = {
@@ -224,7 +244,31 @@ const server = createServer(async (request, response) => {
       await configuration.update(current.revision, { ...current.policy, enabled: input.enabled });
       result = { updated: true };
     } else if (input.action === "captures") result = { captures };
-    else if (input.action === "call") result = await host.call(input.method, input.input ?? {});
+    else if (input.action === "index")
+      result = {
+        meta: await index.getTaskMeta({
+          workspacePath: getConversationWorkspaceDir(),
+          taskId: input.session,
+        }),
+      };
+    else if (input.action === "lose-index") {
+      await host.dispose();
+      index.close();
+      for (const suffix of ["", "-wal", "-shm"])
+        await rm(getTasksIndexDatabasePath() + suffix, { force: true });
+      conversations = createConversationSyncHost({
+        index,
+        agent: agent as unknown as IZCodeAgentService,
+      });
+      host = await createConversationHost({
+        conversations,
+        credentials,
+        storageRoot: config.root,
+        api: config.api,
+        logger: log,
+      });
+      result = { projectionRemoved: true };
+    } else if (input.action === "call") result = await host.call(input.method, input.input ?? {});
     else if (input.action === "rename") {
       await index.updateTaskState({
         workspacePath: getConversationWorkspaceDir(),

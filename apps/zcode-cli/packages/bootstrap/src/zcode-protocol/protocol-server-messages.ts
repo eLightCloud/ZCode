@@ -1,7 +1,8 @@
 import { networkCaptureControlSchema } from "@zcode/shared";
 import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
 import { conversationCheckpointParamsSchema } from "@zcode/shared";
-import type { SessionId } from "@zcode/contracts";
+import { TextCheckpointError, type SessionId } from "@zcode/contracts";
+import { resolve } from "node:path";
 
 import { zcodeProtocolMethods } from "@zcode/shared";
 
@@ -23,6 +24,7 @@ import {
 } from "./server-types.js";
 
 import { collectResidencySessionIds } from "./protocol-server-support.js";
+import { checkpointIndexProjection } from "./checkpoint-index.js";
 
 import type { ZCodeProtocolAgentServerMethodsContext } from "./protocol-server-context.js";
 export async function handleMessage(
@@ -77,15 +79,29 @@ export async function handleRequest(
         ),
       );
     }
-    if (request.method === zcodeProtocolMethods.sessionTextCheckpoint) {
+    if (
+      request.method === zcodeProtocolMethods.sessionTextCheckpoint ||
+      request.method === zcodeProtocolMethods.sessionTextCheckpointIndex
+    ) {
       const { sessionId } = conversationCheckpointParamsSchema.parse(request.params);
       const pool = this.context.sessionResidentPool;
       const store = this.context.deps.sessionStore;
       if (!pool || !store?.exportTextCheckpoint)
         throw new ProtocolRequestError(-32000, "Checkpoint unavailable");
-      const checkpoint = await pool.withCheckpoint(sessionId, () =>
-        store.exportTextCheckpoint!({ sessionID: sessionId as SessionId }),
-      );
+      if (
+        request.method === zcodeProtocolMethods.sessionTextCheckpointIndex &&
+        this.context.sessions.has(sessionId)
+      )
+        throw new TextCheckpointError("unsupported_state");
+      const directory = this.context.deps.cwd ?? process.cwd();
+      const checkpoint = await pool.withCheckpoint(sessionId, async () => {
+        const stored = await store.getSession(sessionId as SessionId);
+        if (!stored) throw new TextCheckpointError("session_not_found");
+        // tasks 库丢失后不能仅凭全局 session ID 把目录项目补成普通会话。
+        if (stored.workspaceID || resolve(stored.directory) !== resolve(directory))
+          throw new TextCheckpointError("unsupported_state");
+        return store.exportTextCheckpoint!({ sessionID: sessionId as SessionId });
+      });
       this.logger?.info("Native checkpoint captured", {
         event: "conversation.sync.capture",
         sessionId,
@@ -93,6 +109,9 @@ export async function handleRequest(
       });
       return this.ok(request.id, {
         dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
+        ...(request.method === zcodeProtocolMethods.sessionTextCheckpointIndex
+          ? { indexProjection: checkpointIndexProjection(checkpoint, directory) }
+          : {}),
       });
     }
     // subscribe hydration、workspace 配置与 resume 都可能跨 await。若只看

@@ -21,6 +21,8 @@ import {
 } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- ZCode Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
+import { createLocalRuntimeMaintenance } from "./localRuntimeMaintenance.js";
+import type { LocalRuntimeMaintenance } from "@zcode/shared";
 import { randomUUID } from "node:crypto";
 import { createTopicResourceBridge } from "./topicResourceBridge.js";
 import { uploadTopicResourceToClient } from "./topicResourceUpload.js";
@@ -955,6 +957,7 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   ZCodeAgentProcessManagerOptions,
   "idleTimeoutMs"
 > {
+  onLocalMaintenanceReady?: (maintenance: LocalRuntimeMaintenance) => void;
   /** 仅供 MCP 状态探测进程使用，不能把空闲回收传给 chat。 */
   mcpStatusIdleTimeoutMs?: number;
   accountProviderConfigSource?: ProviderSource<AccountProviderConfigSnapshot>;
@@ -3692,6 +3695,10 @@ export function createZCodeAgentService(
     return envelope;
   }
 
+  options?.onLocalMaintenanceReady?.(createLocalRuntimeMaintenance(
+    [processManager, pluginProcessManager, mcpStatusProcessManager],
+    () => waitingWorkspaceStartups.size > 0,
+  ));
   return {
     async prepareStorage(params) {
       const client = await processManager.getClient(params);

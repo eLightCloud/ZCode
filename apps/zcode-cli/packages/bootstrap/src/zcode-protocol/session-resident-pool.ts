@@ -5,6 +5,7 @@
 // deactivation gate。
 
 export const DEFAULT_SESSION_RESIDENT_TARGET_COUNT = 8;
+import type { RuntimeMaintenanceParams, RuntimeMaintenanceResult } from "@zcode/shared";
 export const DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT = 16;
 export const DEFAULT_SESSION_RESIDENT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 
@@ -65,6 +66,9 @@ export class SessionResidentPool {
   private readonly inFlightDeactivations = new Map<string, Promise<void>>();
   private activeOperationCount = 0;
   private rebalancing = false;
+  private maintenanceOperation: string | null = null;
+  private maintenanceSettlement: Promise<boolean> | undefined;
+  private maintenanceTail: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly host: SessionResidentPoolHost,
@@ -97,6 +101,7 @@ export class SessionResidentPool {
   async acquireOperation(
     sessionIdsInput?: string | readonly string[],
   ): Promise<() => void> {
+    if (this.maintenanceOperation !== null) throw new Error("Runtime maintenance admission closed");
     const sessionIds = [
       ...new Set(
         (typeof sessionIdsInput === "string" ? [sessionIdsInput] : sessionIdsInput ?? []).filter(
@@ -151,7 +156,7 @@ export class SessionResidentPool {
 
   /** sampler 与 request-release 共用的 TTL / 高低水位收敛入口。 */
   rebalance(): void {
-    if (this.activeOperationCount > 0 || this.rebalancing) return;
+    if (this.activeOperationCount > 0 || this.rebalancing || this.maintenanceOperation) return;
     this.rebalancing = true;
     try {
       const observedAt = this.now();
@@ -226,6 +231,43 @@ export class SessionResidentPool {
 
   waitForDeactivation(sessionId: string): Promise<void> {
     return this.inFlightDeactivations.get(sessionId) ?? Promise.resolve();
+  }
+
+  maintenance(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
+    const result = this.maintenanceTail.then(() => this.performMaintenance(input));
+    this.maintenanceTail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async performMaintenance(input: RuntimeMaintenanceParams): Promise<RuntimeMaintenanceResult> {
+    if (this.maintenanceOperation && this.maintenanceOperation !== input.operationId) {
+      return { operationId: this.maintenanceOperation, state: "blocked", reasonCode: "operation_conflict" };
+    }
+    if (input.action === "begin" && !this.maintenanceOperation) {
+      const ids = this.host.listSessionIds();
+      if (this.activeOperationCount || this.rebalancing || this.inFlightDeactivations.size
+        || ids.some(id => {
+          const facts = this.host.readResidencyFacts(id);
+          return !facts || !this.isEligible(id, facts);
+        })) return { operationId: null, state: "blocked", reasonCode: "native_activity" };
+      // 与 acquireOperation 同一事件循环关闸；先持有再 await，不能让新请求穿过空闲检查。
+      this.maintenanceOperation = input.operationId;
+      const closing = ids.map(id => {
+        try { return this.host.deactivate(id); } catch (error) { return Promise.reject(error); }
+      });
+      this.maintenanceSettlement = Promise.allSettled(closing)
+        .then(results => results.every(result => result.status === "fulfilled"));
+    }
+    if (!this.maintenanceOperation) return { operationId: null, state: "released" };
+    if (!(await this.maintenanceSettlement)) {
+      return { operationId: this.maintenanceOperation, state: "blocked", reasonCode: "unconfirmed" };
+    }
+    if (input.action === "cancel") {
+      this.maintenanceOperation = null;
+      this.maintenanceSettlement = undefined;
+      return { operationId: null, state: "released" };
+    }
+    return { operationId: this.maintenanceOperation, state: "held" };
   }
 
   private isEligible(sessionId: string, facts: SessionResidencyFacts): boolean {

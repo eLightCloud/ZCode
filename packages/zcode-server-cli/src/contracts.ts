@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeMaintenanceParamsSchema, runtimeMaintenanceResultSchema } from "@zcode/shared";
 
 export const SERVER_CLI_PROTOCOL_VERSION = 1;
 export const SERVER_RUNTIME_NODE_VERSION = "22.16.0";
@@ -43,7 +44,7 @@ export const serverStatusSchema = z
     runningTaskCount: z.number().int().nonnegative(),
     crashBudget: crashBudgetSchema,
     updatedAt: z.number().int().nonnegative(),
-    capabilities: z.object({ idleStop: z.literal(true), dataRootLock: z.literal("kernel-sqlite-v1"), liveStatus: z.literal(true).optional() }).optional(),
+    capabilities: z.object({ idleStop: z.literal(true), dataRootLock: z.literal("kernel-sqlite-v1"), liveStatus: z.literal(true).optional(), idleMaintenance: z.literal(true).optional() }).optional(),
   })
   .strict();
 
@@ -90,6 +91,7 @@ export const controlRequestSchema = z.discriminatedUnion("command", [
   requestBase.extend({ command: z.literal("status"), includeCapabilities: z.boolean().optional() }),
   requestBase.extend({ command: z.literal("stop") }),
   requestBase.extend({ command: z.literal("stop-if-idle") }),
+  requestBase.extend({ command: z.literal("maintenance"), input: runtimeMaintenanceParamsSchema }),
   requestBase.extend({ command: z.literal("restart") }),
   requestBase.extend({ command: z.literal("prepare-update") }),
   requestBase.extend({ command: z.literal("apply-update"), force: z.boolean().optional() }),
@@ -134,6 +136,7 @@ export const coreMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("shutdown-ack") }),
   z.object({ type: z.literal("idle-stop-blocked") }),
+  z.object({ type: z.literal("maintenance-result"), requestId: z.string().uuid(), result: runtimeMaintenanceResultSchema }),
   z.object({ type: z.literal("startup-wait"), reason: z.literal("writer-lock-busy") }),
   z.object({ type: z.literal("fatal"), message: z.string().max(500), reason: z.literal("writer-lock-timeout").optional() }),
   z.object({ type: z.literal("exit"), reason: z.string().max(500) }),
@@ -143,6 +146,7 @@ export type CoreMessage = z.infer<typeof coreMessageSchema>;
 export const coreCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("shutdown") }),
   z.object({ command: z.literal("shutdown-if-idle") }),
+  z.object({ command: z.literal("maintenance"), requestId: z.string().uuid(), input: runtimeMaintenanceParamsSchema }),
 ]);
 export type CoreCommand = z.infer<typeof coreCommandSchema>;
 

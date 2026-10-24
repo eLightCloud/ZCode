@@ -4,6 +4,7 @@ import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join } from "node:path";
 import { ZCODE_VERSION } from "@zcode/shared";
+import { runtimeMaintenanceParamsSchema, runtimeMaintenanceResultSchema } from "@zcode/shared";
 import {
   controlRequestSchema,
   createStoppedServerStatus,
@@ -87,7 +88,7 @@ export async function runServerCli(
     }
     // 同一物理 data-root 的符号链接别名会派生不同 control endpoint 和 OS service
     // identity。生命周期命令统一在 IO 前收敛 root，避免第二个 Supervisor 绕过探测重复注册。
-    const layout = ["serve", "status", "stop", "stop-if-idle", "restart", "update", "uninstall"].includes(command)
+    const layout = ["serve", "status", "stop", "stop-if-idle", "restart", "update", "uninstall", "maintenance"].includes(command)
       ? await resolveCanonicalServerLayout(parsed.layout.serverRoot)
       : parsed.layout;
     switch (command) {
@@ -98,6 +99,13 @@ export async function runServerCli(
       case "stop-if-idle":
       case "restart":
         return await runControl(command === "stop" && parsed.argv.includes("--if-idle") ? "stop-if-idle" : command, io, json, {}, layout, parsed.argv.includes("--live"));
+      case "maintenance": {
+        const input = runtimeMaintenanceParamsSchema.parse({
+          action: parsed.argv[1],
+          operationId: parsed.argv[parsed.argv.indexOf("--operation-id") + 1],
+        });
+        return await runControl("maintenance", io, json, { input }, layout);
+      }
       case "update":
         return await runUpdateCommand(parsed.argv, io, json, layout, () =>
           runControl("apply-update", io, json, { force: parsed.argv.includes("--force") }, layout),
@@ -334,7 +342,7 @@ async function runControl(
     result = await requestControl(
       layout.controlEndpoint,
       request,
-      command === "apply-update" ? APPLY_UPDATE_TIMEOUT_MS : undefined,
+      command === "apply-update" ? APPLY_UPDATE_TIMEOUT_MS : command === "maintenance" ? 35_000 : undefined,
     );
   } catch (error: unknown) {
     if (command === "status" && !liveStatus) {
@@ -374,6 +382,7 @@ async function runControl(
     if (!liveStatus) delete status.capabilities;
     result = status;
   }
+  if (command === "maintenance") result = runtimeMaintenanceResultSchema.parse(result);
   if (json) stdout(io, result);
   else stdout(io, result ?? "ok");
   return 0;

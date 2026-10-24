@@ -18,6 +18,14 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
     { request: any; timer: ReturnType<typeof setTimeout> }[]
   >();
   private protocolListener: IDisposable | null;
+  private pendingCalls = 0;
+  private readonly callWaiters = new Set<() => void>();
+
+  /** Cancellation/disconnect does not prove an admitted asynchronous service call settled. */
+  whenCallsSettled(): Promise<void> {
+    if (this.pendingCalls === 0) return Promise.resolve();
+    return new Promise(resolve => this.callWaiters.add(resolve));
+  }
 
   constructor(
     private protocol: IMessagePassingProtocol,
@@ -112,6 +120,7 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
 
     const cts = new CancellationTokenSource();
     let promise: Promise<any>;
+    this.pendingCalls += 1;
 
     try {
       promise = channel.call(this.ctx, request.name, request.arg, cts.token);
@@ -187,6 +196,11 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       .finally(() => {
         disposable.dispose();
         this.activeRequests.delete(request.id);
+        this.pendingCalls -= 1;
+        if (this.pendingCalls === 0) {
+          for (const resolve of this.callWaiters) resolve();
+          this.callWaiters.clear();
+        }
       });
   }
 

@@ -543,6 +543,7 @@ export class ZCodeAgentProcessManager {
   private readonly processesByWorkspaceKey = new Map<string, ManagedZCodeAgentProcess>();
   private readonly ownedProcesses = new Set<ManagedZCodeAgentProcess>();
   private readonly startingByWorkspaceKey = new Map<string, Promise<ZCodeProtocolClient>>();
+  private localMaintenanceOperation: string | null = null;
   private readonly restartGenerationByWorkspaceKey = new Map<string, number>();
   private readonly runtimeGenerationByWorkspaceKey = new Map<string, number>();
   private readonly availableRuntimeIdentityByWorkspaceKey = new Map<string, string>();
@@ -842,6 +843,7 @@ export class ZCodeAgentProcessManager {
     workspacePath: string;
     workspaceIdentity?: string;
   }): Promise<ZCodeProtocolClient> {
+    if (this.localMaintenanceOperation) throw new Error("Runtime maintenance admission closed");
     if (this.disposed) {
       throw new Error("ZCode agent process manager is disposed.");
     }
@@ -907,6 +909,23 @@ export class ZCodeAgentProcessManager {
   }
 
   /** 资源管理器：当前仍存活的受管 runtime（pid + workspace + client） */
+  holdLocalMaintenance(operationId: string): boolean {
+    if (this.localMaintenanceOperation && this.localMaintenanceOperation !== operationId) return false;
+    if (this.startingByWorkspaceKey.size > 0
+      // 根进程 exit 后仍可能有未确认回收的后代；只能由现有 cleanup owner 释放所有权。
+      || [...this.ownedProcesses].some(runtime => runtime.cleanupPromise || runtime.exited
+        || runtime.child.killed || runtime.client.isDisposed
+        || this.processesByWorkspaceKey.get(resolveWorkspaceKey(runtime.workspace)) !== runtime)) return false;
+    this.localMaintenanceOperation = operationId;
+    return true;
+  }
+
+  releaseLocalMaintenance(operationId: string): boolean {
+    if (this.localMaintenanceOperation && this.localMaintenanceOperation !== operationId) return false;
+    this.localMaintenanceOperation = null;
+    return true;
+  }
+
   listManagedProcesses(): Array<{
     pid: number;
     workspacePath: string;

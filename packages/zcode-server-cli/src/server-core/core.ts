@@ -17,6 +17,9 @@ import { DataRootLock } from "../runtime/lock.js";
 import { resolveServerLayout } from "../runtime/paths.js";
 import { join } from "node:path";
 import { CORE_WRITER_WAIT_MS } from "../contracts.js";
+import { coreCommandSchema } from "../contracts.js";
+import type { LocalRuntimeMaintenance } from "@zcode/shared";
+import { CoreMaintenance, readMaintenanceOperation } from "./maintenance.js";
 
 declare const __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: string | undefined;
 
@@ -70,8 +73,15 @@ export async function runServerCore(generation: number): Promise<void> {
     );
   }
   const automationEnabled = process.env.ZCODE_SERVER_AUTOMATION_ENABLED === "1";
+  const maintenanceFile = join(resolveServerLayout(process.env.ZCODE_SERVER_ROOT).runDir, "maintenance.json");
+  const maintenanceOperation = await readMaintenanceOperation(maintenanceFile);
+  if (automationEnabled && maintenanceOperation) {
+    throw new Error("Native automation cannot start while maintenance is held");
+  }
+  let localMaintenance: LocalRuntimeMaintenance | undefined;
   let automation: ReturnType<typeof startServerAutomationRuntime> | undefined;
   const services = createLocalServices({
+    onLocalMaintenanceReady: (port) => { localMaintenance = port; },
     zcodeBuiltinProviderConfigFilePath,
     serviceAuthorityMode: "standalone-server",
     topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
@@ -101,6 +111,7 @@ export async function runServerCore(generation: number): Promise<void> {
     ...(authToken ? { authToken } : {}),
     ...(authTokenHash ? { authTokenHash } : {}),
     serverId,
+    initiallyPaused: maintenanceOperation !== null,
     topicResourcePeers,
   });
   if (automationEnabled) {
@@ -118,6 +129,20 @@ export async function runServerCore(generation: number): Promise<void> {
       }
     });
   };
+  let shutdownStarted = false;
+  const maintenance = new CoreMaintenance(maintenanceFile, http, localMaintenance,
+    () => shutdownStarted || automationEnabled || taskActivityTracker.readRunningTaskCount() > 0,
+    maintenanceOperation);
+  process.on("message", (message: unknown) => {
+    const parsed = coreCommandSchema.safeParse(message);
+    if (!parsed.success || parsed.data.command !== "maintenance") return;
+    const request = parsed.data;
+    void maintenance.handle(request.input).then(
+      result => send({ type: "maintenance-result", requestId: request.requestId, result }),
+      () => send({ type: "maintenance-result", requestId: request.requestId,
+        result: { operationId: request.input.operationId, state: "blocked", reasonCode: "unconfirmed" } }),
+    );
+  });
   // ready.version 的语义是 Core 版本；不能误发 Node runtime 版本常量
   // （22.16.0），否则消费方读取会拿到错误值。
   await send({
@@ -127,7 +152,6 @@ export async function runServerCore(generation: number): Promise<void> {
     version: ZCODE_VERSION,
     generation,
   });
-  let shutdownStarted = false;
   let lastRunningTaskCount = taskActivityTracker.readRunningTaskCount();
   const activitySubscription = taskActivityTracker.onDidChangeRunningTaskCount(
     (runningTaskCount) => {

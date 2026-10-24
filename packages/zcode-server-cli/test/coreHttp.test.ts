@@ -18,7 +18,9 @@ import { createTopicResourcePeers } from "@zcode/services/node";
 import { TOPIC_RESOURCE_RELAY_CHANNEL } from "@zcode/shared";
 
 async function connectResourcePeer(base: string, onValidate: () => void) {
-  const response = await fetch(`${base}/api/rpc-host-capability`, { method: "POST" });
+  const response = await fetch(`${base}/api/rpc-host-capability`, {
+    method: "POST", headers: { connection: "close" },
+  });
   const { capability } = (await response.json()) as { capability: string };
   const socket = new WebSocket(`${base.replace("http:", "ws:")}/ws/host`, {
     headers: { "x-zcode-rpc-host-capability": capability },
@@ -115,6 +117,34 @@ describe("standalone Server Core ingress", () => {
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.close()));
     servers.length = 0;
+  });
+
+  it("fences disconnected but unsettled RPC calls before reversible maintenance", async () => {
+    let entered!: () => void;
+    let finish!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const completed = new Promise<void>(resolve => { finish = resolve; });
+    const services = new ServiceCollection().register(IZCodeAgentService, {
+      queryConversationCommandsV4: async () => { entered(); await completed; return { results: [] }; },
+    } as never);
+    const server = await createCoreHttpServer(services);
+    servers.push(server);
+    const base = `http://${server.host}:${server.port}`;
+    const peer = await connectResourcePeer(base, () => undefined);
+    const pending = peer.services.zcodeAgentService.queryConversationCommandsV4({ commands: [] } as never)
+      .catch(() => undefined);
+    try {
+      await started;
+      peer.dispose();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(server.tryBeginIdleShutdown()).toBe(false);
+      finish();
+      await pending;
+      await vi.waitFor(() => expect(server.tryBeginIdleShutdown()).toBe(true));
+      await expect(fetch(base + "/api/server-info")).rejects.toThrow();
+      server.resumeAfterMaintenance();
+      expect((await fetch(base + "/api/server-info")).status).toBe(200);
+    } finally { finish(); peer.dispose(); }
   });
 
   it("isolates reverse resource requests between Desktop peers and excludes normal WebSocket clients", async () => {

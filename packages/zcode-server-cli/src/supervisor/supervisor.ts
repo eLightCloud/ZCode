@@ -15,6 +15,7 @@ import { recoverSupervisorStartup } from "../runtime/startupRecovery.js";
 import { waitForUpdateReady } from "../runtime/updateReadiness.js";
 import { createRollbackFailure, updateErrorMessage } from "../runtime/updateErrors.js";
 import { CrashBudget } from "./crashBudget.js";
+import { requestCoreMaintenance } from "./coreMaintenanceRequest.js";
 
 // 生命周期事件按运维排障判据用 info/warn/error（出问题时运维要能在日志里看到）；
 // 高频 heartbeat/task-activity 明细走 debug，避免生产日志膨胀。
@@ -38,7 +39,7 @@ export interface SupervisorOptions {
   onStopped?: () => void;
 }
 
-type LifecycleOperationKind = "stop" | "idle-stop" | "restart" | "update" | "uninstall";
+type LifecycleOperationKind = "stop" | "idle-stop" | "restart" | "update" | "uninstall" | "maintenance";
 class IdleStopBlocked extends Error {}
 
 export class Supervisor {
@@ -332,7 +333,10 @@ export class Supervisor {
     return {
       protocolVersion: SERVER_CLI_PROTOCOL_VERSION,
       // 默认响应和快照维持旧严格 reader 的字段集合，能力必须显式协商。
-      ...(includeCapabilities ? { capabilities: { idleStop: true as const, dataRootLock: "kernel-sqlite-v1" as const, liveStatus: true as const } } : {}),
+      ...(includeCapabilities ? { capabilities: { idleStop: true as const,
+        dataRootLock: "kernel-sqlite-v1" as const, liveStatus: true as const,
+        ...(process.platform === "win32" ? {} : { idleMaintenance: true as const }),
+      } } : {}),
       state: this.state,
       pid: this.core?.pid ?? null,
       port: this.port,
@@ -473,6 +477,21 @@ export class Supervisor {
     switch (request.command) {
       case "ping": return { protocolVersion: SERVER_CLI_PROTOCOL_VERSION };
       case "status": return this.status(request.includeCapabilities === true);
+      case "maintenance": return await this.runLifecycleOperation("maintenance", async () => {
+        // 当前持久维护记录依赖 POSIX 目录 fsync；Windows 未验证前不能报告可用能力。
+        if (process.platform === "win32") throw new Error("Core maintenance unavailable on this platform");
+        const core = this.core;
+        if (this.state !== "ready" || !core) throw new Error("Core maintenance unavailable");
+        const result = await requestCoreMaintenance(core, request.input).catch(error => {
+          log.warn("server.maintenance", { operationId: request.input.operationId,
+            action: request.input.action, outcome: "blocked", reasonCode: "unconfirmed" });
+          throw error;
+        });
+        if (this.core !== core || this.state !== "ready") throw new Error("Core maintenance generation changed");
+        log.info("server.maintenance", { operationId: request.input.operationId, action: request.input.action,
+          outcome: result.state, reasonCode: result.reasonCode });
+        return result;
+      });
       case "stop":
       case "stop-if-idle":
         if (request.command === "stop-if-idle" && (this.state !== "ready" || this.runningTaskCount > 0)) {

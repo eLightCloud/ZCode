@@ -1,4 +1,5 @@
 import { networkCaptureControlSchema } from "@zcode/shared";
+import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
 
 import { zcodeProtocolMethods } from "@zcode/shared";
 
@@ -64,6 +65,13 @@ export async function handleRequest(
   this.postResponseOutbox.delete(request.id);
   let releaseResidencyOperation: (() => void) | undefined;
   try {
+    // 生命周期命令自身不能取得普通 operation lease，否则永远将自己判为忙。
+    if (request.method === zcodeProtocolMethods.processIdleMaintenance) {
+      if (!this.context.sessionResidentPool) throw new Error("Runtime lifecycle unavailable");
+      return this.ok(request.id, await this.context.sessionResidentPool.maintenance(
+        runtimeMaintenanceParamsSchema.parse(request.params),
+      ));
+    }
     // subscribe hydration、workspace 配置与 resume 都可能跨 await。若只看
     // session 当前状态，sampler 会在 handler 持有旧 record 时把它关闭。进程级 lease
     // 覆盖整个 request；能识别的 sessionIds 额外用于冷恢复闸门与 LRU touch。

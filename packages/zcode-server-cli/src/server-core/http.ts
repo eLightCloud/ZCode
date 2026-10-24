@@ -36,6 +36,7 @@ export interface CoreHttpServer {
   port: number;
   close: () => Promise<void>;
   tryBeginIdleShutdown: () => boolean;
+  resumeAfterMaintenance: () => void;
 }
 
 const WEBSOCKET_DRAIN_TIMEOUT_MS = 250;
@@ -95,7 +96,9 @@ function exposeWebSocket(
   services: ServiceCollection,
   clientMode: "desktop-continuous" | "web-remote-replayable",
   resourcePeers?: TopicResourcePeers,
-): void {
+): Promise<void> {
+  let resolveSettled!: () => void;
+  const settled = new Promise<void>(resolve => { resolveSettled = resolve; });
   const socket = wrapWebSocket(ws);
   const protocol = new SocketProtocol(socket);
   const rawServer = new ChannelServer(protocol, "server");
@@ -120,9 +123,12 @@ function exposeWebSocket(
   socket.onClose(() => {
     peer?.dispose();
     reverseClient?.dispose();
-    void scope?.dispose();
     rawServer.dispose();
+    void Promise.all([scope?.dispose(), rawServer.whenCallsSettled()]).then(resolveSettled, () => {
+      log.warn(undefined, "Connection scope retirement unconfirmed", { event: "server.scope_retirement_failed" });
+    });
   });
+  return settled;
 }
 
 export async function createCoreHttpServer(
@@ -135,10 +141,17 @@ export async function createCoreHttpServer(
     serverId?: string;
     hostCapabilityStore?: HostCapabilityStore;
     topicResourcePeers?: TopicResourcePeers;
+    initiallyPaused?: boolean;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
-  let accepting = true;
+  let accepting = options.initiallyPaused !== true;
+  let closing = false;
+  const rpcScopes = new Set<Promise<void>>();
+  const track = (pending: Promise<void>) => {
+    rpcScopes.add(pending);
+    void pending.then(() => rpcScopes.delete(pending));
+  };
   app.use("*", async (context, next) => accepting ? await next() : context.json({ error: "Server stopping" }, 503));
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
   const host = options.host ?? "127.0.0.1";
@@ -190,7 +203,7 @@ export async function createCoreHttpServer(
     "/ws",
     upgradeWebSocket(() => ({
       onOpen(_event, socket) {
-        exposeWebSocket(socket.raw as WebSocket, services, "web-remote-replayable");
+        track(exposeWebSocket(socket.raw as WebSocket, services, "web-remote-replayable"));
       },
     })),
   );
@@ -205,12 +218,12 @@ export async function createCoreHttpServer(
     "/ws/host",
     upgradeWebSocket(() => ({
       onOpen(_event, socket) {
-        exposeWebSocket(
+        track(exposeWebSocket(
           socket.raw as WebSocket,
           services,
           "desktop-continuous",
           options.topicResourcePeers,
-        );
+        ));
       },
     })),
   );
@@ -239,11 +252,16 @@ export async function createCoreHttpServer(
     tryBeginIdleShutdown: () => {
       // 与接纳在同一事件循环裁决。保守拒绝所有已接纳 TCP/WS 连接，
       // 避免只读任务快照之后又从旧连接进入新输入的竞态。
-      if (!accepting || connections.size || wss.clients.size) return false;
+      if (!accepting || connections.size || wss.clients.size || rpcScopes.size) return false;
       accepting = false;
       return true;
     },
+    resumeAfterMaintenance: () => {
+      if (closing) throw new Error("Server is closing");
+      accepting = true;
+    },
     close: async () => {
+      closing = true;
       accepting = false;
       await closeWebSocketServer(wss);
       await new Promise<void>((resolve, reject) =>

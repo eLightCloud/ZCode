@@ -18,7 +18,7 @@ export async function continuationControl(context: ZCodeProtocolAgentServerConte
     existing &&
     (resolve(existing.directory) !== resolve(directory) ||
       existing.workspaceID ||
-      existing.parentID)
+      !["interactive", "fork"].includes(existing.taskType))
   )
     throw new ConversationRuntimeError("target_ineligible");
   const target = { directory, projectID: existing?.projectID ?? projectIdFromDirectory(directory) };
@@ -29,10 +29,21 @@ export async function continuationControl(context: ZCodeProtocolAgentServerConte
       JSON.parse(Buffer.from(input.dataBase64, "base64").toString("utf8")),
     );
     const mimeTypes = value.messages.flatMap((message) =>
-      message.parts.filter((part) => part.type === "file").map((part) => part.mime),
+      message.parts.flatMap((part) =>
+        part.type === "file"
+          ? [part.mime]
+          : part.type === "tool" && part.state.status === "completed"
+            ? (part.state.attachments ?? []).map((file) => file.mime)
+            : [],
+      ),
     );
     if (!context.deps.validateContinuationSelection?.(value.modelSelection, mimeTypes))
       throw new ConversationRuntimeError("model_unavailable");
+    try {
+      await context.deps.validateContinuationDependencies?.(value);
+    } catch {
+      throw new ConversationRuntimeError("required_skill_unavailable");
+    }
     await verifyContinuationFiles(context, input.session, input.files, value);
   }
   if (["capture", "stage", "apply", "activate", "activateOffline"].includes(input.kind)) {
@@ -48,8 +59,19 @@ export async function continuationControl(context: ZCodeProtocolAgentServerConte
       if (!store.exportTextCheckpoint) throw new ConversationRuntimeError("unsupported");
       // staging 后配置可能变化；授予后仍不能把不支持的模型静默换成默认项。
       const value = await store.exportTextCheckpoint({ sessionID: input.session as SessionId });
+      try {
+        await context.deps.validateContinuationDependencies?.(value);
+      } catch {
+        throw new ConversationRuntimeError("required_skill_unavailable");
+      }
       const mimeTypes = value.messages.flatMap((message) =>
-        message.parts.filter((part) => part.type === "file").map((part) => part.mime),
+        message.parts.flatMap((part) =>
+          part.type === "file"
+            ? [part.mime]
+            : part.type === "tool" && part.state.status === "completed"
+              ? (part.state.attachments ?? []).map((file) => file.mime)
+              : [],
+        ),
       );
       if (!context.deps.validateContinuationSelection?.(value.modelSelection, mimeTypes))
         throw new ConversationRuntimeError("model_unavailable");

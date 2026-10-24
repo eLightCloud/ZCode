@@ -1,7 +1,9 @@
 import type { ConversationHistoryReader } from "@zcode/shared";
+import type { IPlatformService } from "@zcode/shared";
+import { useConversationFileDownload } from "../hooks/useConversationFileDownload.js";
 import { useConversationHistory } from "../hooks/useConversationHistory.js";
 import { Button } from "./ui/button.js";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ConversationContinuation,
   type ConversationContinuationLabels,
@@ -45,14 +47,20 @@ export function ConversationHistory({
   onWorkspace,
   status,
   onContinue,
+  openDownloadDestination,
 }: {
   reader: ConversationHistoryReader;
   labels: ConversationHistoryLabels;
   onWorkspace(): void;
   status?: ReactNode;
-  onContinue?(session: string, location: string, instanceId: string): void;
+  onContinue?(session: string, location: string, instanceId?: string): void;
+  openDownloadDestination?: IPlatformService["openFileDownload"];
 }) {
   const history = useConversationHistory(reader);
+  const downloadFile = useConversationFileDownload(reader, openDownloadDestination);
+  const [fileError, setFileError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const fileRequest = useRef<AbortController | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const choiceLabels = labels.deletionChoice;
   const viewed = history.transcript;
@@ -65,6 +73,14 @@ export function ConversationHistory({
     viewedItem.selected !== viewed.version
   );
   const viewedKey = viewed ? viewed.session + ":" + viewed.version : null;
+  useEffect(() => {
+    fileRequest.current?.abort();
+    setDownloading(false);
+    setFileError(false);
+    return () => {
+      fileRequest.current?.abort();
+    };
+  }, [viewedKey, reader]);
   return (
     <main className="bg-background text-foreground flex h-full min-h-0 flex-col overflow-y-auto text-ui-base [&_button]:min-h-11 [&_button:focus-visible]:ring-2 [&_button:focus-visible]:ring-ring">
       <header className="border-border flex flex-wrap items-center gap-3 border-b p-4">
@@ -219,6 +235,50 @@ export function ConversationHistory({
                 {choiceLabels.action}
               </Button>
             ))}
+          {!!viewed?.effects?.length && (
+            <div role="status" className="border-border rounded-md border p-3 text-ui-caption">
+              <p>{labels.continuation?.warning}</p>
+              {viewed.effects.map((effect) => (
+                <p
+                  className="break-all"
+                  key={JSON.stringify([
+                    effect.server,
+                    effect.owner,
+                    effect.operation,
+                    effect.requestKey,
+                  ])}
+                >
+                  {effect.owner} · {effect.operation} · {effect.outcome} · {effect.requestKey}
+                </p>
+              ))}
+            </div>
+          )}
+          {fileError && <p role="alert">{labels.unavailable}</p>}
+          {viewed?.files?.map((file) => (
+            <Button
+              key={file.uri}
+              variant="outline"
+              disabled={!reader.file || downloading}
+              aria-busy={downloading}
+              onClick={() => {
+                const current = viewed;
+                setFileError(false);
+                setDownloading(true);
+                const controller = new AbortController();
+                fileRequest.current?.abort();
+                fileRequest.current = controller;
+                void downloadFile(current.session, current.version, file, controller.signal)
+                  .catch(() => {
+                    if (!controller.signal.aborted) setFileError(true);
+                  })
+                  .finally(() => {
+                    if (!controller.signal.aborted) setDownloading(false);
+                  });
+              }}
+            >
+              {file.contentType} · {file.bytes} B
+            </Button>
+          ))}
           {history.transcript?.messages.map((message) => (
             <article key={message.id} className="border-border rounded-md border p-4">
               <h3 className="text-muted-foreground text-ui-caption">

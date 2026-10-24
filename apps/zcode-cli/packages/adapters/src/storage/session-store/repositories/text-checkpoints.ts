@@ -1,9 +1,11 @@
 import {
   SESSION_ENTRY_MODEL_SELECTION,
+  SESSION_ENTRY_EXECUTION_STATE,
   TextCheckpointError,
   textCheckpointSchema,
   type Logger,
   type MessageInfo,
+  type MessageId,
   type MessagePart,
   type SessionId,
   type TextCheckpoint,
@@ -13,7 +15,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { projectTextCheckpoint } from "../text-checkpoint-projection.js";
+import { projectTextCheckpoint, checkpointOriginSchema } from "../text-checkpoint-projection.js";
 import { messagesSync, saveMessageSync, savePartSync } from "./messages.js";
 import { saveSessionEntry, sessionEntries } from "./session-entries.js";
 import { listSessionInputsSync } from "./session-inputs.js";
@@ -56,19 +58,21 @@ export function exportTextCheckpoint(
       const session = getSession(db, input.sessionID);
       if (!session) throw new TextCheckpointError("session_not_found");
       // 这些必要状态尚无文本格式；不能只因 message 是 text 就漏掉旁路事实。
-      for (const table of ["todo", "session_target"]) {
+      for (const table of ["session_target"]) {
         if (db.prepare(`select 1 from ${table} where session_id = ? limit 1`).get(session.id)) {
           throw new TextCheckpointError("unsupported_state");
         }
-      }
-      if (db.prepare("select 1 from session where parent_id = ? limit 1").get(session.id)) {
-        throw new TextCheckpointError("unsupported_state");
       }
       result = projectTextCheckpoint(
         session,
         messagesSync(db, input),
         sessionEntries(db, input),
         listSessionInputsSync(db, input),
+        db
+          .prepare(
+            "select content,status,priority,position,time_created as created,time_updated as updated from todo where session_id=? order by position",
+          )
+          .all(session.id),
       );
       db.exec("commit");
     } catch (error) {
@@ -115,15 +119,34 @@ export function importTextCheckpoint(
     try {
       if (replaceInsideTransaction) {
         // 唯一恢复 writer 复用；外层必须持有持久屏障和同一 SQLite 事务。
-        for (const table of ["part", "message", "session_entry", "session_input"])
+        for (const table of ["part", "message", "session_entry", "session_input", "todo"])
           db.prepare(`delete from ${table} where session_id = ?`).run(sessionID);
         db.prepare("update session set permission = null where id = ?").run(sessionID);
       }
       const identities: Array<[string, string[]]> = [
         ...(replaceInsideTransaction ? [] : [["session", [sessionID]] as [string, string[]]]),
         ["message", checkpoint.messages.map(({ info }) => info.id)],
-        ["part", checkpoint.messages.flatMap(({ parts }) => parts.map((part) => part.id))],
-        ["session_entry", [checkpoint.modelSelectionEntryId]],
+        [
+          "part",
+          checkpoint.messages.flatMap(({ parts }) =>
+            parts.flatMap((part) => [
+              part.id,
+              ...(part.type === "tool" && part.state.status === "completed"
+                ? (part.state.attachments ?? []).map((file) => file.id)
+                : []),
+            ]),
+          ),
+        ],
+        [
+          "session_entry",
+          [
+            "checkpoint-origin:" + sessionID,
+            checkpoint.modelSelectionEntryId,
+            ...(checkpoint.execution ? [checkpoint.execution.id] : []),
+            ...(checkpoint.commandFacts ?? []).map((fact) => fact.id),
+            ...(checkpoint.branchEffects?.length ? ["branch-effects:" + sessionID] : []),
+          ].flat(),
+        ],
         ["session_input", checkpoint.inputs.map((input) => input.id)],
       ];
       for (const [table, keys] of identities) {
@@ -139,8 +162,24 @@ export function importTextCheckpoint(
         workspaceID: target.workspaceID,
         directory: target.directory,
         path: target.directory,
-        taskType: "interactive",
+        taskType: checkpoint.session.taskType ?? "interactive",
+        parentID: checkpoint.session.parentID as SessionId | undefined,
+        titleMessageID: checkpoint.session.titleMessageID as MessageId | undefined,
       });
+      if (checkpoint.session.revert)
+        db.prepare("update session set revert=? where id=?").run(
+          JSON.stringify(checkpoint.session.revert),
+          sessionID,
+        );
+      if (checkpoint.session.lastOutcome)
+        db.prepare(
+          "update session set last_outcome=?,last_outcome_input_id=?,last_outcome_at=? where id=?",
+        ).run(
+          checkpoint.session.lastOutcome,
+          checkpoint.session.lastOutcomeInputId ?? null,
+          checkpoint.session.lastOutcomeAt ?? null,
+          sessionID,
+        );
       for (const { info, parts } of checkpoint.messages) {
         saveMessageSync(db, {
           ...info,
@@ -152,6 +191,18 @@ export function importTextCheckpoint(
         for (const part of parts)
           savePartSync(db, {
             ...part,
+            ...(part.type === "tool" && part.state.status === "completed" && part.state.attachments
+              ? {
+                  state: {
+                    ...part.state,
+                    attachments: part.state.attachments.map((file) => ({
+                      ...file,
+                      sessionID,
+                      messageID: info.id,
+                    })),
+                  },
+                }
+              : {}),
             sessionID,
             messageID: info.id,
           } as MessagePart);
@@ -164,6 +215,36 @@ export function importTextCheckpoint(
         data: checkpoint.modelSelection,
         touchSession: false,
       });
+      if (checkpoint.branchEffects?.length)
+        saveSessionEntry(db, {
+          id: "branch-effects:" + sessionID,
+          sessionID,
+          type: "runtime/branch_effects",
+          data: checkpoint.branchEffects,
+          time: checkpoint.session.time,
+          touchSession: false,
+        });
+      for (const fact of checkpoint.commandFacts ?? [])
+        saveSessionEntry(db, { ...fact, sessionID, type: "v4/command_fact", touchSession: false });
+      if (checkpoint.execution)
+        saveSessionEntry(db, {
+          ...checkpoint.execution,
+          sessionID,
+          type: SESSION_ENTRY_EXECUTION_STATE,
+          touchSession: false,
+        });
+      for (const todo of checkpoint.todos ?? [])
+        db.prepare(
+          "insert into todo(session_id,content,status,priority,position,time_created,time_updated) values(?,?,?,?,?,?,?)",
+        ).run(
+          sessionID,
+          todo.content,
+          todo.status,
+          todo.priority,
+          todo.position,
+          todo.created,
+          todo.updated,
+        );
       const insert = db.prepare(`insert into session_input
         (id, session_id, kind, delivery, payload, admitted_sequence, promoted_sequence,
          promoted_message_id, status, status_reason, time_created, time_updated)
@@ -188,6 +269,21 @@ export function importTextCheckpoint(
         checkpoint.session.time.updated,
         sessionID,
       );
+      const observed = getSession(db, sessionID)!;
+      saveSessionEntry(db, {
+        id: "checkpoint-origin:" + sessionID,
+        sessionID,
+        type: "runtime/checkpoint_origin",
+        time: checkpoint.session.time,
+        touchSession: false,
+        data: checkpointOriginSchema.parse({
+          missingTitleSource: checkpoint.session.titleSource === undefined,
+          missingTitleMessageID: checkpoint.session.titleMessageID === undefined,
+          title: checkpoint.session.title,
+          titleSource: observed.titleSource ?? null,
+          titleMessageID: observed.titleMessageID ?? null,
+        }),
+      });
       if (!replaceInsideTransaction) db.exec("commit");
     } catch (error) {
       if (!replaceInsideTransaction) db.exec("rollback");

@@ -5,7 +5,7 @@ import {
   type ConversationIndexProjection,
 } from "@zcode/shared";
 import { preserveConversationPurpose } from "./tasksDatabase/conversation-classification-v4.js";
-import { captureConversationIndexFacts } from "./conversationSyncIndex.js";
+import { captureConversationIndexFacts, isConversationSyncMeta } from "./conversationSyncIndex.js";
 import { TaskGroupRepository } from "#src/task-groups/index.js";
 import {
   isTasksStorageMigrated,
@@ -1571,6 +1571,8 @@ export class TaskIndexRepo {
       taskId: string;
       workspaceIdentity?: string;
       continuationOperation?: string;
+      legacy?: boolean;
+      attributeLegacy?: boolean;
     },
     capture: (facts: ConversationIndexFacts) => Promise<T>,
   ): Promise<T> {
@@ -1605,16 +1607,8 @@ export class TaskIndexRepo {
     const meta = zcodeTaskMetaSchema.strict().parse(params.meta);
     if (
       facts.pinned === undefined ||
-      meta.workspacePurpose !== "conversation" ||
-      meta.workspaceIdentity ||
-      meta.workspacePath !== getConversationWorkspaceDir() ||
-      meta.provider !== "glm" ||
-      meta.forkedFromTaskId ||
-      meta.cronAutomationId ||
-      meta.offPeakTaskId ||
-      meta.migrationSource ||
-      meta.repairState ||
-      meta.target
+      !isConversationSyncMeta(meta) ||
+      (facts.parentSessionId ?? null) !== (meta.forkedFromTaskId ?? null)
     )
       throw new Error("conversation_sync_rebuild_ineligible");
     await this.ensureReady();

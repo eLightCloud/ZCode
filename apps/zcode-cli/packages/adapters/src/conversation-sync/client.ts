@@ -15,7 +15,9 @@ import {
 import { canonical, digest } from "./canonical.js";
 import {
   conversationHistorySchema,
+  conversationEffectSchema,
   conversationContinuationRecordSchema,
+  conversationContinuationResultSchema,
   conversationFileSchema,
 } from "@zcode/shared";
 import { z } from "zod";
@@ -101,6 +103,16 @@ export function createConversationSyncHttpClient(options: {
     return decoded;
   }
   return {
+    async effects(scope, session) {
+      const value = await request(scope, "/effects", { session });
+      if (!Array.isArray(value)) throw new ConversationSyncError("invalid");
+      return value.map((effect) => conversationEffectSchema.parse(effect));
+    },
+    async enroll(scope, session, version) {
+      return conversationContinuationResultSchema
+        .nullable()
+        .parse(await request(scope, "/enroll", {}, { session, version }));
+    },
     files: {
       async put(scope, file, bytes) {
         const saved = z

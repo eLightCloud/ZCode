@@ -7,39 +7,180 @@ import { createConversationSyncOutbox } from "../src/conversation-sync/outbox.js
 import { checkpoint } from "../checks/sync-fixture.mjs";
 
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {recursive:true,force:true}))); });
-async function setup() { const root=await mkdtemp(join(tmpdir(),"control-identity-"));roots.push(root);return join(root,"sync.sqlite"); }
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+async function setup() {
+  const root = await mkdtemp(join(tmpdir(), "control-identity-"));
+  roots.push(root);
+  return join(root, "sync.sqlite");
+}
 it("enrolls one persistent self-certifying native key without exporting its private material", async () => {
-  const path=await setup(),a=createConversationSyncOutbox(path),b=createConversationSyncOutbox(path);
-  const key=a.controlIdentity(true);
+  const path = await setup(),
+    a = createConversationSyncOutbox(path),
+    b = createConversationSyncOutbox(path);
+  const key = a.controlIdentity(true);
   expect(b.controlIdentity().publicKey).toBe(key.publicKey);
-  expect(Object.keys(key).sort()).toEqual(["bound","changed","location","publicKey"]);
-  expect(a.location()).toBe(key.location);expect(b.location()).toBe(key.location);
-  const bytes=createHash("sha256").update(Buffer.from(key.publicKey,"base64")).digest().subarray(0,16);
-  bytes[6]=(bytes[6]!&15)|64;bytes[8]=(bytes[8]!&63)|128;
-  expect(key.location.replace("host:","").replaceAll("-","")).toBe(bytes.toString("hex"));
-  const nonce=randomBytes(32).toString("base64url"),signature=a.signControlChallenge(nonce);
-  const publicKey=createPublicKey({key:Buffer.from(key.publicKey,"base64"),format:"der",type:"spki"});
-  expect(verify(null,Buffer.from("zcode-native-control-v1:"+nonce),publicKey,Buffer.from(signature,"base64"))).toBe(true);
-  expect(verify(null,Buffer.from("zcode-native-control-v1:"+randomBytes(32).toString("base64url")),publicKey,Buffer.from(signature,"base64"))).toBe(false);
-  a.close();b.close();const reopened=createConversationSyncOutbox(path);
-  expect(reopened.controlIdentity().publicKey).toBe(key.publicKey);reopened.close();
-  if(process.platform!=="win32")expect((await stat(path)).mode&0o777).toBe(0o600);
+  expect(Object.keys(key).sort()).toEqual(["bound", "changed", "location", "publicKey"]);
+  expect(a.location()).toBe(key.location);
+  expect(b.location()).toBe(key.location);
+  const bytes = createHash("sha256")
+    .update(Buffer.from(key.publicKey, "base64"))
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6]! & 15) | 64;
+  bytes[8] = (bytes[8]! & 63) | 128;
+  expect(key.location.replace("host:", "").replaceAll("-", "")).toBe(bytes.toString("hex"));
+  const nonce = randomBytes(32).toString("base64url"),
+    signature = a.signControlChallenge(nonce);
+  const publicKey = createPublicKey({
+    key: Buffer.from(key.publicKey, "base64"),
+    format: "der",
+    type: "spki",
+  });
+  expect(
+    verify(
+      null,
+      Buffer.from("zcode-native-control-v1:" + nonce),
+      publicKey,
+      Buffer.from(signature, "base64"),
+    ),
+  ).toBe(true);
+  expect(
+    verify(
+      null,
+      Buffer.from("zcode-native-control-v1:" + randomBytes(32).toString("base64url")),
+      publicKey,
+      Buffer.from(signature, "base64"),
+    ),
+  ).toBe(false);
+  a.close();
+  b.close();
+  const reopened = createConversationSyncOutbox(path);
+  expect(reopened.controlIdentity().publicKey).toBe(key.publicKey);
+  reopened.close();
+  if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
 });
 it("never rewrites an unconfirmed operation and preserves exact baseline history on explicit identity renewal", async () => {
-  const path=await setup(),box=createConversationSyncOutbox(path);
-  const scope={tenant:randomUUID(),subject:randomUUID()},cp=checkpoint("identity-session");
-  const baseline={id:"saved-base",parent:null,location:box.location(),generation:1,checkpoint:cp};
-  const operation=randomUUID();box.adopt(scope,baseline,1,operation);
-  const request={session:cp.session.id,operation:randomUUID(),command:{kind:"receive" as const,version:{...baseline,id:"pending",parent:baseline.id}}};
-  box.stage(scope,request);
-  const old=box.location();expect(()=>box.controlIdentity(true)).toThrow("blocked");
-  expect(box.location()).toBe(old);expect(box.pending(scope)).toEqual([request]);
+  const path = await setup(),
+    box = createConversationSyncOutbox(path);
+  const scope = { tenant: randomUUID(), subject: randomUUID() },
+    cp = checkpoint("identity-session");
+  const baseline = {
+    id: "saved-base",
+    parent: null,
+    location: box.location(),
+    generation: 1,
+    checkpoint: cp,
+  };
+  const operation = randomUUID();
+  box.adopt(scope, baseline, 1, operation);
+  const request = {
+    session: cp.session.id,
+    operation: randomUUID(),
+    command: {
+      kind: "receive" as const,
+      version: { ...baseline, id: "pending", parent: baseline.id },
+    },
+  };
+  box.stage(scope, request);
+  const old = box.location();
+  expect(() => box.controlIdentity(true)).toThrow("blocked");
+  expect(box.location()).toBe(old);
+  expect(box.pending(scope)).toEqual([request]);
   box.close();
   // A separate confirmed installation demonstrates renewal without touching session/plugin stores.
-  const other=createConversationSyncOutbox(await setup());other.adopt(scope,baseline,1,operation);
-  other.bindInput(scope,"original-command",cp.session.id);other.controlIdentity(true);
-  expect(other.baseline(scope,cp.session.id)).toEqual(baseline);
-  expect(other.branchGeneration(scope,cp.session.id)).toBe(0);expect(other.branchMode(scope,cp.session.id)).toBe("offline");
-  expect(other.ownsSession(scope,cp.session.id)).toBe(true);other.close();
+  const other = createConversationSyncOutbox(await setup());
+  other.adopt(scope, baseline, 1, operation);
+  other.bindInput(scope, "original-command", cp.session.id);
+  other.controlIdentity(true);
+  expect(other.baseline(scope, cp.session.id)).toEqual(baseline);
+  expect(other.branchGeneration(scope, cp.session.id)).toBe(0);
+  expect(other.branchMode(scope, cp.session.id)).toBe("offline");
+  expect(other.ownsSession(scope, cp.session.id)).toBe(true);
+  other.close();
+});
+
+it("attributes only an explicitly confirmed legacy snapshot and preserves permanent rejection across reopen", async () => {
+  const path = await setup();
+  let box = createConversationSyncOutbox(path);
+  const scope = { tenant: randomUUID(), subject: randomUUID() },
+    other = { ...scope, subject: randomUUID() };
+  const operation = randomUUID(),
+    fingerprint = "a".repeat(64),
+    session = "synthetic-legacy";
+  box.attributeLegacy(scope, session, fingerprint, operation);
+  box.attributeLegacy(scope, session, fingerprint, operation);
+  expect(box.ownsSession(scope, session)).toBe(true);
+  expect(() => box.attributeLegacy(other, session, fingerprint, operation)).toThrow("scope");
+  expect(() => box.checkLegacyOwner(other, session)).toThrow("scope");
+  expect(() => box.bindInput(other, "foreign-input", session)).toThrow("scope");
+  const request = {
+    session,
+    operation: randomUUID(),
+    command: {
+      kind: "receive" as const,
+      version: {
+        id: "rejected-version",
+        parent: null,
+        location: box.location(),
+        generation: 0,
+        checkpoint: null,
+      },
+    },
+  };
+  box.stage(scope, request);
+  box.reject(scope, session, request.operation, "conflict");
+  box.close();
+  box = createConversationSyncOutbox(path);
+  expect(box.rejection(scope, session)).toEqual({ operation: request.operation, code: "conflict" });
+  expect(box.rejection(other, session)).toBeNull();
+  expect(box.pending(scope)).toEqual([request]);
+  box.retry(scope, session);
+  expect(box.rejection(scope, session)).toBeNull();
+  expect(box.pending(scope)).toEqual([request]);
+  expect(box.ownsSession(scope, "fork-child", undefined, session)).toBe(true);
+  expect(box.ownsSession(other, "another-child", undefined, session)).toBe(false);
+  box.close();
+});
+
+it("preserves pending uploads and causal ancestry when local execution diverges offline", async () => {
+  const path = await setup();
+  let box = createConversationSyncOutbox(path);
+  const scope = { tenant: randomUUID(), subject: randomUUID() };
+  const cp = checkpoint("offline-source");
+  const baseline = {
+    id: "online-base",
+    parent: null,
+    location: box.location(),
+    generation: 2,
+    checkpoint: cp,
+  };
+  box.adopt(scope, baseline, 2, randomUUID());
+  const request = {
+    session: cp.session.id,
+    operation: randomUUID(),
+    command: {
+      kind: "receive" as const,
+      version: { ...baseline, id: "pending-online", parent: baseline.id },
+    },
+  };
+  box.stage(scope, request);
+  box.markOffline(scope, cp.session.id);
+  expect(box.branchGeneration(scope, cp.session.id)).toBe(0);
+  expect(box.branchMode(scope, cp.session.id)).toBe("offline");
+  expect(box.pending(scope)).toEqual([request]);
+  expect(box.baseline(scope, cp.session.id)).toEqual(request.command.version);
+  expect(() => box.markOffline({ ...scope, subject: randomUUID() }, cp.session.id)).toThrow(
+    "scope",
+  );
+  box.close();
+  box = createConversationSyncOutbox(path);
+  try {
+    expect(box.branchMode(scope, cp.session.id)).toBe("offline");
+    expect(box.branchGeneration(scope, cp.session.id)).toBe(0);
+    expect(box.pending(scope)).toEqual([request]);
+  } finally {
+    box.close();
+  }
 });

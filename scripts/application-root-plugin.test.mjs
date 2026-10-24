@@ -45,6 +45,13 @@ test("external application gets the same public packages as the native host", as
     ),
   );
   assert.ok(!aliases.some((alias) => alias.find.test("@zcode/shared/model-config")));
+  assert.ok(
+    aliases.some(
+      (alias) =>
+        alias.find.test("@zcode/client/browser-file-download") &&
+        alias.replacement.endsWith("packages/client/src/browserFileDownload.ts"),
+    ),
+  );
   const allowed = [],
     watched = [];
   plugin.configureServer({

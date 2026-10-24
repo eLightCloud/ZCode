@@ -1,3 +1,4 @@
+import { readBranchEffects } from "../branch-effects.js";
 import { CoreErrorType } from "@zcode/contracts";
 import { createChildTraceContext } from "@zcode/contracts";
 import { createCoreError } from "@zcode/contracts";
@@ -137,6 +138,47 @@ async function executeToolCallImpl(
       turnId,
       telemetry,
     );
+  }
+
+  if (
+    !entry.metadata.mcpPresentation &&
+    !entry.metadata.readOnly &&
+    deps.sessionStore?.sessionEntries
+  ) {
+    let blocked = false;
+    try {
+      const effects = await readBranchEffects(deps.sessionStore, deps.sessionId);
+      blocked = effects.some((effect) => effect.server === "native:" + entry.metadata.name);
+    } catch {
+      // 导入效果损坏或读取失败时保留工具错误与关联，不让异常绕过正常终态投影。
+      blocked = true;
+    }
+    if (blocked) {
+      const result = createErrorResult(
+        canonicalToolCall,
+        createCoreError(
+          CoreErrorType.ToolExecutionFailed,
+          "Another branch has an unresolved external effect for this tool. Verify the original resource operation before retrying; a new request key is not verification.",
+          { recoverable: true },
+        ),
+      );
+      await emitToolCallError(
+        deps,
+        canonicalToolCall.id,
+        traceContext,
+        turnId,
+        result.error,
+        undefined,
+        pluginId,
+      );
+      deps.logger?.warn("Unresolved cross-branch effect blocked", {
+        event: "tool.branch_effect",
+        sessionId: deps.sessionId,
+        toolCallId: canonicalToolCall.id,
+        outcome: "blocked",
+      });
+      return result;
+    }
   }
 
   let lifetime: ReturnType<NonNullable<ToolEntry["retainExecution"]>> | undefined;

@@ -1,6 +1,25 @@
-import { traceContextToLogContext, TurnMachineImpl } from "../deps.js";
-import type { MessageId, PartId, ToolCall, ToolCallId, ToolExecutionResult, TraceContext } from "../deps.js";
-import { createStreamRecoveryAnchorId, emitStreamRecoveryAnchor, emitStreamingToolLedgerUpdate, isErrorForToolResult, isTurnCancellationError, modelContentForToolResult, stringifyToolResultOutput } from "../helpers/index.js";
+import { COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION } from "@zcode/contracts";
+import {
+  traceContextToLogContext,
+  TurnMachineImpl,
+} from "../deps.js";
+import type {
+  MessageId,
+  PartId,
+  ToolCall,
+  ToolCallId,
+  ToolExecutionResult,
+  TraceContext,
+} from "../deps.js";
+import {
+  createStreamRecoveryAnchorId,
+  emitStreamRecoveryAnchor,
+  emitStreamingToolLedgerUpdate,
+  isErrorForToolResult,
+  isTurnCancellationError,
+  modelContentForToolResult,
+  stringifyToolResultOutput,
+} from "../helpers/index.js";
 import { persistToolResultMediaAttachments } from "../helpers/tool-result-media-persistence.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { StreamedToolExecutionResult } from "../model-execution-types.js";
@@ -126,7 +145,7 @@ export async function settleToolResults(
                 output: content,
                 title: projectedResultToolName.toolName,
                 metadata: {
-                  ...completedToolPartMetadata(result),
+                  ...completedToolPartMetadata(result, this.registry.getMetadata(result.toolName)),
                   ...(mediaPersistence
                     ? { modelContentLayout: mediaPersistence.modelContentLayout }
                     : {}),
@@ -144,6 +163,7 @@ export async function settleToolResults(
                 // 修复原因：state.error 面向 UI / 日志，可能比模型实际收到的
                 // modelContent 更笼统；仅附加保存 string 内容供冷恢复精确重放。
                 metadata: {
+                  schemaVersion: COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION,
                   ...mcpToolPartMetadata(
                     this.registry.getMetadata(result.toolName)?.mcpPresentation,
                   ),

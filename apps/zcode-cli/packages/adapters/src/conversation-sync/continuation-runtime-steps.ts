@@ -3,6 +3,7 @@ import {
   ConversationSyncError,
   TextCheckpointError,
   textCheckpointSchema,
+  checkpointEffectReferences,
   type ConversationSyncStore,
   type SyncScope,
   type SyncVersion,
@@ -18,7 +19,14 @@ import { captureRegisteredFiles } from "./registered-files.js";
 import { canonical, digest } from "./canonical.js";
 
 export interface ConversationRuntimeDirectory {
-  list(scope: SyncScope): Promise<Array<{ location: string; label: string; instanceId?: string; models?: ConversationModelOption[] }>>;
+  list(scope: SyncScope): Promise<
+    Array<{
+      location: string;
+      label: string;
+      instanceId?: string;
+      models?: ConversationModelOption[];
+    }>
+  >;
   runtime(scope: SyncScope, location: string): Promise<ConversationRuntimePort>;
 }
 export function continuationOperation(operation: string, step: string): string {
@@ -113,6 +121,8 @@ export async function captureRuntime(
   const checkpoint = textCheckpointSchema.parse(
     JSON.parse(Buffer.from(captured.dataBase64, "base64").toString("utf8")),
   );
+  if ((checkpoint.session.parentID ?? null) !== (captured.management.parentSessionId ?? null))
+    throw new ConversationSyncError("invalid");
   if (checkpoint.session.id !== session) throw new ConversationSyncError("invalid");
   const content = captured.management.deleted ? null : checkpoint;
   const files = content
@@ -182,6 +192,20 @@ export async function stageRuntime(
       dataBase64: Buffer.from(bytes).toString("base64"),
     });
   }
+  const ownKeys = new Set(
+    checkpointEffectReferences({ ...version.checkpoint, branchEffects: undefined }).map((effect) =>
+      canonical([effect.server, effect.owner, effect.operation, effect.requestKey]),
+    ),
+  );
+  const effects = ((await store.effects?.(scope, session)) ?? []).filter(
+    (effect) =>
+      !ownKeys.has(canonical([effect.server, effect.owner, effect.operation, effect.requestKey])),
+  );
+  const checkpoint = {
+    ...version.checkpoint,
+    ...(targetModel ? { modelSelection: targetModel } : {}),
+    ...(effects.length ? { version: 4 as const, branchEffects: effects } : {}),
+  };
   return runtime.control({
     kind: "stage",
     session,
@@ -189,7 +213,6 @@ export async function stageRuntime(
     branchMode,
     management: version.management,
     ...(version.files?.length ? { files: version.files } : {}),
-    dataBase64: Buffer.from(JSON.stringify(targetModel
-      ? { ...version.checkpoint, modelSelection: targetModel } : version.checkpoint)).toString("base64"),
+    dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
   });
 }

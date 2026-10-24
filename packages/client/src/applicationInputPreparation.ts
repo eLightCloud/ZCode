@@ -10,11 +10,26 @@ type Preparation = (
   },
   host?: IApplicationHostService,
 ) => Promise<void>;
+/** Explicit policy rejection is different from optional binding transport failure. */
+export class ApplicationInputRejected extends Error {
+  constructor(
+    readonly code: string,
+    message = code,
+  ) {
+    super(message);
+    this.name = "ApplicationInputRejected";
+  }
+}
 let preparation: Preparation | undefined;
+let required = false;
 
 /** Trusted application startup only. Never modifies the native command or its identity. */
-export function setApplicationInputPreparation(value: Preparation | undefined): void {
+export function setApplicationInputPreparation(
+  value: Preparation | undefined,
+  options?: { required?: boolean },
+): void {
   preparation = value;
+  required = options?.required === true;
 }
 export async function prepareApplicationInput(
   params: Parameters<IZCodeAgentService["sendConversationCommandV4"]>[0],
@@ -25,6 +40,7 @@ export async function prepareApplicationInput(
     !["sendText", "createSession", "sendGoalCommand"].includes(params.envelope.type)
   )
     return;
+  const mandatory = required;
   const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -40,14 +56,19 @@ export async function prepareApplicationInput(
         },
         host,
       ),
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         timer = setTimeout(() => {
           abort.abort();
-          resolve();
+          if (mandatory) reject(new ApplicationInputRejected("application_input_unconfirmed"));
+          else resolve();
         }, 5000);
       }),
     ]);
-  } catch {
+  } catch (error) {
+    // 已确认的禁入必须保留草稿；可选绑定网络失败仍不接管原生接纳。
+    if (error instanceof ApplicationInputRejected) throw error;
+    // Web 强制准备失败不能伪装成可选本地绑定，未知结果保留草稿供原操作重查。
+    if (mandatory) throw new ApplicationInputRejected("application_input_unconfirmed");
     // 应用自己投影保存失败，原生只保留原命令及 admission owner。
   } finally {
     clearTimeout(timer);

@@ -1,5 +1,6 @@
 import { deliverFilesToolResultDisplayPayloadSchema } from "./deliver-files.js";
 import { z } from "zod";
+import { conversationEffectSchema, type ConversationEffect } from "@zcode/shared";
 import { PersistedToolSearchContentSchema } from "./tool-search.js";
 import { OFFICIAL_MCP_TOOL_ERROR_CODES } from "@zcode/shared";
 import {
@@ -339,14 +340,36 @@ export const toolResultSerializationMetadataSchema = z
     returnedBytes: z.number().int().nonnegative(),
     budgetStrategy: z.enum(["inline", "truncate", "artifact"]),
     artifactPath: z.string().min(1).optional(),
+    artifactUri: z.string().min(1).optional(),
   })
   .strict();
 
 export type ToolResultSerializationMetadata = z.infer<typeof toolResultSerializationMetadataSchema>;
 
+export const persistedToolMediaLayoutSchema = z
+  .array(
+    z.discriminatedUnion("type", [
+      z
+        .object({ type: z.literal("attachment"), attachmentIndex: z.number().int().nonnegative() })
+        .strict(),
+      z.object({ type: z.literal("text"), text: z.string() }).strict(),
+    ]),
+  )
+  .min(1);
+export type PersistedToolMediaLayoutEntry = z.infer<typeof persistedToolMediaLayoutSchema>[number];
+
 export const completedToolPartMetadataSchema = z
   .object({
     // 错误结果沿用字符串内容；仅接受数组会使 V4 冷恢复丢弃整份 metadata，包括 display。
+    modelContentLayout: persistedToolMediaLayoutSchema.optional(),
+    readOnly: z.boolean().optional(),
+    sideEffectScope: z
+      .enum(["none", "workspace", "git", "network", "system", "session", "userInteraction"])
+      .optional(),
+    mcpReadOnly: z.boolean().optional(),
+    businessEffect: z
+      .custom<ConversationEffect>((value) => conversationEffectSchema.safeParse(value).success)
+      .optional(),
     modelContent: z.union([z.string(), PersistedToolSearchContentSchema]).optional(),
     schemaVersion: z.literal(COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION),
     display: toolResultDisplayPayloadSchema.optional(),

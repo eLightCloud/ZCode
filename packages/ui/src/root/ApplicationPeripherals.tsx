@@ -10,6 +10,7 @@ export interface ApplicationShareCandidate {
 /** Trusted optional assembly; owns no session, credential or publication facts. */
 export interface ApplicationPeripherals {
   nativeCloudEnabled: boolean;
+  renderConversationStatus?: (context: { sessionId: string; workspacePath: string }) => ReactNode;
   renderDeliverables?: (files: readonly NativeDeliverable[], workspacePath: string) => ReactNode;
   openHelp: () => void;
   openFeedback: () => void;

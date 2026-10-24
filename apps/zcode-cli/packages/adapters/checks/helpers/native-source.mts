@@ -1,12 +1,13 @@
+// Verification-only direct-store fixture. Production uses createHostConversationSyncSource.
 import {
   TextCheckpointError,
   type SessionId,
   type SessionStorePort,
   type SyncScope,
 } from "@zcode/contracts";
-import type { ConversationSyncOutbox } from "./outbox.js";
-import type { SyncCheckpointSource } from "./worker.js";
-import { digest } from "./canonical.js";
+import type { ConversationSyncOutbox } from "../../src/conversation-sync/outbox.js";
+import type { SyncCheckpointSource } from "../../src/conversation-sync/worker.js";
+import { digest } from "../../src/conversation-sync/canonical.js";
 
 /** Native host facts, not client-supplied workspace metadata. */
 export interface NativeSyncSourceOwner {

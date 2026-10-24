@@ -19,14 +19,23 @@ export function applicationRootPlugin(env) {
       // 外部可信源码不在 pnpm 工作区，包解析须与实际宿主使用同一公开入口。
       return {
         resolve: {
-          alias: ["@zcode/client", "@zcode/services", "@zcode/shared", "@zcode/ui"].map((id) => ({
+          alias: [
+            "@zcode/client",
+            "@zcode/client/browser-file-download",
+            "@zcode/services",
+            "@zcode/shared",
+            "@zcode/ui",
+          ].map((id) => ({
             find: new RegExp("^" + id + "$"),
             replacement: (() => {
               const manifest = new URL(
                 "../packages/" + id.split("/")[1] + "/package.json",
                 import.meta.url,
               );
-              const publicEntry = JSON.parse(readFileSync(manifest, "utf8")).exports["."];
+              const subpath = id.split("/").slice(2).join("/");
+              const publicEntry = JSON.parse(readFileSync(manifest, "utf8")).exports[
+                subpath ? "./" + subpath : "."
+              ];
               return fileURLToPath(new URL(publicEntry, manifest));
             })(),
           })),

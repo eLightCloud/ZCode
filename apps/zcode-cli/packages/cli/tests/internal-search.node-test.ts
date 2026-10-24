@@ -89,8 +89,8 @@ async function writeIgnoringSigtermCommand(path: string, pidFile: string): Promi
     path,
     `#!/usr/bin/env node
 const { writeFileSync } = require("node:fs");
-writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on("SIGTERM", () => {});
+writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 setInterval(() => {}, 1000);
 `,
   );
@@ -309,11 +309,11 @@ nativeSearchTest("internal grep abort signal force kills the native child", asyn
   const { io } = createIo(root, stdin);
   process.env.PATH = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
 
+  const searchPromise = runEmbeddedSearchCli(["grep", "needle"], {
+    ...io,
+    signal: controller.signal,
+  });
   try {
-    const searchPromise = runEmbeddedSearchCli(["grep", "needle"], {
-      ...io,
-      signal: controller.signal,
-    });
     const childPid = await readPidFile(pidFile);
 
     controller.abort();
@@ -321,6 +321,9 @@ nativeSearchTest("internal grep abort signal force kills the native child", asyn
     assert.equal(await searchPromise, 130);
     await waitForProcessExit(childPid);
   } finally {
+    // PID 就绪断言失败时也必须取消并回收真实子进程，否则 node:test 会永久等待存活句柄。
+    controller.abort();
+    await searchPromise;
     stdin.destroy();
     if (previousPath === undefined) {
       delete process.env.PATH;

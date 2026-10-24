@@ -162,6 +162,7 @@ describe("DB109 会话库正式数据迁移", () => {
         "0024_session_database_identity",
       ]),
     );
+    expect(store.debugMigrationIds().at(-1)).toBe("0025_session_continuation");
     expect(raw("session_entry", "selection")).toEqual({
       ...oldEntry,
       modelSelection: currentSelection,

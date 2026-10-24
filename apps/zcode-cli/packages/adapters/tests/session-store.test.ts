@@ -504,6 +504,15 @@ describe("SQLite session store", () => {
     expect(getDefaultSessionDbPath()).toBe(join(homedir(), ".zcode", "cli", "db", "db.sqlite"));
   });
 
+  it("keeps the existing in-memory session store path working", async () => {
+    const store = await createSqliteSessionStore({ dbPath: ":memory:" });
+    try {
+      expect(store.debugMigrationIds()).toHaveLength(25);
+    } finally {
+      store.close();
+    }
+  });
+
   it("can inject sqlite open failures for startup/recovery cases", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "zcode-session-open-fault-"));
     const dbPath = join(tempRoot, "session.sqlite");

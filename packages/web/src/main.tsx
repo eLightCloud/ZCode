@@ -7,6 +7,7 @@ import {
 } from "virtual:zcode-application-root";
 import { mobilePluginDiscoveryTelemetrySchema } from "@zcode/shared";
 import {
+  conversationSessionIdSchema,
   sessionCreateTelemetrySchema,
   type RendererTelemetryEventPayload,
   WEB_REMOTE_CONTROL_WORKSPACE_RECONNECT_TIMEOUT_MS,
@@ -2094,14 +2095,14 @@ async function bootstrapWebApp() {
       onClose: () => {},
     });
     // 查询参数只是导航提示；实例准入仍由服务端裁决，正文由原生同 ID 恢复入口提供。
-    const conversation = params.get("conversation");
-    if (conversation && /^[a-zA-Z0-9_.:-]{1,128}$/.test(conversation)) {
+    const conversation = conversationSessionIdSchema.safeParse(params.get("conversation"));
+    if (conversation.success) {
       const workspace = await services.fileService.ensureConversationWorkspace();
       bootstrap = {
         ...bootstrap,
         initialWorkspaceAbsPath: workspace.path,
         initialWorkspacePurpose: "conversation",
-        initialTaskId: conversation,
+        initialTaskId: conversation.data,
         restoreSession: false,
       };
     }

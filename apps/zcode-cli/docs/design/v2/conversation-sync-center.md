@@ -204,7 +204,7 @@ native request contains only the original operation ID, exact session/version,
 observed revision and candidate set. The authenticated gateway constructs the
 native select command with no location or recovery evidence. Consequently only a
 tombstone can succeed, and native active/pending or in-flight handoffs still block.
-Text choice/activation stays unavailable until actual target recovery is wired.
+Text choice/activation requires the fenced target recovery described below.
 The same operation retries an ACK loss, new candidates make stale choices reject,
 and rejected choices never fence a runtime. Account changes are checked before
 mutation against the previous server-provided scope, which cannot grant access.

@@ -1,6 +1,6 @@
 import { ProviderBusinessError, isNonZeroProviderCode, providerCodeToStatusCode, toProviderCode, readProviderMessage, readProviderRequestId, summarizeProviderBusinessBody, safeParseRecord, asRecord, type AiSdkProviderKind, type ProviderCode } from "./provider-business-error.js";
 import { type ProviderEndpointRoutingPort } from "@zcode/contracts";
-import { createNetworkProxyFetch } from "../network/proxy-fetch.js";
+import { createNetworkProxyFetch } from "../http/index.js";
 import { createProviderEndpointRoutingFetch } from "./provider-endpoint-routing-fetch.js";
 import { normalizeModelTlsFailure } from "./failure-tls.js";
 

@@ -4,7 +4,7 @@
  */
 export const cliAdaptersModule = {
   id: "cli-adapters",
-  requires: ["mcp-apps-protocol", "provider", "shared", "sqlite-migrations", "zcode-cli"],
+  requires: ["cli-network", "conversation-sync", "mcp-apps-protocol", "provider", "shared", "sqlite-migrations", "zcode-cli"],
   provides: ["cli-adapters"],
   publicEntrypoints: [
     "index.ts",

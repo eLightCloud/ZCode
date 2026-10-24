@@ -384,3 +384,7 @@ function toHttpClientError(
     cause: error,
   });
 }
+
+// 网络出口的稳定公开面；MCP / 模型 / 子进程复用同一代理策略实现。
+export { createNetworkProxyFetch } from "../network/proxy-fetch.js";
+export { applyNetworkEgressEnv, type NetworkEgressEnvPolicy } from "../network/subprocess-env.js";

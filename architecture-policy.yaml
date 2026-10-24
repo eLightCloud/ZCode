@@ -744,6 +744,8 @@ modules:
       - apps/zcode-cli/packages/adapters/vitest.config.ts
     managed: true
     requires:
+      - cli-network
+      - conversation-sync
       - mcp-apps-protocol
       - provider
       - shared
@@ -841,6 +843,7 @@ modules:
       - apps/zcode-cli/packages/adapters/src/conversation-sync
     managed: true
     requires:
+      - cli-network
       - shared
       - zcode-cli
     publicEntrypoints:
@@ -864,6 +867,21 @@ modules:
     layers:
       adapters: .
     owner: conversation
+  # cli-network：由 architecture:adopt 登记
+  - id: cli-network
+    roots:
+      - apps/zcode-cli/packages/adapters/src/http
+      - apps/zcode-cli/packages/adapters/src/network
+    managed: true
+    requires:
+      - shared
+      - zcode-cli
+    publicEntrypoints:
+      - apps/zcode-cli/packages/adapters/src/http/index.ts
+      - apps/zcode-cli/packages/adapters/src/http/contract.ts
+    layers:
+      adapters: .
+    owner: native-network
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

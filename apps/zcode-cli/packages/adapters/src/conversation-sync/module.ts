@@ -4,7 +4,7 @@
  */
 export const conversationSyncModule = {
   id: "conversation-sync",
-  requires: ["shared", "zcode-cli"],
+  requires: ["cli-network", "shared", "zcode-cli"],
   provides: ["conversation-sync"],
   publicEntrypoints: ["index.ts", "contract.ts"],
 } as const;

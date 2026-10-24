@@ -141,6 +141,7 @@ modules:
       - conversation-workspace-target
       - web-remote-control-ui
       - remote-connection-flow
+      - source-server-management-view
     publicEntrypoints:
       - packages/ui/src/project-sidebar/index.tsx
       - packages/ui/src/project-sidebar/contract.ts
@@ -374,6 +375,7 @@ modules:
     requires:
       - shared
       - ui
+      - source-server-management-view
     publicEntrypoints:
       - packages/ui/src/remote-connection-flow/index.ts
       - packages/ui/src/remote-connection-flow/contract.ts
@@ -722,16 +724,27 @@ modules:
     roots:
       - packages/desktop/src/main/embedded-browser-permission-contract
       - packages/desktop/src/main/embeddedBrowserPermissionPolicy.ts
+      - packages/desktop/src/main/embeddedBrowserPermissionUiBridge.ts
+      - packages/desktop/src/main/embeddedBrowserSitePermissionStore.ts
+      - packages/ui/src/browser-use/BrowserSitePermissionsPage.tsx
     managed: true
     requires:
       - desktop
       - shared
+      - ui
     publicEntrypoints:
       - packages/desktop/src/main/embeddedBrowserPermissionPolicy.ts
       - packages/desktop/src/main/embedded-browser-permission-contract/contract.ts
+      - packages/desktop/src/main/embeddedBrowserPermissionUiBridge.ts
+      - packages/desktop/src/main/embeddedBrowserSitePermissionStore.ts
+      - packages/ui/src/browser-use/BrowserSitePermissionsPage.tsx
     layers:
       adapters: .
+      ui: ../../../../ui/src/browser-use/BrowserSitePermissionsPage.tsx
     owner: desktop
+    layerOrder:
+      - adapters
+      - ui
   # marketing-touch-controller：由 architecture:adopt 登记
   - id: marketing-touch-controller
     roots:
@@ -1513,6 +1526,166 @@ modules:
     layers:
       app: .
     owner: model-selection
+  # source-server-operation-log：由 architecture:adopt 登记
+  - id: source-server-operation-log
+    roots:
+      - packages/desktop/src/host/source-server-operation-log
+      - packages/desktop/src/host/sourceServerOperationLogs.ts
+    managed: true
+    requires:
+      - desktop
+      - shared
+      - rpc
+      - server
+    publicEntrypoints:
+      - packages/desktop/src/host/source-server-operation-log/index.ts
+      - packages/desktop/src/host/source-server-operation-log/contract.ts
+      - packages/desktop/src/host/sourceServerOperationLogs.ts
+    layers:
+      adapters: .
+    owner: remote
+  # source-server-transport：由 architecture:adopt 登记
+  - id: source-server-transport
+    roots:
+      - packages/server/src/source-server/transport-contract
+      - packages/server/src/source-server/sourceServerTransportRuntime.ts
+      - packages/server/src/source-server/transportAdapter.ts
+    managed: true
+    requires:
+      - server
+      - shared
+    publicEntrypoints:
+      - packages/server/src/source-server/transport-contract/index.ts
+      - packages/server/src/source-server/transport-contract/contract.ts
+      - packages/server/src/source-server/sourceServerTransportRuntime.ts
+      - packages/server/src/source-server/transportAdapter.ts
+    layers:
+      adapters: .
+    owner: remote
+  # source-server-workspace-contract：由 architecture:adopt 登记
+  - id: source-server-workspace-contract
+    roots:
+      - packages/shared/src/source-server/workspace-contract
+      - packages/shared/src/source-server/errorCodes.ts
+      - packages/services/src/source-server-workspace/sourceServerWorkspace.ts
+    managed: true
+    requires:
+      - services
+      - shared
+    publicEntrypoints:
+      - packages/shared/src/source-server/workspace-contract/index.ts
+      - packages/shared/src/source-server/workspace-contract/contract.ts
+      - packages/shared/src/source-server/errorCodes.ts
+      - packages/services/src/source-server-workspace/sourceServerWorkspace.ts
+    layers:
+      contract: .
+    owner: remote
+  # source-server-management-view：由 architecture:adopt 登记
+  - id: source-server-management-view
+    roots:
+      - packages/ui/src/source-server-management-view
+      - packages/ui/src/WorkspaceSidebar/RemoteProjectDetailsPopover.tsx
+      - packages/ui/src/hooks/useSourceServerManagementSnapshot.ts
+      - packages/ui/src/settings/SourceServerMigrationReportPanel.tsx
+      - packages/ui/src/store/sourceServerDisplayNameRegistry.ts
+    managed: true
+    requires:
+      - ui
+      - shared
+      - services
+    publicEntrypoints:
+      - packages/ui/src/source-server-management-view/index.ts
+      - packages/ui/src/source-server-management-view/contract.ts
+      - packages/ui/src/WorkspaceSidebar/RemoteProjectDetailsPopover.tsx
+      - packages/ui/src/hooks/useSourceServerManagementSnapshot.ts
+      - packages/ui/src/settings/SourceServerMigrationReportPanel.tsx
+      - packages/ui/src/store/sourceServerDisplayNameRegistry.ts
+    layers:
+      ui: .
+      app:
+        - ../hooks/useSourceServerManagementSnapshot.ts
+        - ../store/sourceServerDisplayNameRegistry.ts
+    owner: remote
+    layerOrder:
+      - app
+      - ui
+  # native-release-archives：由 architecture:adopt 登记
+  - id: native-release-archives
+    roots:
+      - packages/zcode-server-cli/src/packaging/archive-contract
+      - packages/zcode-server-cli/src/packaging/stageArchives.ts
+    managed: true
+    requires:
+      - zcode-server-cli
+    publicEntrypoints:
+      - packages/zcode-server-cli/src/packaging/archive-contract/index.ts
+      - packages/zcode-server-cli/src/packaging/archive-contract/contract.ts
+      - packages/zcode-server-cli/src/packaging/stageArchives.ts
+    layers:
+      adapters: .
+    owner: release
+  # desktop-operation-indicator：由 architecture:adopt 登记
+  - id: desktop-operation-indicator
+    roots:
+      - packages/desktop/src/main/operation-indicator-contract
+      - packages/desktop/src/main/windowsCuaOperationIndicatorContent.ts
+    managed: true
+    requires:
+      - shared
+    publicEntrypoints:
+      - packages/desktop/src/main/operation-indicator-contract/index.ts
+      - packages/desktop/src/main/operation-indicator-contract/contract.ts
+      - packages/desktop/src/main/windowsCuaOperationIndicatorContent.ts
+    layers:
+      domain: .
+    owner: desktop
+  # workspace-ignore-storage：由 architecture:adopt 登记
+  - id: workspace-ignore-storage
+    roots:
+      - packages/services/src/file/ignore-contract
+      - packages/services/src/file/workspaceFileIgnore.ts
+    managed: true
+    requires:
+      - services
+    publicEntrypoints:
+      - packages/services/src/file/ignore-contract/index.ts
+      - packages/services/src/file/ignore-contract/contract.ts
+      - packages/services/src/file/workspaceFileIgnore.ts
+    layers:
+      adapters: .
+    owner: file
+  # workflow-run-presentation：由 architecture:adopt 登记
+  - id: workflow-run-presentation
+    roots:
+      - packages/ui/src/workflow-run-presentation
+      - packages/ui/src/lib/workflowRunLine.ts
+    managed: true
+    requires:
+      - ui
+      - shared
+    publicEntrypoints:
+      - packages/ui/src/workflow-run-presentation/index.ts
+      - packages/ui/src/workflow-run-presentation/contract.ts
+      - packages/ui/src/lib/workflowRunLine.ts
+    layers:
+      domain: .
+    owner: conversation
+  # workspace-file-filter：由 architecture:adopt 登记
+  - id: workspace-file-filter
+    roots:
+      - packages/ui/src/workspace-file-search/filter-contract
+      - packages/ui/src/workspace-file-search/workspaceFileSearchFilterBackend.ts
+    managed: true
+    requires:
+      - ui
+      - shared
+    publicEntrypoints:
+      - packages/ui/src/workspace-file-search/filter-contract/index.ts
+      - packages/ui/src/workspace-file-search/filter-contract/contract.ts
+      - packages/ui/src/workspace-file-search/workspaceFileSearchFilterBackend.ts
+    layers:
+      adapters: .
+    owner: file
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

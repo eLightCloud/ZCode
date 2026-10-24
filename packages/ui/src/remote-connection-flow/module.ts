@@ -1,10 +1,11 @@
-/**
- * remote-connection-flow 模块清单（architecture-governance managed 模块）。
- * 层：app。修改 requires 时同步更新 architecture-policy.yaml（检查器会校验两者一致）。
- */
+/** Declares the existing source-management projection dependency. */
 export const remoteConnectionFlowModule = {
   id: "remote-connection-flow",
-  requires: ["shared", "ui"],
+  requires: ["shared", "ui", "source-server-management-view"],
   provides: ["remote-connection-flow"],
-  publicEntrypoints: ["index.ts", "contract.ts", "ui/RemoteConnectionProgress.tsx"],
+  publicEntrypoints: [
+    "packages/ui/src/remote-connection-flow/index.ts",
+    "packages/ui/src/remote-connection-flow/contract.ts",
+    "packages/ui/src/remote-connection-flow/ui/RemoteConnectionProgress.tsx",
+  ],
 } as const;

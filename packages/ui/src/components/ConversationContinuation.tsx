@@ -45,7 +45,7 @@ export function ConversationContinuation({
   session: string;
   version: string;
   labels: ConversationContinuationLabels;
-  onReady?(session: string, location: string, instanceId: string): void;
+  onReady?(session: string, location: string, instanceId?: string): void;
 }) {
   const state = useConversationContinuation(reader, session);
   const [target, setTarget] = useState("");
@@ -88,8 +88,8 @@ export function ConversationContinuation({
       aria-busy={state.busy}
     >
       {message && <p role={state.error ? "alert" : "status"}>{message}</p>}
-      {result?.status === "ready" && readyTarget?.instanceId && onReady && (
-        <Button onClick={() => onReady(session, result.location!, readyTarget.instanceId!)}>
+      {result?.status === "ready" && readyTarget && onReady && (
+        <Button onClick={() => onReady(session, result.location!, readyTarget.instanceId)}>
           {labels.open}
         </Button>
       )}

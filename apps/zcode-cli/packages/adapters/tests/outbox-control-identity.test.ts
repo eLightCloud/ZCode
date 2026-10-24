@@ -43,3 +43,22 @@ it("never rewrites an unconfirmed operation and preserves exact baseline history
   expect(other.branchGeneration(scope,cp.session.id)).toBe(0);expect(other.branchMode(scope,cp.session.id)).toBe("offline");
   expect(other.ownsSession(scope,cp.session.id)).toBe(true);other.close();
 });
+
+it("attributes only an explicitly confirmed legacy snapshot and preserves permanent rejection across reopen",async()=>{
+  const path=await setup();let box=createConversationSyncOutbox(path);
+  const scope={tenant:randomUUID(),subject:randomUUID()},other={...scope,subject:randomUUID()};
+  const operation=randomUUID(),fingerprint="a".repeat(64),session="synthetic-legacy";
+  box.attributeLegacy(scope,session,fingerprint,operation);box.attributeLegacy(scope,session,fingerprint,operation);
+  expect(box.ownsSession(scope,session)).toBe(true);
+  expect(()=>box.attributeLegacy(other,session,fingerprint,operation)).toThrow("scope");
+  expect(()=>box.bindInput(other,"foreign-input",session)).toThrow("scope");
+  const request={session,operation:randomUUID(),command:{kind:"receive" as const,version:{id:"rejected-version",parent:null,location:box.location(),generation:0,checkpoint:null}}};
+  box.stage(scope,request);box.reject(scope,session,request.operation,"conflict");box.close();
+  box=createConversationSyncOutbox(path);
+  expect(box.rejection(scope,session)).toEqual({operation:request.operation,code:"conflict"});
+  expect(box.rejection(other,session)).toBeNull();expect(box.pending(scope)).toEqual([request]);
+  box.retry(scope,session);expect(box.rejection(scope,session)).toBeNull();expect(box.pending(scope)).toEqual([request]);
+  expect(box.ownsSession(scope,"fork-child",undefined,session)).toBe(true);
+  expect(box.ownsSession(other,"another-child",undefined,session)).toBe(false);
+  box.close();
+});

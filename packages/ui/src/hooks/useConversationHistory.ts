@@ -125,6 +125,17 @@ export function useConversationHistory(reader: ConversationHistoryReader) {
       globalThis.removeEventListener("focus", focus);
     };
   }, [refresh]);
+  useEffect(()=>{
+    if(loading || choice.current) return;
+    const controller=new AbortController();
+    const timer=setInterval(()=>{
+      // 空 cursor 保留 reader 已绑定的身份；不能后台重置 scope 后继续展示旧正文。
+      void reader.history("",controller.signal).then(rows=>{
+        if(!controller.signal.aborted) setItems(old=>[...rows,...old.filter(row=>!rows.some(next=>next.session===row.session))]);
+      }).catch(()=>{if(!controller.signal.aborted){setItems([]);setTranscript(null);setFailed(true);}});
+    },15000);
+    return()=>{controller.abort();clearInterval(timer);};
+  },[reader,loading]);
   return {
     items,
     transcript,

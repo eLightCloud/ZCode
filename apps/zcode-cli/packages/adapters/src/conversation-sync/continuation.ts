@@ -257,7 +257,7 @@ export function createConversationContinuation(options: {
         input,
         "waiting",
         granted ? "granted" : "settling",
-        runtimeCode(error) === "busy" ? "busy" : ["model_unavailable", "unsupported"].includes(runtimeCode(error)) ? "capability" : "unavailable",
+        runtimeCode(error) === "busy" ? "busy" : ["model_unavailable", "unsupported", "required_skill_unavailable"].includes(runtimeCode(error)) ? "capability" : "unavailable",
         granted?.state.pending?.version ?? input.version,
       );
     }
@@ -266,6 +266,23 @@ export function createConversationContinuation(options: {
   return {
     run,
     cancel,
+    async enroll(scope: SyncScope, location: string, session: string, version: string) {
+      const state = await current(scope, session);
+      const operation = step("enroll:"+session+":"+version, location);
+      const pending = await journal.read(scope,session,operation);
+      if (pending) return run(scope,pending.intent);
+      // 仅首次在线登记，不因重连抢占已有 owner，不把分歧或外部版本当本机事实。
+      if((await journal.offlineLocations(scope,session)).length) return null;
+      if(state.active || state.pending || state.selected || state.candidates.length !== 1 || state.candidates[0] !== version) return null;
+      const saved=await store.version(scope,session,version);
+      if(!saved?.checkpoint || saved.location !== location || saved.generation !== 0) throw new ConversationSyncError("blocked");
+      const intent:ConversationContinuationIntent={session,operation,kind:"select",target:location,version,revision:state.revision,candidates:state.candidates};
+      // 与 offline 接纳共用会话行锁；预检后发生离线激活也不能被自动登记抢占。
+      await journal.begin(scope,intent,true);
+      const value=await run(scope,intent);
+      if(value.status === "stale") await cancel(scope,session,operation);
+      return value;
+    },
     async options(scope: SyncScope, session: string) {
       const state = await current(scope, session),
         pending = await journal.read(scope, session);

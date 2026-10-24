@@ -134,6 +134,7 @@ export async function handleRequest(
       });
       return this.ok(request.id, {
         dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
+        originCommandId: checkpoint.messages[0]?.info.anchor?.sourceCommandId ?? checkpoint.inputs.find(input=>input.promotedMessageID===checkpoint.messages[0]?.info.id)?.payload.conversationInputIntent?.sourceCommandId,
         ...(request.method === zcodeProtocolMethods.sessionTextCheckpointIndex
           ? { indexProjection: checkpointIndexProjection(checkpoint, directory, cliFacts) }
           : {}),

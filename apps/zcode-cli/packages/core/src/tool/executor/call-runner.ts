@@ -139,6 +139,17 @@ async function executeToolCallImpl(
     );
   }
 
+  if(!entry.metadata.mcpPresentation && !entry.metadata.readOnly && deps.sessionStore?.sessionEntries) {
+    const entries=await deps.sessionStore.sessionEntries({sessionID:deps.sessionId,type:"runtime/branch_effects"});
+    const effects=entries.flatMap(entry=>Array.isArray(entry.data)?entry.data:entry.data && typeof entry.data==="object" && "effects" in entry.data && Array.isArray(entry.data.effects)?entry.data.effects:[]);
+    if(effects.some(effect=>effect && typeof effect==="object" && "server" in effect && effect.server==="native:"+entry.metadata.name)) {
+      const result=createErrorResult(canonicalToolCall,createCoreError(CoreErrorType.ToolExecutionFailed,"Another branch has an unresolved external effect for this tool. Verify the original resource operation before retrying; a new request key is not verification.",{recoverable:true}));
+      await emitToolCallError(deps,canonicalToolCall.id,traceContext,turnId,result.error,undefined,pluginId);
+      deps.logger?.warn("Unresolved cross-branch effect blocked",{event:"tool.branch_effect",sessionId:deps.sessionId,toolCallId:canonicalToolCall.id,outcome:"blocked"});
+      return result;
+    }
+  }
+
   let lifetime: ReturnType<NonNullable<ToolEntry["retainExecution"]>> | undefined;
   try {
     lifetime = entry.retainExecution?.(canonicalToolCall.id);

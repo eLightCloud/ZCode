@@ -14,6 +14,7 @@ import type {
   SessionId,
   ModelId,
   ModelProviderId,
+  MessagePart,
 } from "@zcode/contracts";
 import { mapMessageWithParts } from "./message-mapper.js";
 
@@ -47,7 +48,7 @@ export function checkpointIndexProjection(
         id: part.id as PartId,
         sessionID,
         messageID: message.info.id as MessageId,
-      })),
+      }) as MessagePart),
     };
     return mapMessageWithParts(stored);
   });
@@ -58,6 +59,7 @@ export function checkpointIndexProjection(
     ...(cliFacts ? { cliFacts } : {}),
     meta: {
       taskId: checkpoint.session.id,
+      ...(checkpoint.session.parentID ? {forkedFromTaskId:checkpoint.session.parentID} : {}),
       traceId: checkpoint.session.traceID ?? generateTraceId(checkpoint.session.id),
       title: resolveZCodeVisibleSessionTitle({ title: checkpoint.session.title, messages }),
       createdAt: checkpoint.session.time.created,

@@ -35,10 +35,12 @@ export async function persistDurableSessionEvent(
   if (!this.sessionStore) return;
 
   if (event.type === SessionEventType.TurnComplete || event.type === SessionEventType.TurnError) {
-    const payload = event.payload as { resultType?: string };
+    const payload = event.payload as { resultType?: string; inputId?:string };
     // 终态由 CLI 在发布事件前持久化；Host 冷启动不能再把全部历史任务推导为成功。
     await this.sessionStore.updateSession({
       id: event.sessionId,
+      lastOutcomeInputId:payload.inputId??null,
+      lastOutcomeAt:event.timestamp.getTime(),
       lastOutcome:
         event.type === SessionEventType.TurnError
           ? "error"

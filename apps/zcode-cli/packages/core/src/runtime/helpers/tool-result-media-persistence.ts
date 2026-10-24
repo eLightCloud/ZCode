@@ -1,3 +1,4 @@
+import type {PersistedToolMediaLayoutEntry} from "@zcode/contracts";
 import type { FilePart } from "@zcode/contracts";
 import { createPartId } from "../deps.js";
 import type {
@@ -15,9 +16,7 @@ type DataBackedToolMediaBlock =
   | Extract<ModelMessageContentBlock, { type: "image" | "video" }>
   | (Extract<ModelMessageContentBlock, { type: "file" }> & { dataUrl: string });
 
-type PersistedToolMediaLayoutEntry =
-  | { type: "attachment"; attachmentIndex: number }
-  | { type: "text"; text: string };
+
 
 export async function persistToolResultMediaAttachments(input: {
   artifactStore?: ToolArtifactStorePort;

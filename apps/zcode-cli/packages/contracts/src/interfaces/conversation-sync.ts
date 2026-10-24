@@ -202,7 +202,10 @@ export class ConversationSyncError extends Error {
   }
 }
 export interface ConversationSyncStore {
+  effects?(scope:SyncScope,session:string):Promise<import("@zcode/shared").ConversationEffect[]>;
   files?: ConversationFileStore;
+  /** Source-bound first online enrollment; receive alone never grants admission. */
+  enroll?(scope: SyncScope, session: string, version: string): Promise<import("@zcode/shared").ConversationContinuationResult | null>;
   /** Native private orchestration journal; never an accepted input queue or execution grant. */
   continuations?: import("@zcode/shared").ConversationContinuationJournal;
   executeContinuation?(

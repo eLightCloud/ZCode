@@ -9,6 +9,7 @@ import {
   ConversationRuntimeError,
 } from "@zcode/shared";
 import { exportTextCheckpoint, importTextCheckpoint } from "./text-checkpoints.js";
+import { saveSessionEntry, sessionEntries } from "./session-entries.js";
 import { getSession } from "./sessions.js";
 
 type Row = {
@@ -51,6 +52,17 @@ export function controlContinuation(
       .get(input.session) as Row | undefined;
     if (!row) throw new ConversationRuntimeError("not_found");
     return result(row);
+  }
+  if(input.kind === "effects") {
+    db.exec("begin immediate");
+    try {
+      const row=db.prepare("select * from session_continuation where session_id=?").get(input.session) as Row|undefined;
+      if(!row || row.operation!==input.operation || row.generation!==input.generation || row.state!=="active") throw new ConversationRuntimeError("admission_closed");
+      const previous=sessionEntries(db,{sessionID:input.session as SessionId,type:"runtime/branch_effects"})[0];
+      const revision=previous?.data && typeof previous.data==="object" && "revision" in previous.data ? Number(previous.data.revision) : -1;
+      if(input.revision>=revision) saveSessionEntry(db,{id:"branch-effects:"+input.session,sessionID:input.session as SessionId,type:"runtime/branch_effects",time:{created:previous?.time.created??Date.now(),updated:Date.now()},data:{revision:input.revision,effects:input.effects},touchSession:false});
+      db.exec("commit");return result(row);
+    }catch(error){db.exec("rollback");throw error;}
   }
   db.exec("begin immediate");
   try {

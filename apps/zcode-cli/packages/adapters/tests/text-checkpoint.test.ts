@@ -79,6 +79,30 @@ async function setup() {
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
+  it("round-trips settled tool history, plan configuration and todos without replaying inputs", async () => {
+    const {store,target}=await setup();
+    const cp:any=example();cp.version=4;
+    cp.execution={id:"execution",time:{created:1,updated:2},data:{mode:"build",planEnabled:true}};
+    cp.todos=[{content:"Synthetic pending work",status:"pending",priority:"high",position:0,created:1,updated:2}];
+    cp.messages[1].parts.unshift({id:"tool-1",type:"tool",callID:"call-1",tool:"web_search",state:{status:"completed",input:{query:"synthetic"},output:"SYNTHETIC_RESULT",title:"Search",metadata:{schemaVersion:1,modelContent:"SYNTHETIC_RESULT"},time:{start:1,end:2}}});
+    try {
+      await store.importTextCheckpoint({checkpoint:cp,target});
+      expect(await store.exportTextCheckpoint({sessionID:cp.session.id})).toEqual(cp);
+      expect(await store.readTodos({sessionID:cp.session.id})).toMatchObject([{content:"Synthetic pending work",status:"pending"}]);
+      const pending=structuredClone(cp);pending.messages[1].parts[0].state.status="running";
+      expect(textCheckpointSchema.safeParse(pending).success).toBe(false);
+    } finally {store.close();}
+  });
+  it("does not upload private reasoning while preserving the public provider history", async()=>{
+    const {store,target}=await setup();const cp=example();
+    try {
+      await store.importTextCheckpoint({checkpoint:cp,target});
+      await store.savePart({id:"private" as never,sessionID:cp.session.id as SessionId,messageID:"assistant-1" as never,type:"reasoning",text:"PRIVATE_REASONING_MARKER",time:{start:1,end:2}});
+      const saved=await store.exportTextCheckpoint({sessionID:cp.session.id as SessionId});
+      expect(JSON.stringify(saved)).not.toContain("PRIVATE_REASONING_MARKER");
+      expect(saved.messages).toEqual(cp.messages);
+    }finally{store.close();}
+  });
   it("correlates failures without logging rejected payloads or private paths", async () => {
     const { root, store: initialStore } = await setup();
     initialStore.close();
@@ -236,9 +260,9 @@ describe("native text checkpoint contract", () => {
             id: "unsupported" as never,
             sessionID,
             messageID: "assistant-1" as never,
-            type: "reasoning",
-            text: "synthetic-private",
-            time: { start: 1 },
+            type: "tool",
+            tool: "synthetic",callID:"pending-call",
+            state: {status:"running",input:{},time:{start:1}},
           });
         if (fault === "metadata-array") {
           const messages = await store.messages({ sessionID });
@@ -272,4 +296,62 @@ it("rejects restored session identifiers that could escape the artifact namespac
   } finally {
     store.close();
   }
+});
+
+
+it.each(["error", "interrupted"] as const)("preserves an actual %s terminal input without inventing an assistant", async outcome => {
+  const {store,target}=await setup(); const cp:any=example(); cp.version=4;
+  cp.messages=cp.messages.slice(0,1);cp.session.lastOutcome=outcome;cp.session.lastOutcomeInputId="command-1";cp.session.lastOutcomeAt=2;
+  try {
+    await store.importTextCheckpoint({checkpoint:cp,target});
+    expect(await store.exportTextCheckpoint({sessionID:cp.session.id})).toEqual(cp);
+    const stale=structuredClone(cp);stale.session.lastOutcomeInputId="older-command";
+    expect(textCheckpointSchema.safeParse(stale).success).toBe(false);
+    delete stale.session.lastOutcomeInputId;
+    expect(textCheckpointSchema.safeParse(stale).success).toBe(false);
+  } finally {store.close();}
+});
+
+it("cold-restores fork lineage and a conversation-only rewind without requiring the parent's database",async()=>{
+  const {store,target}=await setup(); const cp:any=example();cp.version=4;
+  cp.session.parentID="informational-parent";cp.session.taskType="fork";
+  cp.session.revert={kind:"conversation_rewind",scope:"conversation",messageID:"assistant-1",targetMessageID:"user-1",keptMessageIDs:["user-1","assistant-1"],branchGeneration:1};
+  cp.messages[0].info.metadata={forkOrigin:{sessionId:"informational-parent",messageId:"old-parent-user"}};
+  try {await store.importTextCheckpoint({checkpoint:cp,target});expect(await store.exportTextCheckpoint({sessionID:cp.session.id})).toEqual(cp);}
+  finally {store.close();}
+});
+
+it("keeps the native compact boundary and synthetic summary as public provider context",async()=>{
+  const {store,target}=await setup();const cp:any=example();cp.version=4;
+  cp.messages[0].parts.push({id:"compact-part",type:"compaction",auto:false,trigger:"manual",compactBoundary:{boundaryId:"boundary",trigger:"manual",preCompactTokenCount:100,summarizedMessageCount:2,lastSummarizedMessageId:"assistant-1",summaryMessageIds:["summary"],traceId:"synthetic-trace"}});
+  cp.messages.push({info:{id:"summary",role:"user",agent:"build",time:{created:2},synthetic:true,summary:{diffs:[]},semantics:{origin:"agent_runtime",kind:"compact_summary",uiVisibility:"hidden",providerVisibility:"visible",transcriptVisibility:"hidden"}},parts:[{id:"summary-part",type:"text",text:"SYNTHETIC_COMPACT_CONTEXT",synthetic:true}]});
+  try {await store.importTextCheckpoint({checkpoint:cp,target});expect(await store.exportTextCheckpoint({sessionID:cp.session.id})).toEqual(cp);}
+  finally {store.close();}
+});
+
+it("restores registered tool media and serialization references, refusing source-only paths",async()=>{
+  const {store,target}=await setup();const cp:any=example();cp.version=4;
+  const uri="zcode-artifact://session-portable/tool-result-00000000-0000-4000-8000-000000000001";
+  cp.messages[1].parts.push({id:"media-tool",type:"tool",callID:"media-call",tool:"mcp__synthetic__image",state:{status:"completed",input:{},output:"SYNTHETIC_TOOL_MEDIA",title:"Media",time:{start:1,end:2},metadata:{schemaVersion:1,modelContent:"Synthetic text",modelContentLayout:[{type:"text",text:"Synthetic text"},{type:"attachment",attachmentIndex:0}],serialization:{truncated:true,originalBytes:100,returnedBytes:10,budgetStrategy:"artifact",artifactPath:uri,artifactUri:uri}},attachments:[{id:"embedded-image",type:"file",url:uri,mime:"image/png",metadata:{storageKind:"artifact",artifactUri:uri,recoverability:"provider_ready"}}]}});
+  try {await store.importTextCheckpoint({checkpoint:cp,target});expect(await store.exportTextCheckpoint({sessionID:cp.session.id})).toEqual(cp);
+    const wrong=structuredClone(cp);wrong.messages[1].parts[1].state.metadata.serialization.artifactPath="/source-only/private-artifact";
+    expect(textCheckpointSchema.safeParse(wrong).success).toBe(false);
+  }finally{store.close();}
+});
+
+it("lets unregistered old connections read but refuses every mutation of portable conversation facts",async()=>{
+  const {store,dbPath,target}=await setup();const cp=example();
+  try {await store.importTextCheckpoint({checkpoint:cp,target});}finally{store.close();}
+  const old=new DatabaseSync(dbPath);
+  try {
+    expect(old.prepare("select count(*) as n from message").get()?.n).toBe(2);
+    for(const table of ["session","message","part","session_input","session_entry","todo"]) {
+      for(const sql of [`delete from ${table}`,`update ${table} set ${table==="session" || table==="message" || table==="part" || table==="session_input" || table==="session_entry" ? "id=id" : "content=content"}`])
+        expect(()=>old.exec(sql)).toThrow(/zcode_portable_context_version/);
+    }
+    expect(old.prepare("select count(*) as n from message").get()?.n).toBe(2);
+  }finally{old.close();}
+  const reopened=await createSqliteSessionStore({dbPath});
+  try {expect(await reopened.exportTextCheckpoint({sessionID:cp.session.id as SessionId})).toEqual(cp);}
+  finally{reopened.close();}
 });

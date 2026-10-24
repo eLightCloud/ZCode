@@ -1,3 +1,4 @@
+import { createNativeConversationSyncSource } from "./helpers/native-source.mjs";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,6 @@ import type { ConversationSyncStore, SyncScope, ProjectId, SessionId } from "@zc
 import {
   createConversationSyncOutbox,
   createConversationSyncWorker,
-  createNativeConversationSyncSource,
 } from "@zcode/adapters/conversation-sync";
 import { createSqliteSessionStore } from "@zcode/adapters/storage";
 import { checkpoint, logger, version } from "./sync-fixture.mjs";

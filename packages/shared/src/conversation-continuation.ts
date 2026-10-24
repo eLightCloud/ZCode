@@ -66,6 +66,8 @@ export interface ConversationContinuationJournal {
   begin(
     scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
     input: ConversationContinuationIntent,
+    /** First online enrollment must atomically refuse existing or offline owners. */
+    enrollment?: boolean,
   ): Promise<ConversationContinuationRecord>;
   read(
     scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],

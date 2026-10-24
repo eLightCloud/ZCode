@@ -168,3 +168,13 @@ it("does not guess CLI facts when an older capture lacks them", async () => {
     }),
   ).toBeNull();
 });
+
+it("shares capture eligibility with rebuild, including changeSummary and ordinary fork lineage",async()=>{
+  const {isConversationSyncMeta}=await import("#src/session/conversationSyncIndex.js");
+  const meta={taskId:"qualified",traceId:"trace",title:"Synthetic",createdAt:1,updatedAt:2,mode:"build",workspacePurpose:"conversation",provider:"glm",workspacePath:getConversationWorkspaceDir()} as const;
+  expect(isConversationSyncMeta(meta)).toBe(true);
+  expect(isConversationSyncMeta({...meta,forkedFromTaskId:"parent"})).toBe(true);
+  expect(isConversationSyncMeta({...meta,changeSummary:{summary:"unsupported"}} as never)).toBe(false);
+  expect(isConversationSyncMeta({...meta,workspacePurpose:undefined})).toBe(false);
+  expect(isConversationSyncMeta({...meta,workspacePurpose:undefined},true)).toBe(true);
+});

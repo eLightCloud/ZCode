@@ -16,9 +16,10 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
-import { useTabStore } from "@/store/TabStoreProvider.js";
+import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import type { ZCodeAgentWorkspaceTarget } from "@zcode/services";
+import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { logger } from "@/logger.js";
 
 export interface ApplicationPage {
@@ -32,6 +33,8 @@ export interface ApplicationPage {
 export interface ApplicationPageContext {
   workspace?: ZCodeAgentWorkspaceTarget;
   rpcReady: boolean;
+  /** Native navigation only; never sends input or grants execution. */
+  openConversation?(session: string): Promise<void>;
 }
 
 const ApplicationPageActionContext = createContext<ReactNode>(null);
@@ -50,7 +53,9 @@ export function ApplicationPageHeaderAction() {
   return useContext(ApplicationPageActionContext);
 }
 
-export function ApplicationPageContent({ render }: Pick<ApplicationPage, "render">) {
+export function ApplicationPageContent({ render, onNavigate }: Pick<ApplicationPage, "render"> & {onNavigate?():void}) {
+  const tabs=useTabStoreApi();
+  const setActiveTaskId=useZCodeSessionStore(s=>s.setActiveTaskId);
   const active = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
   const workspace = active && isWorkspaceTab(active) ? active : undefined;
   const resolution = useWorkspaceServicesResolution(
@@ -63,6 +68,13 @@ export function ApplicationPageContent({ render }: Pick<ApplicationPage, "render
     <ServiceProvider services={resolution.services}>
       {render({
         rpcReady: Boolean(workspace) && resolution.rpcReady,
+        openConversation: async session => {
+          if(!resolution.services.projectService) throw new Error("conversation_navigation_unavailable");
+          const target=await resolution.services.projectService.prepareSession();
+          tabs.getState().addTab(target.workspacePath,{workspacePurpose:"conversation"});
+          setActiveTaskId(target.workspacePath,session,target.workspaceIdentity);
+          onNavigate?.();
+        },
         workspace: workspace
           ? {
               workspacePath: workspace.workspacePath,
@@ -208,7 +220,7 @@ export function ApplicationPages({
               </header>
               <div className="min-h-0 flex-1 overflow-auto" key={`${page.id}:${generation}`}>
                 <ScopedErrorBoundary scope={`application-page:${page.id}`}>
-                  <ApplicationPageContent render={page.render} />
+                  <ApplicationPageContent render={page.render} onNavigate={close} />
                 </ScopedErrorBoundary>
               </div>
             </DialogContent>

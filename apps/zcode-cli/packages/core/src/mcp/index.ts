@@ -1,5 +1,7 @@
 // MCP tool bridge - projects MCP descriptors into core tool entries
 
+import { isDeepStrictEqual } from "node:util";
+import { conversationEffectSchema } from "@zcode/shared";
 import {
   SessionEventType,
   resolveMcpToolVisibility,
@@ -208,6 +210,7 @@ export function createMcpToolEntry(
       description: descriptor.description,
       name,
       mcpPresentation: {
+        readOnly,
         serverName: descriptor.serverName,
         toolName: descriptor.toolName,
         ...(descriptor.description ? { description: descriptor.description } : {}),
@@ -250,6 +253,26 @@ export function createMcpToolEntry(
     },
     handler: async (input, context) => {
       const startedAt = Date.now();
+      if(!readOnly && context.sessionStore?.sessionEntries) {
+        const entries=await context.sessionStore.sessionEntries({sessionID:context.sessionId,type:"runtime/branch_effects"});
+        const effects=entries.flatMap(entry=>Array.isArray(entry.data)?entry.data:entry.data && typeof entry.data==="object" && "effects" in entry.data && Array.isArray(entry.data.effects)?entry.data.effects:[]).map(value=>conversationEffectSchema.parse(value)).filter(value=>value.server===descriptor.serverName);
+        if(effects.length) {
+          const checker=descriptor.effectCheckTool && (await mcpPort.listTools()).find(tool=>tool.serverName===descriptor.serverName && tool.toolName===descriptor.effectCheckTool && tool.annotations?.readOnlyHint===true);
+          if(!checker) throw new Error("branch_effect_verification_required");
+          const action={tool:descriptor.toolName,arguments:toMcpRuntimeArguments(input,isCuaAppObservation)};
+          const checked=await mcpPort.callTool({serverName:descriptor.serverName,toolName:checker.toolName,arguments:{effects,action},trace:{traceId:context.traceId,sessionId:context.sessionId,turnId:context.turnId}}, {signal:context.abortSignal,timeoutMs});
+          if(checked.isError) throw new Error("branch_effect_result_unknown");
+          const decision=checked.structuredContent;
+          if(!decision || typeof decision!=="object" || !("action" in decision) || !isDeepStrictEqual(decision.action,action) || !("decision" in decision)) throw new Error("branch_effect_result_unknown");
+          if(decision.decision === "replay" && "result" in decision && decision.result && typeof decision.result==="object" && "content" in decision.result && Array.isArray(decision.result.content)) {
+            const original=decision.result as Awaited<ReturnType<McpPort["callTool"]>>;
+            const receipt=conversationEffectSchema.safeParse(original._meta?.["zcode/effect"]);
+            if(!receipt.success || receipt.data.outcome==="unknown" || !effects.some(effect=>effect.owner===receipt.data.owner && effect.operation===receipt.data.operation && effect.requestKey===receipt.data.requestKey)) throw new Error("branch_effect_result_unknown");
+            return {...original,_meta:{...original._meta,"zcode/readOnly":readOnly,"zcode/effect":{...receipt.data,server:descriptor.serverName}}};
+          }
+          if(decision.decision !== "proceed") throw new Error("branch_effect_verification_required");
+        }
+      }
       const result = await mcpPort.callTool(
         {
           serverName: descriptor.serverName,

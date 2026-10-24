@@ -18,7 +18,18 @@ export function createConversationSyncHost(options: {
   function target(taskId: string) {
     return { workspacePath: getConversationWorkspaceDir(), taskId };
   }
+  async function capture(session:string,management:import("@zcode/shared").ConversationIndexFacts) {
+    const value=await options.agent.captureTextCheckpoint({workspacePath:getConversationWorkspaceDir(),sessionId:session});
+    return {...value,management};
+  }
   return {
+    async legacy(session,attribute=false,expected) {
+      return options.index.withConversationSyncFacts({...target(session),legacy:true,attributeLegacy:attribute},async management=>{
+        const value=await capture(session,management);
+        if(attribute && (!expected || value.dataBase64!==expected.dataBase64 || !isDeepStrictEqual(management,expected.management))) throw new Error("conversation_legacy_changed");
+        return value;
+      });
+    },
     async readArtifact(session, uri) {
       const port = options.continuation?.();
       if (!port?.content) throw new Error("continuation_files_unavailable");
@@ -32,13 +43,7 @@ export function createConversationSyncHost(options: {
     async captureContinuation(session, operation) {
       return options.index.withConversationSyncFacts(
         { ...target(session), continuationOperation: operation },
-        async (management) => ({
-          ...(await options.agent.captureTextCheckpoint({
-            workspacePath: getConversationWorkspaceDir(),
-            sessionId: session,
-          })),
-          management,
-        }),
+        async (management) => capture(session,management),
       );
     },
     async rebuildIndex(input) {
@@ -95,10 +100,7 @@ export function createConversationSyncHost(options: {
       return options.index.withConversationSyncFacts(target(session), async (management) => ({
         ...(management.deleted
           ? { dataBase64: "" }
-          : await options.agent.captureTextCheckpoint({
-              workspacePath: getConversationWorkspaceDir(),
-              sessionId: session,
-            })),
+          : await capture(session,management)),
         management,
       }));
     },

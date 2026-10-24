@@ -12,13 +12,11 @@ function portableIntent(allowFiles: boolean) {
     if (!parsed.success) return false;
     const intent = parsed.data;
     return (
-      intent.kind === "sendText" &&
+      ["sendText","compact"].includes(intent.kind) &&
       (allowFiles
         ? intent.attachments.every((ref) => portableAttachmentRef.safeParse(ref).success)
         : intent.attachments.length === 0) &&
       (!intent.mode || ["build", "guarded"].includes(intent.mode)) &&
-      intent.planEnabled !== true &&
-      intent.delivery.admitted !== "guide" &&
       intent.steer.state === "notRequested" &&
       ["admitted", "queued", "drained"].includes(intent.dispatch.state) &&
       [

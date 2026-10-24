@@ -1,5 +1,6 @@
 import {
   ConversationSyncError,
+  textCheckpointSchema, checkpointEffectReferences,
   syncRequestSchema,
   syncScopeSchema,
   syncStateSchema,
@@ -336,6 +337,17 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     }
   }
   return {
+    effects: (scope,session)=>transaction(scope,async client=>{
+      const rows=await client.query("select distinct p.payload from zcode_sync.versions v join zcode_sync.payloads p using(tenant,subject,digest) where v.session=$1",[session]);
+      const effects=new Map<string,import("@zcode/shared").ConversationEffect>();
+      for(const row of rows.rows) for(const effect of checkpointEffectReferences(textCheckpointSchema.parse(row.payload))) {
+        const key=canonical([effect.server,effect.owner,effect.operation,effect.requestKey]);
+        const previous=effects.get(key);
+        if(previous && canonical(previous)!==canonical(effect)) throw new ConversationSyncError("conflict");
+        effects.set(key,effect);
+      }
+      return [...effects].sort(([a],[b])=>a.localeCompare(b)).map(([,effect])=>effect);
+    }),
     files: options.objects ? createConversationFileStore(transaction, options.objects) : undefined,
     continuations: continuationJournal(transaction),
     continuation: (scope, session, operation) =>

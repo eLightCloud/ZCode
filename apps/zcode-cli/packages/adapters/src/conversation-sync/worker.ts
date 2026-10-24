@@ -50,10 +50,13 @@ export function createConversationSyncWorker(options: {
       .filter((item) => item.workspacePurpose === "conversation" && !item.hasLocalDirectory)
       .map((item) => receiveOperation(item.session, item.version));
     options.outbox.capture(options.scope, changes.cursor, after, requests);
-    const limited = new Set<string>();
+    const blockedSessions = new Set<string>();
+    let firstRejection: ConversationSyncError | undefined;
     for (const request of options.outbox.pending(options.scope)) {
       checkScope();
-      if (limited.has(request.session)) continue;
+      if (blockedSessions.has(request.session)) continue;
+      const rejected=options.outbox.rejection(options.scope,request.session);
+      if(rejected) {blockedSessions.add(request.session);options.unconfirmed?.(request.session,rejected.code);firstRejection??=new ConversationSyncError(rejected.code);continue;}
       let receipt;
       try {
         receipt = await options.center.execute(options.scope, request);
@@ -69,8 +72,11 @@ export function createConversationSyncWorker(options: {
           code,
         });
         // 限额拒绝不应阻塞其它会话；同一会话的后继仍须等待准确前序确认。
-        if (code === "limit") {
-          limited.add(request.session);
+        if (cause instanceof ConversationSyncError && ["limit", "invalid", "conflict", "blocked", "stale", "not_found"].includes(code)) {
+          // 永久拒绝只阻塞同一会话的因果后继，不得饿死其他会话；原操作仍保留供修复核对。
+          blockedSessions.add(request.session);
+          firstRejection ??= cause;
+          if(code!=="limit") options.outbox.reject(options.scope,request.session,request.operation,code as "invalid"|"conflict"|"blocked"|"stale"|"not_found");
           continue;
         }
         throw cause;
@@ -87,7 +93,7 @@ export function createConversationSyncWorker(options: {
         outcome: "server_saved",
       });
     }
-    if (limited.size) throw new ConversationSyncError("limit");
+    if (firstRejection) throw firstRejection;
   }
   return {
     reconcile(): Promise<void> {

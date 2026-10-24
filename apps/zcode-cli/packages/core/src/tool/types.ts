@@ -94,6 +94,7 @@ export interface ToolMetadata {
   stopTurnOnSuccess?: boolean;
   /** MCP discovery 的可信展示来源；只参与 UI 投影，不参与权限判定。 */
   mcpPresentation?: {
+    readOnly?:boolean;
     serverName: string;
     toolName: string;
     description?: string;
@@ -500,6 +501,7 @@ export interface ToolResultSerialization {
   truncated: boolean;
   budgetStrategy: ToolResultBudgetStrategy;
   artifactPath?: string;
+  artifactUri?: string;
 }
 
 export interface ToolBatchResult {

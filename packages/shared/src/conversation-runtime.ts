@@ -1,3 +1,4 @@
+import {conversationEffectSchema} from "./conversation-sync.js";
 import { z } from "zod";
 import { conversationSessionIdSchema, conversationIndexFactsSchema } from "./conversation-sync.js";
 import { conversationScopeSchema } from "./conversation-sync.js";
@@ -40,6 +41,7 @@ export const conversationRuntimeCommandSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   z.object({ ...base, kind: z.literal("read") }).strict(),
+  z.object({...base,kind:z.literal("effects"),generation:z.number().int().nonnegative(),revision:z.number().int().nonnegative(),effects:z.array(conversationEffectSchema).max(1000)}).strict(),
   z
     .object({
       ...base,

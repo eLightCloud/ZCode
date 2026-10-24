@@ -70,7 +70,7 @@ export function continuationJournal(transaction: Transaction): ConversationConti
       }),
     requestCancel: (scope, session, operation) => latch(scope, session, operation, "cancelling"),
     commitOffline: (scope, session, operation) => latch(scope, session, operation, "forward_only"),
-    begin: (scope, raw) =>
+    begin: (scope, raw, enrollment = false) =>
       transaction(scope, async (client) => {
         const input = conversationContinuationIntentSchema.parse(raw);
         const session = await client.query(
@@ -93,6 +93,13 @@ export function continuationJournal(transaction: Transaction): ConversationConti
         );
         if (pending.rowCount) throw new ConversationSyncError("blocked");
         const state = syncStateSchema.parse(session.rows[0].state);
+        if(enrollment) {
+          const offline=await client.query(`select 1 from zcode_sync.continuations where session=$1 and input_json->>'kind'='offline'
+            and result_json->>'status'='ready' and ordinal>coalesce((select max(ordinal) from zcode_sync.continuations where session=$1
+              and input_json->>'kind'<>'offline' and result_json->>'status'='ready'),0) limit 1`,[input.session]);
+          if(state.active || state.pending || state.selected || state.candidates.length!==1 || offline.rowCount)
+            throw new ConversationSyncError("blocked");
+        }
         if (
           state.revision !== input.revision ||
           canonical([...state.candidates].sort()) !==

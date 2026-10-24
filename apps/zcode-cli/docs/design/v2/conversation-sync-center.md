@@ -351,3 +351,45 @@ Activation compares the expected model-adjusted checkpoint and adopts the origin
 saved version as its causal base. Subsequent model change is an ordinary successor,
 not a rewrite of the chosen version or a fabricated upload ACK. The original intent
 fingerprint includes the complete choice. Retrying cannot change it.
+
+## Completion batch (2026-10-25)
+
+The native checkpoint writer remains the only body writer. Format v4 adds settled
+tool history, compact boundaries and public synthetic context, terminal outcomes,
+execution configuration and todo facts. Unknown required runtime state still blocks;
+credentials, private reasoning, live runners and permission grants are not portable.
+The production scanner is the Host scanner; the earlier direct-store scanner is a
+verification fixture and is not a public production export. Session-local permanent
+rejections isolate their causal successors, while scope/transport failures stop the
+current pass. Capture failures preserve bounded reason codes without raw payloads.
+
+Online enrollment must settle the exact native source and use the existing
+continuation journal / selection commit before activation. Receiving a version never
+grants execution. Reconnection discovers center versions as read-only projections;
+body replacement remains explicit. Known foreign owners and policy/limit rejection
+are not network failures and must not fall through to offline input preparation.
+
+Legacy ownership migration requires an explicit authenticated local confirmation
+bound to the exact captured checkpoint, source installation and original subject;
+ordinary login or a later command cannot adopt unknown old conversations. It only
+attributes the existing local source and never imports another account's data.
+
+Cross-branch effect references are preserved independently of the selected body by
+the native version owner. Only registered resource adapters may attest receipts;
+model text is not a receipt. New related actions query their existing resource owner;
+unknown outcomes block that action without a global deduplication heuristic.
+
+Status is per conversation: local capture, center watermark, current candidates,
+execution binding and explicit blocking code. Web input stops when its known latest
+checkpoint is rejected by a storage limit. Desktop may preserve new local facts as
+an explicit offline branch. History exposes registered file references through the
+authenticated native content boundary. Desktop navigation uses the existing native
+workspace/task entry, not a fabricated cloud instance id.
+
+Self-contained conversation fork keeps its native parent reference and remapped
+message/part provenance; it does not require transferring or granting the parent.
+The current SQLite parent_id is an informational text reference, not an FK.
+Conversation-only rewind carries the native active-chain cursor and exact kept IDs;
+workspace snapshots and file rewind remain subject to registered dependency proof.
+A child inherits original account attribution only from an already attributed native
+parent in the same installation. Unknown legacy attribution requires explicit review.

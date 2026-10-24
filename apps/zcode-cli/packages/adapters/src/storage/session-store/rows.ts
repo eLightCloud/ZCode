@@ -26,6 +26,8 @@ export interface SessionRow {
   time_archived: number | null;
   time_deleted: number | null;
   last_outcome: "completed" | "error" | "interrupted" | null;
+  last_outcome_input_id?:string|null;
+  last_outcome_at?:number|null;
 }
 
 export interface MessageRow {

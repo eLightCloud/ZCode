@@ -5745,6 +5745,7 @@ export function SessionPane({
           </div>
         ) : null}
         <ConversationHeader
+          conversation={sessionId ? {sessionId,workspacePath} : undefined}
           title={snapshot?.meta.title ?? ""}
           onClosePane={onClosePane}
           workspaceBadge={workspaceBadge}

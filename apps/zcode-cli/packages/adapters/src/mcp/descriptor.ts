@@ -21,6 +21,7 @@ export function normalizeMcpToolDescriptor(
   const ui = normalizeMcpToolUiMeta(record._meta);
   return {
     serverName,
+    ...(typeof meta["zcode/effectCheckTool"] === "string" ? {effectCheckTool:meta["zcode/effectCheckTool"] as string} : {}),
     alwaysLoad: alwaysLoad === true || meta["anthropic/alwaysLoad"] === true,
     searchHint:
       typeof meta["anthropic/searchHint"] === "string"

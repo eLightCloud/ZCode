@@ -41,7 +41,8 @@ try {
   assert.equal((await store.state(connection.scope, "worker-http"))!.revision, 1);
   assert.equal((await store.list(connection.scope, null, 100)).length, 6);
   const continuation = await store.state(connection.scope, "session-runtime-continuation");
-  assert.equal(continuation?.active?.location, "runtime-desktop");
+  // 最新接续夹具最后选定离线分支并在 cloud 激活，恢复后须保持该准确位置。
+  assert.equal(continuation?.active?.location, "runtime-cloud");
   assert.equal(continuation?.handoff?.phase, "activated");
   assert.equal(
     await store.continuations!.read(connection.scope, "session-runtime-continuation"),

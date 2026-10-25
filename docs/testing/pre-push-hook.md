@@ -2,13 +2,13 @@
 
 仓库现在通过 Husky 接管 Git 的 `pre-push`。
 
-推送策略沿已接收官方基线 `3c5b227649371507ddc4eb46ac5133afe6db1cab`：执行受影响单测，不追加强制全量。组织集成分支使用 main，因此首次推送和默认比较基线将官方 origin/staging 映射为 origin/main；选择、跳过及失败退出规则不变。根 Vitest 的触发规则、串行分组和 CUA 独立项目沿官方配置，仅保留已有默认应用 Root 的解析插件以支持企业装配扩展。
+组织推送策略要求每次实际执行完整根单测。静态与架构检查通过后，affected 只预览并校验 push 范围，随后必须经现有隔离入口执行 pnpm test:unit；无关联或选中全部都不能免除全量。任一检查或全量单测失败均阻止 push。affected 独立命令继续保留上游选择 / 跳过语义，不能把预览成功当作单测通过。该组织门禁覆盖此前“与官方 push 完全一致”的要求，Vitest 配置和已有组织 main / 默认应用 Root 适配保持。
 
 - 安装依赖后会执行根脚本 `pnpm prepare`，自动完成 Husky 安装。
 - `pre-push` 会执行 `pnpm run verify:pre-push`。
 - 根 `pnpm test` 现在只跑单测，不再误把桌面端 `packages/desktop/test/e2e` 当成 Vitest 用例。
 - Bugfix：单测脚本里的 E2E exclude glob 必须加引号；否则 shell 会先把 `packages/desktop/test/e2e/**/*.test.ts` 展开成真实文件列表，导致 Vitest 把多余文件当成 filters，同时又被 exclude 排除，最终报 `No test files found` 并阻止 push。
-- `verify:pre-push` 依次执行 lint、架构检查和 push 范围的受影响单测；lint、架构检查、选中测试或脚本自身失败都会阻止 push。
+- `verify:pre-push` 依次执行 lint、schema、架构与门禁接线检查、push 范围预览、完整根单测；任何失败阻止 push。
 
 这样可以在代码推到远端前，先用更快的静态检查拦住明显问题，再把单测问题拦在本地，同时保留 `pnpm test:e2e` 作为桌面端 E2E 的独立入口。
 
@@ -22,7 +22,7 @@ pre-push 直接使用当前 `PATH` 中的 pnpm / Node，不强制依赖 mise。�
 开发者准备 Node / pnpm（mise、nvm 或其他方式）
     → Git hook 保留 push ref 信息并清理 Git local env
     → pnpm run verify:pre-push
-    → lint / 架构检查 / 受影响单测
+    → lint / schema / 架构与门禁接线 / affected 预览 / 隔离全量根单测
 ```
 
 - 仓库负责声明工具版本和执行检查；个人环境负责让合适的 Node / pnpm 可被 Git 找到。

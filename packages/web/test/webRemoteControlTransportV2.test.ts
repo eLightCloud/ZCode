@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { EventEmitter, once } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeRelayV2 } from "@zcode/shared/testing/fake-relay-v2";
@@ -47,6 +48,7 @@ async function fixture(
     expect(received).toContainEqual(expect.objectContaining({ type: "auth_ack" })),
   );
   const states: string[] = [];
+  const stateEvents = new EventEmitter();
   const failures: unknown[] = [];
   const onSendReady = vi.fn();
   const terminal = new WebRemoteControlTerminalTransport({
@@ -56,14 +58,21 @@ async function fixture(
     getToken: (signal) =>
       createWebRemoteControlV2TokenClient(relay.httpUrl, tokenFetcher)(terminalJwt, signal),
     onPayload: vi.fn(),
-    onStateChange: (state) => states.push(state),
+    onStateChange: (state) => {
+      states.push(state);
+      stateEvents.emit(`state:${state}`);
+    },
     onFailure: (failure) => failures.push(failure),
     onError: vi.fn(),
     onSendReady,
     reloadPage: vi.fn(),
   });
   cleanup.push(() => terminal.dispose());
-  return { relay, terminal, states, failures, sid, received, onSendReady };
+  const waitForState = async (state: string) => {
+    if (states.at(-1) !== state)
+      await once(stateEvents, `state:${state}`, { signal: AbortSignal.timeout(5000) });
+  };
+  return { relay, terminal, states, failures, sid, received, onSendReady, waitForState };
 }
 
 function controlledTransport() {
@@ -251,23 +260,35 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
           : undefined,
     });
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // 等实际错误处理登记重试后再推进时间，不能把 HTTP 吞吐计入退避算法的时限。
+    const schedule = globalThis.setTimeout;
+    const retries = new EventEmitter();
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((handler, ms, ...args) => {
+      const timer = schedule(handler, ms, ...args);
+      retries.emit(String(ms));
+      return timer;
+    });
+    const waitForRetry = (ms: number) =>
+      once(retries, String(ms), { signal: AbortSignal.timeout(5000) });
+    const firstRetry = waitForRetry(500);
     h.terminal.start();
-    await delay(60);
+    await firstRetry;
     const tokens = () =>
       h.relay.httpCalls.filter((r) => (r.body as { role?: string }).role === "terminal").length;
     let count = 1;
-    for (const ms of [500, 1000, 2000, 4000, 8000, 10000, 10000]) {
+    const delays = [500, 1000, 2000, 4000, 8000, 10000, 10000];
+    for (const [index, ms] of delays.entries()) {
       await vi.advanceTimersByTimeAsync(ms - 1);
-      await delay(30);
       expect(tokens()).toBe(count);
+      const nextRetry = waitForRetry(delays[Math.min(index + 1, delays.length - 1)]!);
       await vi.advanceTimersByTimeAsync(1);
-      await delay(60);
+      await nextRetry;
       expect(tokens()).toBe(++count);
       fail = "network";
     }
     fail = undefined;
     await vi.advanceTimersByTimeAsync(10000);
-    await delay(100);
+    await h.waitForState("paired");
     expect(h.states.at(-1)).toBe("paired");
     expect(h.failures).toEqual([]);
   });

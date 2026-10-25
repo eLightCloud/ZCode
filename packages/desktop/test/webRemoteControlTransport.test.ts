@@ -135,30 +135,46 @@ describe("desktop relay V2 transport", () => {
       },
     });
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // 真实 HTTP 的错误处理完成后才登记退避；固定 sleep 不能作为推进 fake clock 的屏障。
+    const schedule = globalThis.setTimeout;
+    const retries = new EventEmitter();
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((handler, ms, ...args) => {
+      const timer = schedule(handler, ms, ...args);
+      retries.emit(String(ms));
+      return timer;
+    });
+    const waitForRetry = (ms: number) =>
+      once(retries, String(ms), { signal: AbortSignal.timeout(5000) });
+    const firstRetry = waitForRetry(1000);
     f.transport.start();
-    await settle();
+    await firstRetry;
     let count = 1;
     const tokenCalls = () =>
       f.relay.httpCalls.filter((call) => call.path.endsWith("/token")).length;
-    for (const ms of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+    const delays = [1000, 2000, 4000, 8000, 16000, 30000, 30000];
+    for (const [index, ms] of delays.entries()) {
       expect(tokenCalls()).toBe(count);
       await vi.advanceTimersByTimeAsync(ms - 1);
-      await settle();
       expect(tokenCalls()).toBe(count);
+      const nextRetry = waitForRetry(delays[Math.min(index + 1, delays.length - 1)]!);
       await vi.advanceTimersByTimeAsync(1);
-      await settle();
+      await nextRetry;
       count++;
+      expect(tokenCalls()).toBe(count);
+      failure = "network";
     }
     failure = undefined;
     await vi.advanceTimersByTimeAsync(30000);
     await f.waitForState("waiting_terminal");
     expect(f.states.at(-1)).toBe("waiting_terminal");
     failure = "network";
+    const disconnected = waitForRetry(1000);
     f.relay.disconnect({ role: "device" });
-    await settle();
+    await disconnected;
     const before = tokenCalls();
+    const networkRetry = waitForRetry(2000);
     await vi.advanceTimersByTimeAsync(1000);
-    await settle();
+    await networkRetry;
     expect(tokenCalls()).toBe(before + 1);
     expect(f.states.at(-1)).toBe("connecting");
   });

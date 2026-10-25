@@ -112,4 +112,4 @@ existing unique names, networks, volumes, and cleanup ownership remain unchanged
 
 ### macOS 全量测试进程
 
-macOS 根 UT 默认采用 forks（普通组 2 个 worker、原有串行组不变），以隔离 fsevents 的原生 N-API 回收。真实 threads 全量的崩溃报告显示 uv_mutex_lock / napi_release_threadsafe_function / fse_instance_destroy 引发 SIGABRT；相同范围 forks 完整通过。ZCODE_TEST_POOL 可显式选择诊断池，其他平台默认沿 threads。此配置不删除测试、改变断言、扩大超时或失败后自动重试。隔离入口统一记录实际 termination_signal；信号终止仍返回失败并阻止 push，成功 / 失败均清理自身临时目录。
+macOS 根 UT 默认采用 forks（普通组 4 个 worker、原有串行组不变），以隔离 fsevents 的原生 N-API 回收。真实 threads 全量的崩溃报告显示 uv_mutex_lock / napi_release_threadsafe_function / fse_instance_destroy 引发 SIGABRT；相同范围 forks 完整通过。ZCODE_TEST_POOL 可显式选择诊断池，其他平台默认沿 threads。此配置不删除测试、改变断言、扩大超时或失败后自动重试。隔离入口统一记录实际 termination_signal；信号终止仍返回失败并阻止 push，成功 / 失败均清理自身临时目录。

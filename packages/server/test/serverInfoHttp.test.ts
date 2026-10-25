@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import { AddressInfo } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -10,6 +11,16 @@ import { createHttpServer } from "../src/http.js";
 describe("server info HTTP endpoint", () => {
   const servers: Array<{ close(callback?: (err?: Error) => void): void }> = [];
   const tempDirs: string[] = [];
+
+  async function startLoopbackServer(...args: Parameters<typeof createHttpServer>) {
+    const [services, port, options] = args;
+    // 真实 HTTP 夹具与客户端固定同一 IPv4 地址，避免不同地址族复用端口时请求串台。
+    const server = createHttpServer(services, port, { ...options, host: "127.0.0.1" });
+    servers.push(server);
+    await once(server, "listening");
+    expect((server.address() as AddressInfo).address).toBe("127.0.0.1");
+    return server;
+  }
 
   afterEach(async () => {
     await Promise.all(
@@ -32,7 +43,7 @@ describe("server info HTTP endpoint", () => {
   });
 
   it("returns desktop connector bootstrap metadata", async () => {
-    const server = createHttpServer(new ServiceCollection(), 0, {
+    const server = await startLoopbackServer(new ServiceCollection(), 0, {
       serverId: "studio",
       name: "Studio Server",
       workspaces: [
@@ -42,7 +53,6 @@ describe("server info HTTP endpoint", () => {
         },
       ],
     });
-    servers.push(server);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/server-info`);
@@ -76,12 +86,11 @@ describe("server info HTTP endpoint", () => {
   });
 
   it("announces virtual projects only for an initialized owner host", async () => {
-    const server = createHttpServer(new ServiceCollection(), 0, {
+    const server = await startLoopbackServer(new ServiceCollection(), 0, {
       serverId: "owner",
       virtualProjects: true,
       migrationFailedPathCount: 2,
     });
-    servers.push(server);
     const address = server.address() as AddressInfo;
     const response = await fetch(`http://127.0.0.1:${address.port}/api/server-info`);
     expect(await response.json()).toMatchObject({
@@ -92,10 +101,9 @@ describe("server info HTTP endpoint", () => {
   });
 
   it("requires the lite token for protected API routes", async () => {
-    const server = createHttpServer(new ServiceCollection(), 0, {
+    const server = await startLoopbackServer(new ServiceCollection(), 0, {
       authToken: "secret-token",
     });
-    servers.push(server);
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
@@ -129,8 +137,7 @@ describe("server info HTTP endpoint", () => {
   });
 
   it("does not expose either retired remote-connect route", async () => {
-    const server = createHttpServer(new ServiceCollection(), 0);
-    servers.push(server);
+    const server = await startLoopbackServer(new ServiceCollection(), 0);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/connect-remote`, {
@@ -152,11 +159,10 @@ describe("server info HTTP endpoint", () => {
     await writeFile(join(staticRoot, "index.html"), "<html>lite</html>", "utf8");
     await writeFile(join(staticRoot, "app.js"), "console.log('lite');", "utf8");
 
-    const server = createHttpServer(new ServiceCollection(), 0, {
+    const server = await startLoopbackServer(new ServiceCollection(), 0, {
       staticRoot,
       spaFallback: true,
     });
-    servers.push(server);
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
 

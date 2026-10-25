@@ -129,7 +129,7 @@ export default defineConfig({
           ],
           exclude: ["packages/desktop/test/e2e/**", "packages/zcode-cua/**", ...forkIsolatedTests],
           pool: unitPool === "forks" ? "forks" : "threads",
-          maxWorkers: unitPool === "forks" ? 2 : 4,
+          maxWorkers: unitPool === "forks" && process.platform !== "darwin" ? 2 : 4,
           sequence: { groupOrder: 0 },
         },
       },

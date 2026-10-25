@@ -212,12 +212,11 @@ describe("server remote connection", () => {
       try {
         await mkdir(denied);
         await mkdir(surviving);
-        const server = createHttpServer(
+        const server = await startLoopbackServer(
           new ServiceCollection().register(IFileService, createFileService()),
           0,
           { serverId: "permission-fixture" },
         );
-        servers.push(server);
         const address = server.address() as AddressInfo;
         const connection = await connectServerRemote({
           kind: "server",

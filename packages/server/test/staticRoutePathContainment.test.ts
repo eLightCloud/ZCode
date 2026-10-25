@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import { AddressInfo } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -76,10 +77,13 @@ describe("static route path containment", () => {
     tempDirs.push(staticRoot);
     await writeFile(join(staticRoot, "index.html"), "<html>home</html>");
     const server = createHttpServer(new ServiceCollection(), 0, {
+      host: "127.0.0.1",
       staticRoot,
       spaFallback: true,
     });
     servers.push(server);
+    await once(server, "listening");
+    expect((server.address() as AddressInfo).address).toBe("127.0.0.1");
     return (server.address() as AddressInfo).port;
   }
 

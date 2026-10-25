@@ -41,7 +41,13 @@ describe.each(["websocket", "duplex"] as const)("%s RPC connection lifecycle", (
           },
         }),
         0,
-        { serverId: "rpc-lifecycle", authRequired: true, authToken: "test-ingress" },
+        // localhost 可能只监听 IPv6；夹具与 IPv4 客户端必须同址，避免撞上另一 IPv4 服务。
+        {
+          host: "127.0.0.1",
+          serverId: "rpc-lifecycle",
+          authRequired: true,
+          authToken: "test-ingress",
+        },
       );
       const peerSockets: Duplex[] = [];
       server.on("upgrade", (_request, socket) => peerSockets.push(socket));
@@ -57,6 +63,7 @@ describe.each(["websocket", "duplex"] as const)("%s RPC connection lifecycle", (
       if (!server.listening) await once(server, "listening");
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("TCP address unavailable");
+      expect(address.address).toBe("127.0.0.1");
       const connect = async () => {
         const connection =
           transport === "websocket"

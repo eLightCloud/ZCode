@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AddressInfo } from "node:net";
 import { ServiceCollection, IBotsService, type IBotsService as BotsService } from "@zcode/services";
@@ -5,6 +6,16 @@ import { createHttpServer } from "../src/http.js";
 
 describe("bots HTTP callback", () => {
   const servers: Array<{ close(callback?: (err?: Error) => void): void }> = [];
+
+  async function startLoopbackServer(...args: Parameters<typeof createHttpServer>) {
+    const [services, port, options] = args;
+    // 真实 HTTP 夹具与客户端固定同一 IPv4 地址，避免不同地址族复用端口时请求串台。
+    const server = createHttpServer(services, port, { ...options, host: "127.0.0.1" });
+    servers.push(server);
+    await once(server, "listening");
+    expect((server.address() as AddressInfo).address).toBe("127.0.0.1");
+    return server;
+  }
 
   afterEach(async () => {
     await Promise.all(
@@ -41,8 +52,7 @@ describe("bots HTTP callback", () => {
       handleProviderCallback,
       handleProviderCallbackResponse,
     } as unknown as BotsService);
-    const server = createHttpServer(services, 0);
-    servers.push(server);
+    const server = await startLoopbackServer(services, 0);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/bots/webhook`, {
@@ -84,8 +94,7 @@ describe("bots HTTP callback", () => {
 
   it("rejects unsupported bot providers", async () => {
     const services = new ServiceCollection();
-    const server = createHttpServer(services, 0);
-    servers.push(server);
+    const server = await startLoopbackServer(services, 0);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/bots/unknown`, {
@@ -104,8 +113,7 @@ describe("bots HTTP callback", () => {
         status: 503,
       })),
     } as unknown as BotsService);
-    const server = createHttpServer(services, 0);
-    servers.push(server);
+    const server = await startLoopbackServer(services, 0);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/bots/webhook`, {
@@ -119,8 +127,7 @@ describe("bots HTTP callback", () => {
 
   it("rejects non-webhook providers on the HTTP callback endpoint", async () => {
     const services = new ServiceCollection();
-    const server = createHttpServer(services, 0);
-    servers.push(server);
+    const server = await startLoopbackServer(services, 0);
     const address = server.address() as AddressInfo;
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/bots/feishu/feishu-1`, {

@@ -6,6 +6,7 @@ IMAGE_NAME="${IMAGE_NAME:-zcode-desktop-e2e-demo}"
 DOCKERFILE="${DOCKERFILE:-Dockerfile.desktop-e2e}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 PNPM_VERSION="${PNPM_VERSION:-10.33.2}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-zcode-tests}"
 DEFAULT_E2E_SPEC="./test/e2e/container-boot.test.ts,./test/e2e/smoke.test.ts,./test/e2e/e2ecase-regression.test.ts,./test/e2e/upstream-provider.test.ts,./test/e2e/task-list-archive-confirmation.test.ts"
 # 修复原因：formal/local replay 通过不等于 Docker admission；Assistant Preview Cards 的容器尝试
 # 停在镜像解析阶段，CDD01 则在 WDIO 内失败；两者都没有 replay-isolated 绿色证据。
@@ -136,6 +137,9 @@ if [ "${SKIP_DRIVER_PREFETCH:-0}" != "1" ]; then
   log "prefetching Chromedriver into volume ${DRIVER_CACHE_VOLUME}"
   docker run \
     --rm \
+    --label "com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+    --label "com.docker.compose.service=test-driver-prefetch" \
+    --label "com.docker.compose.oneoff=True" \
     --platform "$DOCKER_PLATFORM" \
     -e "DRIVER_PREFETCH_TIMEOUT=${DRIVER_PREFETCH_TIMEOUT}" \
     -e "WDIO_BROWSER_DRIVER_CACHE_DIR=${DRIVER_CACHE_DIR}" \
@@ -151,6 +155,9 @@ fi
 
 docker_run_args=(
   --name "$CONTAINER_NAME"
+  --label "com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+  --label "com.docker.compose.service=test-desktop-e2e"
+  --label "com.docker.compose.oneoff=True"
   --platform "$DOCKER_PLATFORM"
   --shm-size "$SHM_SIZE"
   -e CI=1

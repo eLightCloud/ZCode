@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFailed, vi } from "vitest";
 import { createFakeRelayV2, type FakeRelayV2Options } from "@zcode/shared/testing/fake-relay-v2";
 import {
   buildZCodeEndpointUrls,
@@ -635,6 +635,16 @@ describe("V2 manager public API with real relay", () => {
   });
   it("KICKED有界恢复最终对外返回session-conflict", async () => {
     const f = await fixture();
+    // 只记录失败阶段，不改变随机退避、真实 Relay 或原 6500ms 断言预算。
+    onTestFailed(() => {
+      const status = f.manager.getStatus(1);
+      console.error("engineering.relay.kicked-recovery.failure", {
+        status: status.status,
+        reason: status.failure?.reason,
+        messageCount: f.relay.messages.length,
+        httpCalls: f.relay.httpCalls.map(({ method, path }) => ({ method, path })),
+      });
+    });
     await f.start();
     f.relay.sendError({ role: "device" }, "KICKED");
     await vi.waitFor(() => expect(f.relay.messages.length).toBe(2), { timeout: 6500 });

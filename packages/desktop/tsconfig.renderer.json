@@ -2,12 +2,18 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "out/renderer",
-    "rootDir": "src/renderer",
+    "rootDir": "src",
+    "types": ["vite/client", "node"],
     "lib": ["es2025", "dom", "dom.iterable"],
     "jsx": "react-jsx",
     "noEmit": true
   },
-  "include": ["src/renderer"],
+  "include": [
+    "src/renderer",
+    "src/shared/armsBrowserInit.ts",
+    "src/shared/armsRumShared.ts",
+    "../client/src/globals.d.ts"
+  ],
   // renderer 直接 import 了 shared；把它补进 references，避免 renderer 单独检查时再走源码回退路径。
   "references": [{ "path": "../shared" }, { "path": "../ui" }, { "path": "../client" }]
 }

@@ -2,7 +2,7 @@
 
 仓库现在通过 Husky 接管 Git 的 `pre-push`。
 
-组织推送策略要求每次实际执行完整根单测。静态与架构检查通过后，affected 只预览并校验 push 范围，随后必须经现有隔离入口执行 pnpm test:unit；无关联或选中全部都不能免除全量。任一检查或全量单测失败均阻止 push。affected 独立命令继续保留上游选择 / 跳过语义，不能把预览成功当作单测通过。该组织门禁覆盖此前“与官方 push 完全一致”的要求，Vitest 配置和已有组织 main / 默认应用 Root 适配保持。
+组织推送策略要求每次实际执行完整根单测。静态与架构检查通过后，affected 只预览并校验 push 范围，随后必须经现有隔离入口执行 pnpm test:unit；无关联或选中全部都不能免除全量。任一检查或全量单测失败均阻止 push。affected 独立命令继续保留上游选择 / 跳过语义，不能把预览成功当作单测通过。该组织门禁覆盖此前“与官方 push 完全一致”的要求，Vitest 测试范围和已有组织 main / 默认应用 Root 适配保持，macOS 进程池见末节。
 
 - 安装依赖后会执行根脚本 `pnpm prepare`，自动完成 Husky 安装。
 - `pre-push` 会执行 `pnpm run verify:pre-push`。
@@ -109,3 +109,7 @@ The desktop E2E container entry groups both driver prefetch and test containers
 under `COMPOSE_PROJECT_NAME` in Docker Desktop (default: `zcode-tests`). Product
 launchers may provide their own project name. This is presentation metadata;
 existing unique names, networks, volumes, and cleanup ownership remain unchanged.
+
+### macOS 全量测试进程
+
+macOS 根 UT 默认采用 forks（普通组 2 个 worker、原有串行组不变），以隔离 fsevents 的原生 N-API 回收。真实 threads 全量的崩溃报告显示 uv_mutex_lock / napi_release_threadsafe_function / fse_instance_destroy 引发 SIGABRT；相同范围 forks 完整通过。ZCODE_TEST_POOL 可显式选择诊断池，其他平台默认沿 threads。此配置不删除测试、改变断言、扩大超时或失败后自动重试。隔离入口统一记录实际 termination_signal；信号终止仍返回失败并阻止 push，成功 / 失败均清理自身临时目录。

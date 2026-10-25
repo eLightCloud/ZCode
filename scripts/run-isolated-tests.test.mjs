@@ -7,8 +7,12 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 for (const suite of ["cli", "unit"])
-  for (const expectedCode of [0, 7]) {
-    test(`${suite}: isolates the whole test tree and cleans it after exit ${expectedCode}`, async () => {
+  for (const [expectedCode, signal] of [
+    [0, null],
+    [7, null],
+    [1, "SIGTERM"],
+  ]) {
+    test(`${suite}: isolates and cleans after exit ${expectedCode}, signal ${signal}`, async () => {
       const fixture = await mkdtemp(join(tmpdir(), "cli-test-home-contract-"));
       try {
         for (const path of [
@@ -37,7 +41,7 @@ import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'
 const home = os.homedir();
 fs.writeFileSync(path.join(home, 'synthetic-test-db'), 'synthetic fixture');
 console.log(JSON.stringify({probe:true, home, config:process.env.XDG_CONFIG_HOME, args:process.argv.slice(2)}));
-process.exit(${expectedCode});
+${signal ? `process.kill(process.pid, '${signal}');` : `process.exit(${expectedCode});`}
 `,
         );
         const result = spawnSync(process.execPath, [entry, suite, "--", "--concurrency=1"], {
@@ -65,6 +69,9 @@ process.exit(${expectedCode});
         );
         await assert.rejects(stat(probe.home), { code: "ENOENT" });
         assert.equal(rows.at(-1).outcome, "cleaned");
+        const finished = rows.find((row) => row.outcome === "passed" || row.outcome === "failed");
+        assert.equal(finished.exit_code, expectedCode);
+        assert.equal(finished.termination_signal, signal);
       } finally {
         await rm(fixture, { recursive: true, force: true });
       }

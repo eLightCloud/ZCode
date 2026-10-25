@@ -2,6 +2,10 @@ import { applicationRootPlugin } from "./scripts/application-root-plugin.mjs";
 import { resolve } from "node:path";
 import { configDefaults, defineConfig } from "vitest/config";
 
+// macOS 的 fsevents 在线程回收时曾触发 N-API SIGABRT；进程隔离保留完整范围与原时限。
+const unitPool =
+  process.env.ZCODE_TEST_POOL ?? (process.platform === "darwin" ? "forks" : "threads");
+
 const processLifecycleTests = [
   "packages/services/test/processTreeTerminator.test.ts",
   "packages/services/test/zcodeAgentService.test.ts",
@@ -124,9 +128,8 @@ export default defineConfig({
             "scripts/ci/ci-telemetry-keyword-guard.test.mjs",
           ],
           exclude: ["packages/desktop/test/e2e/**", "packages/zcode-cua/**", ...forkIsolatedTests],
-          // Node 24/macOS 的 threads 全量运行可触发 V8 SIGSEGV；诊断时切换进程隔离，测试范围不变。
-          pool: process.env.ZCODE_TEST_POOL === "forks" ? "forks" : "threads",
-          maxWorkers: process.env.ZCODE_TEST_POOL === "forks" ? 2 : 4,
+          pool: unitPool === "forks" ? "forks" : "threads",
+          maxWorkers: unitPool === "forks" ? 2 : 4,
           sequence: { groupOrder: 0 },
         },
       },

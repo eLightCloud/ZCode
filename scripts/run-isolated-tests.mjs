@@ -57,12 +57,12 @@ try {
     stdio: "inherit",
   });
   signals.forEach((signal, index) => process.on(signal, handlers[index]));
-  const code = await new Promise((resolveExit, reject) => {
+  const { code, signal } = await new Promise((resolveExit, reject) => {
     child.once("error", reject);
-    child.once("close", (exitCode) => resolveExit(exitCode ?? 1));
+    child.once("close", (exitCode, signal) => resolveExit({ code: exitCode ?? 1, signal }));
   });
   process.exitCode = code;
-  report(code === 0 ? "passed" : "failed", { exit_code: code });
+  report(code === 0 ? "passed" : "failed", { exit_code: code, termination_signal: signal });
 } catch (error) {
   process.exitCode = 1;
   report("failed", { reason_code: "runner_failed" });

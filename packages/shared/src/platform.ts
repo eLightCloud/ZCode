@@ -1,3 +1,27 @@
+import type {
+  BrowserViewOperationPayload,
+  BrowserViewResidencyReportPayload,
+  BrowserViewResidencyTransitionPayload,
+  BrowserViewCloseTabRequest,
+  BrowserViewCloseTabNotification,
+  BrowserViewRestoredTabShell,
+  BrowserViewRestoreTabsRequest,
+  BrowserViewViewportChangedPayload,
+  BrowserViewScreenshotSurfacePreparePayload,
+  BrowserViewScreenshotSurfaceReadyPayload,
+  BrowserViewScreenshotSurfaceReleasePayload,
+  BrowserGuestAttachResult,
+  ChromeBrowserDataImportOptions,
+  ChromeBrowserDataImportResult,
+  EmbeddedBrowserDataClearResult,
+  EmbeddedBrowserOpenUrlRequest,
+  EmbeddedBrowserPermissionPromptEvent,
+  EmbeddedBrowserPermissionResolveRequest,
+  EmbeddedBrowserSitePermissionsSnapshot,
+  EmbeddedBrowserSitePermissionUpdateRequest,
+  EmbeddedBrowserSitePermissionResetRequest,
+} from "./platform-browser/contract.js";
+export * from "./platform-browser/contract.js";
 /* eslint-disable max-lines -- 跨端 platform contract 集中声明 renderer 能力；OAuth 与 browser lifecycle 必须保持 desktop/web 类型合同，本 MR 不拆分平台边界。 */
 import type {
   DockerConnectOptions,
@@ -54,163 +78,6 @@ export interface TaskNotificationPayload {
   title: string;
   body: string;
 }
-
-/** Main 将一次能够定位真实 tab 的 browser-use 操作投递给其 origin renderer。 */
-export interface BrowserViewOperationPayload {
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  tabId: string;
-  browserId: string;
-  browserGeneration: number;
-  /** 当前模型命令会打开、激活或改变 Browser 布局，renderer 应重建 resize observation baseline。 */
-  resetsResizeBaseline?: boolean;
-}
-
-export type BrowserTabResidencyState =
-  | "live-visible"
-  | "live-background"
-  | "suspend-pending"
-  | "suspended"
-  | "restoring";
-
-/** 仅用于创建尚未提交首个 navigation entry 的 residency restore guest。 */
-export const BROWSER_VIEW_RESTORE_BOOTSTRAP_URL = "zcode-browser-restore://pending";
-
-/** Renderer 上报 tab shell 的展示事实；windowId 必须由 main 绑定可信 IPC sender。 */
-export interface BrowserViewResidencyReportPayload {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  selected: boolean;
-  visible: boolean;
-  currentTask: boolean;
-  loading: boolean;
-  restoreUrl?: string | null;
-  title?: string | null;
-  faviconUrl?: string | null;
-}
-
-export interface BrowserViewResidencyTransitionPayload {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId: string | undefined;
-  sessionId: string;
-  browserId: string;
-  browserGeneration: number;
-  generation: number;
-  residency: Extract<
-    BrowserTabResidencyState,
-    "live-visible" | "live-background" | "suspended" | "restoring"
-  >;
-}
-
-export interface BrowserViewCloseTabRequest {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-}
-
-export const LOCAL_MEDIA_PREVIEW_SCHEME = "zcode-media";
-
-export function buildLocalMediaPreviewUrl(path: string): string {
-  const url = new URL(`${LOCAL_MEDIA_PREVIEW_SCHEME}://local/preview`);
-  url.searchParams.set("path", path);
-  return url.toString();
-}
-
-/**
- * main→renderer 的关闭通知。
- *
- * 旧 payload 只有 tabId，renderer 只能在“当前活跃 workspace”的 side pane 状态里查找；
- * 用户已切到别的 workspace 时通知会被静默丢弃，原 workspace 的持久化状态里留下关不掉的幽灵 tab。
- * 带上 owner scope 后，renderer 可以直接定位到对应 workspace 的 side pane 内存删除该 tab。
- * scope 字段可缺省：recovery-orphan 等内部路径只有 tabId，renderer 此时退回“仅当前 workspace”语义。
- */
-export interface BrowserViewCloseTabNotification {
-  tabId: string;
-  workspaceKey?: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-  reason?: "recovery-orphan";
-}
-
-/** 跨重启先恢复 logical shell；renderer 初始不得一次 mount 全部 guest。 */
-export interface BrowserViewRestoredTabShell {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  browserId: string;
-  browserGeneration: number;
-  origin: "agent" | "user";
-  restoreUrl: string | null;
-  title: string | null;
-  faviconUrl: string | null;
-  openedAt: number;
-  lastSelectedAt: number | null;
-}
-
-export interface BrowserViewRestoreTabsRequest {
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-}
-
-/** Main 将 Agent viewport 变更定向投递给目标 tab 的 origin renderer。 */
-export interface BrowserViewViewportChangedPayload extends BrowserViewOperationPayload {
-  viewport: BrowserViewportSize | null;
-}
-
-// 旧默认预算 1500ms 在慢机器或后台窗口中不足以等待连续稳定帧；main 与 renderer
-// 共用这个默认值，并由 prepare payload 传递实际覆盖值，避免两端 deadline 再次漂移。
-export const BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS = 3_000;
-
-/** 截图/录制握手对 renderer 预览比例的瞬时要求；缺失时沿用用户当前预览。 */
-export type BrowserViewSurfaceScaleMode = "current" | "unscaled";
-
-/** Main 请求 owner renderer 在截图前准备后台 guest 合成表面。 */
-export interface BrowserViewScreenshotSurfacePreparePayload extends BrowserViewOperationPayload {
-  requestId: string;
-  webContentsId: number;
-  viewport: BrowserViewportSize;
-  /** 自然 viewport 不使用 metrics 的 guest 布局补偿；缺失时保持原仿真行为（含录制）。 */
-  viewportMode?: "natural" | "emulated";
-  /** `unscaled` 只在 lease 生命周期内强制真实 100% surface，不写回用户的 Fit/固定比例。 */
-  surfaceScaleMode?: BrowserViewSurfaceScaleMode;
-  /** Main 当前实际使用的 prepare 超时；旧 payload 缺失时 renderer 回退到共享默认值。 */
-  timeoutMs?: number;
-}
-
-/** Owner renderer 确认目标 guest 的逻辑 viewport 与原生预览 surface 比例均已稳定。 */
-export interface BrowserViewScreenshotSurfaceReadyPayload extends BrowserViewScreenshotSurfacePreparePayload {
-  surfaceScale: number;
-}
-
-/** Main 通知 owner renderer 释放临时后台截图合成表面。 */
-export type BrowserViewScreenshotSurfaceReleasePayload = Omit<
-  BrowserViewScreenshotSurfacePreparePayload,
-  "viewport" | "viewportMode" | "surfaceScaleMode" | "timeoutMs"
->;
-
-export type BrowserGuestAttachRejectReason =
-  | "not-found"
-  | "destroyed"
-  | "not-webview"
-  | "closed"
-  | "window-mismatch"
-  | "workspace-mismatch"
-  | "session-mismatch"
-  | "remote-session-mismatch"
-  | "residency-suspended"
-  | "residency-generation-mismatch";
-
-/** Renderer 上报 guest 后 main 返回的绑定结果；拒绝不能再被伪装成无返回的 ready timeout。 */
-export type BrowserGuestAttachResult =
-  | { ok: true; guestGeneration: number }
-  | { ok: false; reason: BrowserGuestAttachRejectReason; recoveryRequested: boolean };
 
 /** 已安装的编辑器/终端信息 */
 export interface EditorInfo {
@@ -386,53 +253,6 @@ export interface WindowScreenshotResult {
   size: number;
 }
 
-export type ChromeBrowserDataImportError =
-  | "chrome_profile_not_found"
-  | "chrome_profile_ambiguous"
-  | "chrome_executable_not_found"
-  | "chrome_cookie_access_denied"
-  | "chrome_cookie_elevation_required"
-  | "chrome_cookie_elevation_cancelled"
-  | "chrome_cookie_helper_verification_failed"
-  | "chrome_cookie_app_bound_decryption_failed"
-  | "chrome_cookie_protection_unsupported"
-  | "chrome_profile_locked"
-  | "chrome_local_storage_import_failed"
-  | "chrome_import_not_supported"
-  | "chrome_browser_data_import_unavailable"
-  | "chrome_data_import_failed"
-  | "chrome_default_profile_not_found";
-
-export interface ChromeBrowserDataImportOptions {
-  /** Windows App-Bound Cookie 只能在本次显式确认后触发 UAC；不得持久化为全局授权。 */
-  allowElevatedChromeDecryption?: boolean;
-}
-
-/** Chrome 浏览器数据导入只返回数量和状态；Cookie/LocalStorage 值和解密材料不得跨进程。 */
-export interface ChromeBrowserDataImportResult {
-  success: boolean;
-  cookies: {
-    imported: number;
-    skipped: number;
-    failed: number;
-  };
-  localStorage: {
-    originsImported: number;
-    entriesImported: number;
-    originsSkipped: number;
-    originsFailed: number;
-    error?: ChromeBrowserDataImportError;
-  };
-  /** 部分成功时保留可操作问题；不得包含 Profile 绝对路径或站点数据。 */
-  issues?: ChromeBrowserDataImportError[];
-  error?: ChromeBrowserDataImportError;
-}
-
-export interface EmbeddedBrowserDataClearResult {
-  success: boolean;
-  error?: string;
-}
-
 export interface WindowControlsOverlayMetrics {
   leftPaddingPx?: number;
   rightPaddingPx?: number;
@@ -501,96 +321,6 @@ export interface RemoteSessionReconnectedEvent {
   sessionId: string;
   workspacePath: string;
   workspaceIdentity: string;
-}
-
-export interface EmbeddedBrowserOpenUrlRequest {
-  url: string;
-  disposition: "default" | "foreground-tab" | "background-tab" | "new-window" | "other";
-  /** 触发 popup 的 browser-use tab 归属；旧版事件缺失时由 renderer 按当前 scope 兼容处理。 */
-  workspaceKey?: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-  browserId?: string;
-  browserGeneration?: number;
-  sourceTabId?: string;
-}
-
-export interface EmbeddedBrowserPermissionDeviceOption {
-  deviceId: string;
-  name?: string;
-  vendorId?: number;
-  productId?: number;
-  serialNumber?: string;
-}
-
-export interface EmbeddedBrowserPermissionScreenOption {
-  sourceId: string;
-  name: string;
-  /** 源类型：整个屏幕 / 窗口，由 main 按 desktopCapturer source id 前缀判定。 */
-  kind: "screen" | "window";
-  thumbnailDataUrl?: string;
-}
-
-/** Main → Renderer 的内置浏览器权限弹窗请求；kind 决定 renderer 渲染哪类弹窗。 */
-export type EmbeddedBrowserPermissionPromptEvent =
-  | {
-      requestId: string;
-      kind: "permission";
-      origin: string;
-      permission: string;
-      mediaTypes?: string[];
-      /** 发起请求的 guest webContents id；renderer 据此只在归属 tab 渲染，
-       *  避免后台 tab 的请求显示在当前 tab 造成误批准。 */
-      guestWebContentsId?: number;
-    }
-  | {
-      requestId: string;
-      kind: "screen-share";
-      origin: string;
-      screens: EmbeddedBrowserPermissionScreenOption[];
-      /** 屏幕共享无 tab 锚定语义，恒缺省（兜底渲染）。 */
-      guestWebContentsId?: number;
-    }
-  | {
-      requestId: string;
-      kind: "device";
-      origin: string;
-      /** select-hid-device / select-usb-device / select-serial-port / select-bluetooth-device */
-      permission: string;
-      devices: EmbeddedBrowserPermissionDeviceOption[];
-      /** 发起请求的 guest webContents id（serial/蓝牙可取到；hid/usb 受 frame 限制
-       *  缺省，renderer 兜底渲染）。 */
-      guestWebContentsId?: number;
-    };
-
-export type EmbeddedBrowserPermissionResolution =
-  | { action: "allow-always" }
-  | { action: "allow-session" }
-  | { action: "block-always" }
-  | { action: "dismiss" }
-  | { action: "share-screen"; sourceId: string }
-  | { action: "select-device"; deviceId: string }
-  | { action: "cancel" };
-
-export interface EmbeddedBrowserPermissionResolveRequest {
-  requestId: string;
-  resolution: EmbeddedBrowserPermissionResolution;
-}
-
-export type EmbeddedBrowserSitePermissionsSnapshot = Record<
-  string,
-  Record<string, "allow" | "deny">
->;
-
-export interface EmbeddedBrowserSitePermissionUpdateRequest {
-  origin: string;
-  permission: string;
-  /** "ask" 表示删除该条记录，回到每次询问。 */
-  state: "allow" | "deny" | "ask";
-}
-
-export interface EmbeddedBrowserSitePermissionResetRequest {
-  origin: string;
 }
 
 export interface ConnectRemoteRequest {
@@ -689,6 +419,9 @@ export type CuaOsSupport =
  * 业务服务（文件、终端、凭据等）走 IServiceAccessor 的 RPC 通道。
  */
 export interface IPlatformService {
+  /** Main-owned fixed-origin application API; credentials never cross the renderer boundary. */
+  applicationHttp?: import("./application-http/contract.js").ApplicationHttpPort;
+
   /** 是否支持当前客户端本机文件的默认应用与目录操作；Web 不具备此能力。 */
   canOpenLocalFiles?: boolean;
 

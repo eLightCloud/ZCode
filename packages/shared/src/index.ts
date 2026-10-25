@@ -249,6 +249,8 @@ export type {
   UpdateCheckResultPayload,
   UpdateStatePayload,
   WSLDistro,
+  WindowControlsOverlayMetrics,
+  DesktopZoomState,
   WindowControlsOverlayReadyPayload,
   ZCodeStdioTapDevState,
 } from "./platform.js";
@@ -386,3 +388,5 @@ export * from "./conversation-runtime.js";
 export * from "./conversation-continuation.js";
 export * from "./conversation-files.js";
 export * from "./zcode-task-search-text.js";
+
+export * from "./application-http/contract.js";

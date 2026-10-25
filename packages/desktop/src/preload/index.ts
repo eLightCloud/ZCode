@@ -1,3 +1,4 @@
+import { APPLICATION_HTTP_CHANNEL, APPLICATION_HTTP_CANCEL_CHANNEL } from "@zcode/shared";
 import { installPluginSandboxHostBridge } from "./pluginSandbox/hostBridge.js";
 import {
   databaseStartupControlSchema,
@@ -31,8 +32,6 @@ contextBridge.exposeInMainWorld("__ZCODE_DEVICE_ID__", parseDeviceIdFromArgs());
 import type {
   AppSettings,
   ApplicationIconRequest,
-  BindRemoteWorkspaceSessionContextResult,
-  BindRemoteWorkspaceSessionContextIpcResult,
   BrowserViewOperationPayload,
   BrowserGuestAttachResult,
   BrowserViewScreenshotSurfacePreparePayload,
@@ -60,15 +59,12 @@ import type {
   OAuthStateRegistration,
   WebRemoteControlAuthStateChange,
   OpenInEditorOptions,
-  RemoteTarget,
   TaskNotificationPayload,
   TelemetryRendererContext,
   RendererActionTraceBatchV1,
   RendererActionTraceConfigV1,
   RendererHeapSample,
   PostUpdateReleaseNotesPayload,
-  RemoteSessionClosedEvent,
-  RemoteSessionReconnectedEvent,
   UpdateCheckResultPayload,
   UpdateStatePayload,
   ZCodeStdioTapDevState,
@@ -84,7 +80,6 @@ import type {
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStatus,
   WebRemoteControlWorkspaceTarget,
-  RemoteConnectionRuntimeLog,
   WindowControlsOverlayMetrics,
   WindowControlsOverlayReadyPayload,
   CreateTempTextAttachmentRequest,
@@ -93,7 +88,7 @@ import type {
   ConfigureFinalArmsCustomEventE2ERequest,
   FinalArmsCustomEventE2EEntry,
 } from "@zcode/shared";
-import { unwrapRemoteWorkspaceBindResult } from "./remoteWorkspaceBindBridge.js";
+import { createRemoteWorkspacePreload } from "./remoteWorkspace/index.js";
 import {
   InternalChannels,
   PlatformChannels,
@@ -262,40 +257,13 @@ window.addEventListener("DOMContentLoaded", updateRendererProcessTitle, {
  * 通过 MessagePort RPC 访问，不再经过此 bridge。
  */
 contextBridge.exposeInMainWorld("zcode", {
-  connectRemote: (
-    options: RemoteTarget,
-    requestId?: string,
-    context?: {
-      workspacePath?: string;
-      workspaceIdentity?: string;
-      connectTrigger?: import("@zcode/shared").RemoteWorkspaceConnectTrigger;
-      confirmSourceServerInstall?: boolean;
-    },
-  ) =>
-    ipcRenderer.invoke(PlatformChannels.ConnectRemote, {
-      target: options,
-      requestId,
-      ...(context ? context : {}),
-    }),
-  requestSourceSettingsAttachment: (sourceServerId: string) =>
-    ipcRenderer.invoke(PlatformChannels.RequestSourceSettingsAttachment, {
-      sourceServerId,
-    }),
-  cancelPendingRemoteConnection: (requestId?: string): Promise<void> =>
-    ipcRenderer.invoke(PlatformChannels.CancelPendingRemoteConnection, {
-      requestId,
-    }),
-  bindRemoteWorkspaceSessionContext: (context: {
-    remoteSessionId: string;
-    workspacePath: string;
-    workspaceIdentity?: string;
-    workspacePurpose?: import("@zcode/shared").WorkspacePurpose;
-  }): Promise<BindRemoteWorkspaceSessionContextResult> =>
-    ipcRenderer
-      .invoke(PlatformChannels.BindRemoteWorkspaceSessionContext, context)
-      .then((result: BindRemoteWorkspaceSessionContextIpcResult) =>
-        unwrapRemoteWorkspaceBindResult(result),
-      ),
+  applicationHttp: {
+    request: (input: import("@zcode/shared").ApplicationHttpRequest) =>
+      ipcRenderer.invoke(APPLICATION_HTTP_CHANNEL, input),
+    cancel: (requestId: string): Promise<void> =>
+      ipcRenderer.invoke(APPLICATION_HTTP_CANCEL_CHANNEL, requestId),
+  },
+  ...createRemoteWorkspacePreload(ipcRenderer),
   startWebRemoteControl: (context: WebRemoteControlContext) =>
     ipcRenderer.invoke(PlatformChannels.StartWebRemoteControl, context),
   stopWebRemoteControl: (): Promise<void> =>
@@ -355,26 +323,6 @@ contextBridge.exposeInMainWorld("zcode", {
   materializeWorkflowArtifactFile: (payload: MaterializeWorkflowArtifactFileRequest) =>
     ipcRenderer.invoke(PlatformChannels.MaterializeWorkflowArtifactFile, payload),
   /** 订阅当前窗口内远程连接过程日志，返回 disposer */
-  onRemoteConnectionLog: (callback: (entry: RemoteConnectionRuntimeLog) => void) => {
-    const handler = (_event: unknown, payload: unknown) =>
-      callback(payload as RemoteConnectionRuntimeLog);
-    ipcRenderer.on(PlatformChannels.RemoteConnectionLog, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.RemoteConnectionLog, handler);
-  },
-  /** 订阅当前窗口内远程 session 关闭事件，返回 disposer */
-  onRemoteSessionClosed: (callback: (event: RemoteSessionClosedEvent) => void) => {
-    const handler = (_event: unknown, payload: unknown) =>
-      callback(payload as RemoteSessionClosedEvent);
-    ipcRenderer.on(PlatformChannels.RemoteSessionClosed, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.RemoteSessionClosed, handler);
-  },
-  /** 订阅 Source 自动重连后的 logical session 换代事件。 */
-  onRemoteSessionReconnected: (callback: (event: RemoteSessionReconnectedEvent) => void) => {
-    const handler = (_event: unknown, payload: unknown) =>
-      callback(payload as RemoteSessionReconnectedEvent);
-    ipcRenderer.on(PlatformChannels.RemoteSessionReconnected, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.RemoteSessionReconnected, handler);
-  },
   /** 检查目录是否已在其他窗口打开 */
   activateOrSetWorkspace: (path: string): Promise<{ activated: boolean }> =>
     ipcRenderer.invoke(PlatformChannels.ActivateOrSetWorkspace, path),

@@ -1,4 +1,5 @@
 import type {
+  IPlatformService,
   DesktopCommandId,
   DesktopZoomState,
   DesktopWindowChromeState,
@@ -76,16 +77,28 @@ declare global {
       disposeSandbox(sandboxId: string, initId?: number): Promise<void>;
       consumeUserGesture(sandboxId: string): Promise<boolean>;
     };
-    zcode: {
-      connectRemote(
-        options: RemoteTarget,
-        requestId?: string,
-        context?: {
-          workspacePath: string;
-          workspaceIdentity?: string;
-          connectTrigger?: import("@zcode/shared").RemoteWorkspaceConnectTrigger;
-        },
-      ): Promise<{ success: boolean; error?: string; sessionId?: string }>;
+    zcode: Required<
+      Pick<
+        IPlatformService,
+        | "createTempTextAttachment"
+        | "onRemoteSessionReconnected"
+        | "loadMcpFromUserDirectory"
+        | "saveMcpToUserDirectory"
+        | "migrateLegacyCommonMcp"
+        | "onShareImport"
+        | "reportArmsCustomEvent"
+        | "reportLocalTtftBatch"
+        | "setShortcutRecordingActive"
+        | "onCloseActiveContextRequest"
+        | "onOpenFeedbackDialog"
+        | "onOpenTicketsPanel"
+        | "getWindowControlsOverlayMetrics"
+        | "onWindowControlsOverlayChanged"
+        | "getZCodeStdioTapDevState"
+      >
+    > & {
+      applicationHttp?: import("@zcode/shared").ApplicationHttpPort;
+      connectRemote: IPlatformService["connectRemote"];
       requestSourceSettingsAttachment?(sourceServerId: string): Promise<{ attachmentId: string }>;
       /** 取消当前窗口尚未建立完成的远程连接 */
       cancelPendingRemoteConnection?(requestId?: string): Promise<void>;
@@ -301,15 +314,7 @@ declare global {
       }>;
       /** 截取当前窗口，用于错误反馈携带现场画面 */
       captureWindowScreenshot?(): Promise<WindowScreenshotResult | null>;
-      browserViewAttachGuest?(payload: {
-        key: string;
-        webContentsId: number;
-        active?: boolean;
-        workspaceKey?: string;
-        remoteSessionId?: string;
-        sessionId?: string;
-        residencyGeneration?: number;
-      }): Promise<void>;
+      browserViewAttachGuest?: NonNullable<IPlatformService["browserViewAttachGuest"]>;
       /** 重建 `<webview>` 前让 main 精确断开旧 guest 的 CDP。 */
       browserViewDetachGuest?(payload: { key: string; webContentsId: number }): Promise<boolean>;
       browserViewCloseTab?(payload: BrowserViewCloseTabRequest): Promise<void>;

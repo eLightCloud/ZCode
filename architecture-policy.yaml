@@ -74,6 +74,42 @@ modules:
       - cli-runtime
       - cli-tool-runtime
       - cli-workflow
+  - id: platform-browser-protocol
+    roots: [packages/shared/src/platform-browser]
+    managed: true
+    requires: [shared]
+    publicEntrypoints: [packages/shared/src/platform-browser/contract.ts]
+    layers: { domain: "." }
+    owner: desktop-platform
+  - id: application-http-protocol
+    roots: [packages/shared/src/application-http]
+    managed: true
+    requires: []
+    publicEntrypoints: [packages/shared/src/application-http/contract.ts]
+    layers: { adapters: "." }
+    owner: desktop-platform
+  - id: remote-workspace-preload
+    roots: [packages/desktop/src/preload/remoteWorkspace]
+    managed: true
+    requires: [shared]
+    publicEntrypoints:
+      [
+        packages/desktop/src/preload/remoteWorkspace/index.ts,
+        packages/desktop/src/preload/remoteWorkspace/contract.ts,
+      ]
+    layers: { adapters: "." }
+    owner: desktop-platform
+  - id: desktop-application-http
+    roots: [packages/desktop/src/main/applicationHttp]
+    managed: true
+    requires: [shared, application-http-protocol]
+    publicEntrypoints:
+      [
+        packages/desktop/src/main/applicationHttp/index.ts,
+        packages/desktop/src/main/applicationHttp/contract.ts,
+      ]
+    layers: { adapters: "." }
+    owner: desktop-platform
   # sqlite-migrations：由 architecture:adopt 登记
   - id: sqlite-migrations
     roots:

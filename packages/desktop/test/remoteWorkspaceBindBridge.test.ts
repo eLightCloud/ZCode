@@ -1,17 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { unwrapRemoteWorkspaceBindResult } from "../src/preload/remoteWorkspaceBindBridge.js";
+import { describe, expect, it, vi } from "vitest";
+import type { IpcRenderer } from "electron";
+import { createRemoteWorkspacePreload } from "../src/preload/remoteWorkspace/index.js";
 
 describe("remote workspace bind preload bridge", () => {
   it("restores structured reasonCode and retryable metadata for renderer callers", async () => {
-    const error = await Promise.resolve()
-      .then(() =>
-        unwrapRemoteWorkspaceBindResult({
-          success: false,
-          error: "workspace migration conflict",
-          reasonCode: "workspace-task-identity-conflict",
-          retryable: false,
-        }),
-      )
+    const ipc = {
+      invoke: vi.fn().mockResolvedValue({
+        success: false,
+        error: "workspace migration conflict",
+        reasonCode: "workspace-task-identity-conflict",
+        retryable: false,
+      }),
+    } as unknown as IpcRenderer;
+    const port = createRemoteWorkspacePreload(ipc);
+    const error = await port
+      .bindRemoteWorkspaceSessionContext({
+        remoteSessionId: "owned-logical",
+        workspacePath: "/owned/workspace",
+      })
       .catch((value: unknown) => value);
 
     expect(error).toMatchObject({

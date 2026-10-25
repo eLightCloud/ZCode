@@ -9,6 +9,7 @@ export function createDesktopPlatform(options: {
   isLocalDevelopmentRuntime: boolean;
 }): IPlatformService {
   return {
+    applicationHttp: window.zcode.applicationHttp,
     canSelectFilePath: true,
     canOpenLocalFiles: true,
     openFileDownload: (name) =>

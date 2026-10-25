@@ -1,6 +1,7 @@
 const PERFORMANCE_TIMELINE_CLEANUP_INTERVAL_MS = 10_000;
 
-let cleanupTimer: ReturnType<typeof window.setInterval> | undefined;
+// 浏览器 timer ID 始终为 number，不能取混入 Node 声明后的重载末项 Timeout。
+let cleanupTimer: number | undefined;
 
 export function startPerformanceTimelineCleanup(): void {
   if (!import.meta.env.DEV || cleanupTimer != null) {

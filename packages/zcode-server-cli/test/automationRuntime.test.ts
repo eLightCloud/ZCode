@@ -40,7 +40,11 @@ async function fixture() {
     .register(IModelSelectionService, {
       getView: async () => ({ effectiveSelection: selection }),
     } as unknown as IModelSelectionService);
-  const create = (nextRunAt: number, workspaceIdentity?: string) =>
+  const create = (
+    nextRunAt: number,
+    workspaceIdentity?: string,
+    execution: { projectId?: string; additionalDirectories?: string[] } = {},
+  ) =>
     repo.create(
       {
         title: "controlled",
@@ -50,6 +54,7 @@ async function fixture() {
         recurring: true,
         workspacePath: directory,
         workspaceIdentity,
+        ...execution,
       },
       { nextRunAt },
     );
@@ -234,11 +239,17 @@ describe("Server Core native automation wiring", () => {
   it("manual admission preserves cron and holds its claim until the actual terminal", async () => {
     const f = await fixture();
     const nextRunAt = Date.now() + 3600_000;
-    const rule = await f.create(nextRunAt);
+    const rule = await f.create(nextRunAt, undefined, {
+      projectId: "saved-project",
+      additionalDirectories: [f.directory],
+    });
     const runtime = f.start();
     await runtime.ready;
     const claimed = (await f.repo.runNow(rule.automationId, { now: Date.now() }))!;
     await runtime.runManual(claimed);
+    expect(f.task.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "saved-project", additionalDirectories: [f.directory] }),
+    );
     await vi.waitFor(async () =>
       expect((await f.repo.getRun(claimed.run.runId))?.dispatchStatus).toBe("dispatched"),
     );

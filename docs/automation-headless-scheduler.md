@@ -138,3 +138,5 @@ It belongs exclusively to the trusted Host extension. Native Agent process creat
 alongside the native listener credentials, including command-resolver environment overrides.
 A resource/model credential passed to Agent adapters must not authorize private application
 admission or source-proof renewal. Application deployments register distinct credential hashes.
+
+Manual dispatch carries the saved projectId and additionalDirectories through the same dispatch request as scheduled triggers. A headless manual trigger must not drop project ownership or execution directories; callers cannot provide temporary replacements.

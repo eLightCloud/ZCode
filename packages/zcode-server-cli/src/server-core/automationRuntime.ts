@@ -160,6 +160,8 @@ export function startServerAutomationRuntime(
           runId: params.run.runId,
           prompt: params.automation.prompt,
           targetTaskId: params.automation.targetTaskId,
+          projectId: params.automation.projectId,
+          additionalDirectories: params.automation.additionalDirectories,
           modelSelection: params.run.modelSelection ?? params.automation.modelSelection,
           mode: params.automation.mode,
           workspacePath: params.automation.workspacePath,

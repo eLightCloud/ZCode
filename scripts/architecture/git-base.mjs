@@ -91,15 +91,14 @@ export async function resolveDiffBase(
   ]);
   const viaUpstream = upstream && (await pick(upstream, `upstream ${upstream}`, true));
   if (viaUpstream) return viaUpstream;
-  // 架构检查优先 origin/staging，其次 origin/HEAD；
-  // 否则长期分支会把 staging 尚未合入 main 的历史差异误算成本分支新增。
+  // 组织集成目标已统一为 main；与单测选择共用主分支优先规则。
   const originHead =
     (await gitOut(cwd, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])) ?? null;
   const existing = new Set();
   for (const ref of [
-    "origin/staging",
-    originHead,
     "origin/main",
+    originHead,
+    "origin/staging",
     "origin/master",
     "main",
     "master",

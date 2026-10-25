@@ -116,7 +116,6 @@ with that exact run/input. The fixed prompt is unchanged. Context is application
 data, never credentials or an authorization override; each resource owner still
 checks current authority. A configured malformed attachment rejects admission.
 
-
 ### Optional application management supplement
 
 The existing automation management view may render an optional launcher/application supplied
@@ -125,7 +124,6 @@ control receipts; it does not claim, schedule or execute tasks. Without applicat
 native view and its personal automation actions remain unchanged. The external service principal
 must own its private Host. A management viewer receives business metadata only, never an implicit
 conversation or file content grant. Unknown commands are queried by their original request ID.
-
 
 The public read-only `getAutomationCapabilities` reports the current native timezone and whether
 the Host has an immediate dispatch owner. A launcher application must not infer readiness from a

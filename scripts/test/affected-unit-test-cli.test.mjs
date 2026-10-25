@@ -176,7 +176,7 @@ for (const kind of ["unstaged", "staged", "untracked"]) {
   });
 }
 
-test("Push 使用 remote SHA；新分支使用 staging 共同祖先；手动模式使用 upstream", async (t) => {
+test("Push 使用 remote SHA；新分支使用 main 共同祖先；手动模式使用 upstream", async (t) => {
   const { write, git, base, invoke, hook } = await fixture(t);
   await git("update-ref", "refs/remotes/origin/staging", base);
   await git("update-ref", "refs/remotes/origin/main", base);
@@ -191,6 +191,18 @@ test("Push 使用 remote SHA；新分支使用 staging 共同祖先；手动模�
     assert.equal(result.code, 0, result.stderr);
     assert.deepEqual(paths(result), ["a.test.mjs"]);
   }
+});
+
+test("首次 Push 不让旧 staging 的较新提交隐藏 main 之后的改动", async (t) => {
+  const { write, git, base, invoke, hook } = await fixture(t);
+  await git("update-ref", "refs/remotes/origin/main", base);
+  await write("source.mjs", "export const value = 2;");
+  await git("add", ".");
+  await git("commit", "-m", "change after main");
+  await git("update-ref", "refs/remotes/origin/staging", "HEAD");
+  const result = await invoke(["--scope", "push", "--dry-run", "--json"], await hook(zero));
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(paths(result), ["a.test.mjs"]);
 });
 
 test("无基线、无效基线、非 HEAD 推送均报错；删除 ref 不测试", async (t) => {

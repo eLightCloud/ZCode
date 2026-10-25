@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFailed } from "vitest";
 import { createGenUiStateStorage } from "./stateStorage.js";
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
@@ -64,14 +64,26 @@ describe("desktop Gen UI state persistence", () => {
       sessionId: "task",
       path: "/workspace/chart.html",
     };
+    const started = performance.now();
+    const diagnostics = { watcherObserved: false, writerCommitted: false, receivedChanges: 0 };
+    // 原生 watcher 超时时保留实际停顿阶段，不能把未完成写入误判为丢通知。
+    onTestFailed(() => {
+      console.error("engineering.gen-ui.native-watch.failure", {
+        ...diagnostics,
+        elapsedMs: performance.now() - started,
+      });
+    });
     await a.get(target);
+    diagnostics.watcherObserved = true;
     const changed = new Promise<unknown>((resolve) => {
       const off = a.onChanged((event) => {
+        diagnostics.receivedChanges += 1;
         off.dispose();
         resolve(event.state);
       });
     });
     await b.set(target, { modelContent: "selection", privateContent: null });
+    diagnostics.writerCommitted = true;
     expect(await changed).toEqual({ modelContent: "selection", privateContent: null });
   });
 });

@@ -1,4 +1,5 @@
 import { IApplicationHostService } from "./application-host/contract.js";
+export type { ApplicationHostControlPort } from "./application-host/contract.js";
 import { createApplicationHostService } from "./application-host/applicationHostService.js";
 import { createConversationSyncHost } from "./session/conversationSyncHost.js";
 import {
@@ -1204,6 +1205,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *        用于 BroadcastService 跨窗口中转。传 null 则广播为空操作。
  */
 export function createLocalServices(options: {
+  onApplicationControlReady?: (
+    port: import("./application-host/contract.js").ApplicationHostControlPort,
+  ) => void;
   /** Trusted local lifecycle capability; never registered as an RPC service method. */
   onLocalMaintenanceReady?: (maintenance: import("@zcode/shared").LocalRuntimeMaintenance) => void;
   onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
@@ -3085,6 +3089,8 @@ export function createLocalServices(options: {
         })
       : undefined;
   const applicationHost = createApplicationHostService({
+    projects: projectService,
+    models: providerRuntime.modelSelection,
     runtime: continuationHost,
     native: zcodeAgentService,
     conversations: createConversationSyncHost({
@@ -3096,6 +3102,7 @@ export function createLocalServices(options: {
     storageRoot: resolveAppConfigDir(),
     surface: options.agentTelemetry?.runtimeSurface,
     modulePath: process.env["ZCODE_APPLICATION_HOST_MODULE"],
+    onControlReady: options?.onApplicationControlReady,
   });
   services.register(IApplicationHostService, applicationHost);
   if (continuationHost) options?.onConversationRuntimeReady?.(continuationHost);
@@ -3309,6 +3316,9 @@ export { startupStorage } from "#src/startup-storage/index.js";
 
 /** 独立 Server 共用迁移屏障与身份装配；入口不得以 local owner 开放远端项目 RPC。 */
 export async function createServerHostServices(options: {
+  onApplicationControlReady?: NonNullable<
+    Parameters<typeof createLocalServices>[0]
+  >["onApplicationControlReady"];
   topicResourceRelayChannel?: NonNullable<
     Parameters<typeof createLocalServices>[0]
   >["topicResourceRelayChannel"];
@@ -3343,6 +3353,7 @@ export async function createServerHostServices(options: {
   });
   const migrationFailedPathCount = await workspaceAliasRepo.getFailedPathCount();
   const services = createLocalServices({
+    onApplicationControlReady: options.onApplicationControlReady,
     onAutomationManualRunRequested: options.onAutomationManualRunRequested,
     onLocalMaintenanceReady: options.onLocalMaintenanceReady,
     onConversationRuntimeReady: options.onConversationRuntimeReady,

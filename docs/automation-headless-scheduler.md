@@ -69,3 +69,72 @@ Verify scheduled and manual dispatch, successful admission settlement, failed
 dispatch/claim release, wake, graceful shutdown, restart and existing Desktop
 manager/telemetry tests. Persisted automation semantics and native interval remain
 unchanged. Generic transport separation must contain no enterprise business names.
+
+## Paused creation and private application admission
+
+`createAutomation({enabled:false,...})` creates a paused definition with no due
+time. Omission keeps the existing enabled default. Only the native owner changes
+its enabled state and computes the next due time; external configuration cannot
+claim a run by writing the native database.
+
+Paused absolute-schedule creation may carry a UUID `creationId`. It identifies
+the native definition atomically; retry returns the same matching definition,
+while changed creation parameters conflict. Relative-delay and interval carriers
+are not accepted with this key. Enabling an initially paused definition computes
+its first due time in the native service. Manual trigger may carry a UUID
+`requestId`; its existing native manual run is returned without dispatching twice,
+including after completion. No additional run ledger or execution queue is added.
+`previewAutomation` uses the same schedule normalization as creation and validates
+native model/schedule carriers without writing a definition. Its next time is a
+preview from now, not the next-run fact of a still-paused definition.
+
+The trusted launcher may receive a private Application Host control port. It is
+never registered on the browser RPC service. Server exposes its bounded opaque
+control calls only behind the private instance credential. A configured extension
+may also check an automation input before task creation, using the native run ID
+and the exact fixed dispatch configuration. It returns admitted, blocked, or
+unavailable. Blocked is a permanent application admission failure; unavailable
+retains native bounded retry. An absent extension or hook leaves native personal
+automation unchanged. A configured malformed hook result cannot mean admitted.
+
+```text
+native claim → fixed model/config → optional private application admission
+                                  ├ admitted → native task/input admission
+                                  ├ blocked → native permanent failure
+                                  └ unavailable → native bounded retry
+```
+
+Application-owned context references may bind to the native run/input ID before
+dispatch, but may not mirror the native execution queue or terminal state. The
+hook cannot rewrite input, model choice, claim or run identity. Test rejection
+before createTask/sendPrompt, paused creation, private HTTP authentication and
+ordinary automation with no application hook.
+
+An admitted hook may supply one bounded text context attachment (16 KiB, safe
+filename). It uses the existing native file-attachment input path and persists
+with that exact run/input. The fixed prompt is unchanged. Context is application
+data, never credentials or an authorization override; each resource owner still
+checks current authority. A configured malformed attachment rejects admission.
+
+
+### Optional application management supplement
+
+The existing automation management view may render an optional launcher/application supplied
+`renderAutomationSupplement` slot. The slot configures external business policy and queries native
+control receipts; it does not claim, schedule or execute tasks. Without application assembly the
+native view and its personal automation actions remain unchanged. The external service principal
+must own its private Host. A management viewer receives business metadata only, never an implicit
+conversation or file content grant. Unknown commands are queried by their original request ID.
+
+
+The public read-only `getAutomationCapabilities` reports the current native timezone and whether
+the Host has an immediate dispatch owner. A launcher application must not infer readiness from a
+saved definition alone. In Server Core the native automation feature switch installs the dispatcher
+and scheduler together; when disabled, applications may save draft business policy but must not
+declare the Host ready or enable a business rule.
+
+A launcher may inject an application admission secret as `ZCODE_APPLICATION_HOST_TOKEN`.
+It belongs exclusively to the trusted Host extension. Native Agent process creation removes it
+alongside the native listener credentials, including command-resolver environment overrides.
+A resource/model credential passed to Agent adapters must not authorize private application
+admission or source-proof renewal. Application deployments register distinct credential hashes.

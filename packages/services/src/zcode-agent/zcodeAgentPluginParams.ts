@@ -202,6 +202,8 @@ export interface ZCodeAgentResolveSuggestedPluginReferenceParams extends ZCodeAg
 // ---- 定时任务(automation)管理参数 ----
 
 export interface ZCodeAgentCreateAutomationParams extends ZCodeAgentWorkspaceTarget {
+  creationId?: string;
+  enabled?: boolean;
   projectId?: string | null;
   title: string;
   cronExpr: string;

@@ -202,6 +202,7 @@ export interface ZCodeAgentInitializeResult {
 
 export interface ZCodeAgentRunAutomationNowResult {
   status: "queued" | "duplicate";
+  runId?: string;
 }
 
 export interface ZCodeAgentWorkspaceRuntimeIdentity {
@@ -820,12 +821,20 @@ export interface IZCodeAgentService {
   // ---- 定时任务(automation)管理 ----
   listAutomations(params: ZCodeAgentWorkspaceTarget): Promise<ZCodeAutomation[]>;
   listAllAutomations(): Promise<ZCodeAutomation[]>;
+  getAutomationCapabilities(): Promise<{ manualDispatchAvailable: boolean; timezone: string }>;
   createAutomation(params: ZCodeAgentCreateAutomationParams): Promise<ZCodeAutomation>;
+  previewAutomation(params: ZCodeAgentCreateAutomationParams): Promise<{
+    nextRunAt?: number;
+    modelSelection?: ModelSelection;
+    scheduleRule?: import("@zcode/shared").ZCodeAutomationScheduleRule;
+  }>;
   updateAutomation(params: ZCodeAgentUpdateAutomationParams): Promise<ZCodeAutomation | null>;
   deleteAutomation(params: ZCodeAgentAutomationIdParams): Promise<void>;
   setAutomationEnabled(params: ZCodeAgentSetAutomationEnabledParams): Promise<void>;
   restartAutomation(params: ZCodeAgentAutomationIdParams): Promise<void>;
-  runAutomationNow(params: ZCodeAgentAutomationIdParams): Promise<ZCodeAgentRunAutomationNowResult>;
+  runAutomationNow(
+    params: ZCodeAgentAutomationIdParams & { requestId?: string },
+  ): Promise<ZCodeAgentRunAutomationNowResult>;
   listAutomationRuns(params: ZCodeAgentAutomationIdParams): Promise<ZCodeAutomationRun[]>;
   deleteAutomationRun(params: ZCodeAgentDeleteAutomationRunParams): Promise<void>;
   generateWorkspaceText(

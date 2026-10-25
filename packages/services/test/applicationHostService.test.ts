@@ -47,4 +47,57 @@ describe("Application Host lifecycle", () => {
     await expect(service.call("status", {})).rejects.toThrow("application_host_request_failed");
     await service.dispose();
   });
+  it("keeps trusted control separate from public call and rejects malformed admission", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zcode-app-control-"));
+    const modulePath = join(root, "extension.mjs");
+    await writeFile(
+      modulePath,
+      `export async function createApplicationHost() {return {
+      async call(){throw new Error('public method unavailable');},
+      async control(method){return {state:method};},
+      async beforeAutomationInput(input){
+        if(input.automationId==='context') return {state:'admitted',context:{filename:'business.json',text:'{"fixed":true}'}};
+        if(input.automationId==='large') return {state:'admitted',context:{filename:'business.json',text:'x'.repeat(16385)}};
+        return input.automationId==='blocked'?'blocked':'invalid';},
+      async dispose(){} };}`,
+    );
+    let privatePort!: import("../src/application-host/contract.js").ApplicationHostControlPort;
+    const service = createApplicationHostService({
+      native,
+      credentials,
+      storageRoot: root,
+      modulePath,
+      onControlReady: (port) => {
+        privatePort = port;
+      },
+    });
+    expect("control" in service).toBe(false);
+    expect("beforeAutomationInput" in service).toBe(false);
+    try {
+      expect(await privatePort.control("inspect", {})).toEqual({ state: "inspect" });
+      await expect(service.call("inspect", {})).rejects.toThrow("application_host_request_failed");
+      const input = {
+        automationId: "blocked",
+        inputId: "synthetic-run",
+        workspacePath: root,
+        prompt: "synthetic",
+      };
+      expect(await privatePort.beforeAutomationInput(input)).toBe("blocked");
+      expect(
+        await privatePort.beforeAutomationInput({ ...input, automationId: "context" }),
+      ).toEqual({
+        state: "admitted",
+        context: { filename: "business.json", text: '{"fixed":true}' },
+      });
+      expect(await privatePort.beforeAutomationInput({ ...input, automationId: "large" })).toBe(
+        "unavailable",
+      );
+      expect(await privatePort.beforeAutomationInput({ ...input, automationId: "invalid" })).toBe(
+        "unavailable",
+      );
+    } finally {
+      await service.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

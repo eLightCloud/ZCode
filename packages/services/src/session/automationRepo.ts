@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  automationIdForCreationId,
   AUTOMATION_CREATE_LIMIT,
   AUTOMATION_CREATE_LIMIT_ERROR_CODE,
   resolveWorkspaceKey,
@@ -113,6 +114,7 @@ interface AutomationRunRow {
 export interface ClaimedManualAutomationRun {
   automation: ZCodeAutomation;
   run: ZCodeAutomationRun;
+  replayed?: boolean;
 }
 
 function rowToAutomation(row: AutomationRow): ZCodeAutomation {
@@ -327,12 +329,18 @@ export class AutomationRepo {
 
   async create(
     params: ZCodeAutomationCreateParams,
-    options: { nextRunAt: number | null; lifecycleStatus?: ZCodeAutomationLifecycleStatus },
+    options: {
+      nextRunAt: number | null;
+      lifecycleStatus?: ZCodeAutomationLifecycleStatus;
+      creationId?: string;
+    },
   ): Promise<ZCodeAutomation> {
     assertValidAutomationMode(params.mode);
     await this.ensureReady();
     const now = Date.now();
-    const automationId = `automation-${randomUUID()}`;
+    const automationId = options.creationId
+      ? automationIdForCreationId(options.creationId)
+      : `automation-${randomUUID()}`;
     const workspaceKey = resolveWorkspaceKey({
       workspacePath: params.workspacePath,
       workspaceIdentity: params.workspaceIdentity,
@@ -342,6 +350,13 @@ export class AutomationRepo {
     // BEGIN IMMEDIATE 串行化“全状态总数检查 + 插入”，确保本地任务索引不会突破 20 条。
     db.exec("BEGIN IMMEDIATE");
     try {
+      if (options.creationId) {
+        const existing = this.getRow(automationId);
+        if (existing) {
+          db.exec("COMMIT");
+          return rowToAutomation(existing);
+        }
+      }
       const countRow = db.prepare("SELECT COUNT(*) AS count FROM automations").get() as {
         count: number | bigint;
       };
@@ -398,7 +413,7 @@ export class AutomationRepo {
         max_runs: params.maxRuns ?? null,
         end_at: params.endAt ?? null,
         schedule_rule: params.scheduleRule ? JSON.stringify(params.scheduleRule) : null,
-        enabled: options.lifecycleStatus === "completed" ? 0 : 1,
+        enabled: options.lifecycleStatus && options.lifecycleStatus !== "active" ? 0 : 1,
         lifecycle_status: options.lifecycleStatus ?? "active",
         next_run_at: options.nextRunAt,
         created_at: now,
@@ -431,6 +446,10 @@ export class AutomationRepo {
       )
       .all({ workspace_key: workspaceKey }) as unknown as AutomationRow[];
     return rows.map(rowToAutomation);
+  }
+
+  async getCreated(creationId: string): Promise<ZCodeAutomation | null> {
+    return this.get(automationIdForCreationId(creationId));
   }
 
   /** 首次派发专用读取：列表可以展示未绑定任务，但派发不能把损坏值当成跟随默认。 */
@@ -582,24 +601,40 @@ export class AutomationRepo {
   }
 
   /** 暂停 / 恢复。paused ↔ active，保留 next_run_at / run_count。 */
-  async setEnabled(automationId: string, enabled: boolean, workspaceKey?: string): Promise<void> {
+  async setEnabled(
+    automationId: string,
+    enabled: boolean,
+    workspaceKey?: string,
+    computeMissingNextRun?: (automation: ZCodeAutomation) => number | null,
+  ): Promise<void> {
     await this.ensureReady();
-    this.getDatabase()
-      .prepare(
-        `UPDATE automations
-        SET enabled = @enabled,
-            lifecycle_status = @lifecycle_status,
-            updated_at = @now
-        WHERE automation_id = @id
-          AND (@workspace_key IS NULL OR workspace_key = @workspace_key)`,
-      )
-      .run({
-        id: automationId,
-        enabled: enabled ? 1 : 0,
-        lifecycle_status: enabled ? "active" : "paused",
-        now: Date.now(),
-        workspace_key: workspaceKey ?? null,
-      });
+    const db = this.getDatabase();
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.getRow(automationId, workspaceKey);
+      if (row) {
+        // 首次时间与启用同事务，不能把并发编辑前算出的旧计划时间写回新配置。
+        const next =
+          enabled &&
+          row.next_run_at === null &&
+          row.lifecycle_status === "paused" &&
+          computeMissingNextRun
+            ? computeMissingNextRun(rowToAutomation(row))
+            : row.next_run_at;
+        db.prepare(`UPDATE automations SET enabled=@enabled, lifecycle_status=@status,
+          next_run_at=@next, updated_at=@now WHERE automation_id=@id`).run({
+          id: row.automation_id,
+          enabled: enabled ? 1 : 0,
+          status: enabled ? "active" : "paused",
+          next,
+          now: Date.now(),
+        });
+      }
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   /** 终态任务手动重跑：回 active、清计数与重试态，nextRunAt 由调用方重算传入。 */
@@ -643,13 +678,28 @@ export class AutomationRepo {
    */
   async runNow(
     automationId: string,
-    options: { now: number },
+    options: { now: number; requestId?: string },
     workspaceKey?: string,
   ): Promise<ClaimedManualAutomationRun | null> {
     await this.ensureReady();
     const db = this.getDatabase();
     db.exec("BEGIN IMMEDIATE");
     try {
+      const runId = `${automationId}:manual:${options.requestId ? z.string().uuid().parse(options.requestId).toLowerCase() : randomUUID()}`;
+      if (options.requestId) {
+        const existing = db
+          .prepare("SELECT * FROM automation_runs WHERE run_id=?")
+          .get(runId) as unknown as AutomationRunRow | undefined;
+        const automation = this.getRow(automationId, workspaceKey);
+        if (existing && automation && existing.workspace_key === automation.workspace_key) {
+          db.exec("COMMIT");
+          return {
+            automation: rowToAutomation(automation),
+            run: rowToRun(existing),
+            replayed: true,
+          };
+        }
+      }
       db.prepare(
         `UPDATE automations
         SET running = 0, claimed_at = NULL
@@ -680,7 +730,6 @@ export class AutomationRepo {
         return null;
       }
 
-      const runId = `${automationId}:manual:${randomUUID()}`;
       db.prepare(
         `INSERT INTO automation_runs (
           run_id, automation_id, workspace_key, scheduled_at, trigger,

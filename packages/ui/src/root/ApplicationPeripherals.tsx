@@ -15,6 +15,7 @@ export interface ApplicationPeripherals {
   openHelp: () => void;
   openFeedback: () => void;
   openShare: (candidate: ApplicationShareCandidate) => void;
+  renderAutomationSupplement?: () => ReactNode;
   renderModelPlans: () => ReactNode;
 }
 

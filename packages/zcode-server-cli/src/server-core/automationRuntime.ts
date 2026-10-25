@@ -8,6 +8,7 @@ import {
   startAutomationScheduler,
   type AutomationSchedulerHandle,
   type SchedulerToMainMessage,
+  type ApplicationHostControlPort,
 } from "@zcode/services/node";
 import {
   buildServerRemoteWorkspaceIdentity,
@@ -19,13 +20,33 @@ import {
 /** One Core owns one native data root. No timer or claim state is owned here. */
 export function startServerAutomationRuntime(
   services: ServiceCollection,
-  options: { databasePath?: string; serverId?: string } = {},
+  options: {
+    databasePath?: string;
+    serverId?: string;
+    applicationAdmission?: ApplicationHostControlPort["beforeAutomationInput"];
+  } = {},
 ) {
   const logger = createServiceLogger("server-automation");
   const repo = new AutomationRepo(options.databasePath);
   const dispatcher = createAutomationDispatcher({
     repo,
     clientMode: "web-remote-replayable",
+    async beforeAutomationInput(input) {
+      const outcome = await options.applicationAdmission?.(input);
+      if (outcome === "blocked")
+        throw new AutomationDispatchConfigurationError("application_admission_denied");
+      if (outcome === "unavailable") throw new Error("Application admission unavailable");
+      if (outcome && typeof outcome === "object")
+        return [
+          {
+            kind: "file" as const,
+            filename: outcome.context.filename,
+            mimeType: "application/json",
+            sizeBytes: Buffer.byteLength(outcome.context.text),
+            textContent: outcome.context.text,
+          },
+        ];
+    },
     resolveServices(request) {
       // Server Core 没有 Desktop 的 RemoteConnectionRegistry；远端目标不能退到本机。
       if (

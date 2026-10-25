@@ -14,6 +14,7 @@ describe("parseAutomationRunId", () => {
     expect(parseAutomationRunId("automation-1:manual:run-1")).toEqual({
       automationId: "automation-1",
       trigger: "manual",
+      manualRequestId: "run-1",
     });
   });
 

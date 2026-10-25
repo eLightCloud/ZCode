@@ -15,6 +15,13 @@ export function isAutomationCreateLimitError(error: unknown): boolean {
   return message.includes(AUTOMATION_CREATE_LIMIT_ERROR_CODE);
 }
 
+/** Native identity of a caller-keyed paused definition; shared by creation and read-only recovery. */
+export function automationIdForCreationId(creationId: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creationId))
+    throw new Error("automation_creation_id_invalid");
+  return `automation-${creationId.toLowerCase()}`;
+}
+
 /** 整条 automation 的生命周期。 */
 export type ZCodeAutomationLifecycleStatus = "active" | "completed" | "failed" | "paused";
 
@@ -110,6 +117,7 @@ export interface ZCodeAutomationRunIdParts {
   trigger: ZCodeAutomationTrigger;
   /** runId 内嵌的本轮理论触发时间（Unix 毫秒）。 */
   scheduledAt?: number;
+  manualRequestId?: string;
 }
 
 /**
@@ -122,7 +130,13 @@ export function parseAutomationRunId(runId: string): ZCodeAutomationRunIdParts |
   const automationId = runId.slice(0, separatorIndex);
   const rest = runId.slice(separatorIndex + 1);
   if (rest.startsWith("manual:")) {
-    return rest.length > "manual:".length ? { automationId, trigger: "manual" } : null;
+    return rest.length > "manual:".length
+      ? {
+          automationId,
+          trigger: "manual",
+          manualRequestId: rest.slice("manual:".length),
+        }
+      : null;
   }
   const scheduledAt = Number(rest);
   if (!Number.isSafeInteger(scheduledAt) || scheduledAt <= 0) return null;
@@ -151,6 +165,10 @@ export interface ZCodeAutomationRun {
 
 /** 创建 automation 的入参（workspace 由调用方从 session 上下文注入）。 */
 export interface ZCodeAutomationCreateParams {
+  /** Stable UUID for paused absolute-schedule creation; replay never creates a second definition. */
+  creationId?: string;
+  /** Optional paused creation; only the native owner computes the first due time. */
+  enabled?: boolean;
   projectId?: string | null;
   hostId?: string;
   /** 创建定义时固化，之后不跟随虚拟项目 roots 编辑。 */
@@ -180,6 +198,17 @@ export interface ZCodeAutomationCreateParams {
   intervalUnit?: ZCodeAutomationIntervalUnit;
   /** 1–200 的整数间隔，必须与 intervalUnit 配对。 */
   interval?: number;
+}
+
+/** Exact native dispatch snapshot supplied to an optional trusted application admission port. */
+export interface AutomationInputAdmission {
+  automationId: string;
+  inputId: string;
+  workspacePath: string;
+  workspaceIdentity?: string;
+  prompt: string;
+  modelSelection?: ModelSelection;
+  mode?: string;
 }
 
 /** 编辑 automation 的可变字段。 */

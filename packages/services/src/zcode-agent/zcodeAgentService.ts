@@ -5237,12 +5237,29 @@ export function createZCodeAgentService(
       return automationService.list(params);
     },
 
+    async getAutomationCapabilities() {
+      return {
+        manualDispatchAvailable: Boolean(options?.onAutomationManualRunRequested),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+    },
+
     async listAllAutomations() {
       return automationService.list();
     },
 
+    async previewAutomation(params: ZCodeAgentCreateAutomationParams) {
+      return automationService.preview({
+        ...params,
+        recurring: params.recurring ?? true,
+        mode: params.mode as ZCodeTaskMode | undefined,
+      });
+    },
+
     async createAutomation(params: ZCodeAgentCreateAutomationParams) {
       return automationService.create({
+        creationId: params.creationId,
+        enabled: params.enabled,
         projectId: params.projectId,
         title: params.title,
         cronExpr: params.cronExpr,
@@ -5303,24 +5320,32 @@ export function createZCodeAgentService(
       });
     },
 
-    async runAutomationNow(params: ZCodeAgentAutomationIdParams) {
+    async runAutomationNow(params: ZCodeAgentAutomationIdParams & { requestId?: string }) {
       const dispatch = options?.onAutomationManualRunRequested;
       if (!dispatch) {
         // runNow 会先写 manual run 并占用 single-flight claim；dispatcher
         // 缺失是同步可判定的配置错误，必须在认领前失败，不能依赖 stale 崩溃回收。
         throw new Error("Automation immediate dispatcher is unavailable.");
       }
-      const claimed = await automationService.runNow(params.automationId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
+      const claimed = await automationService.runNow(
+        params.automationId,
+        {
+          workspacePath: params.workspacePath,
+          workspaceIdentity: params.workspaceIdentity,
+        },
+        params.requestId,
+      );
       if (!claimed) {
         // single-flight 已拒绝重复运行时，旧的空成功返回会被 UI 误判为
         // 新 run 已入队，导致每次重复点击都展示一次“已触发”。
         return { status: "duplicate" as const };
       }
+      if (claimed.replayed) return { status: "duplicate" as const, runId: claimed.run.runId };
       await dispatch(claimed);
-      return { status: "queued" as const };
+      return {
+        status: "queued" as const,
+        ...(params.requestId ? { runId: claimed.run.runId } : {}),
+      };
     },
 
     async listAutomationRuns(params: ZCodeAgentAutomationIdParams) {

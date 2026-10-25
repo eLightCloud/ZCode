@@ -1459,6 +1459,10 @@ describe("createZCodeAgentService", () => {
     setDataBaseDir(sandboxRoot);
     const workspacePath = "/workspace/run-now";
     const serviceWithoutDispatcher = createZCodeAgentService();
+    expect(await serviceWithoutDispatcher.getAutomationCapabilities()).toEqual({
+      manualDispatchAvailable: false,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
     const automation = await serviceWithoutDispatcher.createAutomation({
       workspacePath,
       title: "daily check",
@@ -1484,6 +1488,9 @@ describe("createZCodeAgentService", () => {
     const serviceWithDispatcher = createZCodeAgentService({
       onAutomationManualRunRequested: dispatch,
     });
+    expect((await serviceWithDispatcher.getAutomationCapabilities()).manualDispatchAvailable).toBe(
+      true,
+    );
     await expect(
       serviceWithDispatcher.runAutomationNow({
         workspacePath,

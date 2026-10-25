@@ -853,3 +853,41 @@ it("requires the explicit instance credential for private continuation control e
     await server.close();
   }
 });
+
+it("keeps private application control authenticated and bounds its opaque input", async () => {
+  const applicationControl = vi.fn(async () => ({ state: "synthetic" }));
+  const server = await createCoreHttpServer(new ServiceCollection(), {
+    authToken: "synthetic-instance-token",
+    applicationControl,
+  });
+  try {
+    const url = `http://127.0.0.1:${server.port}/api/application-control`;
+    const input = { method: "inspect", input: { ref: "synthetic" } };
+    expect(
+      (
+        await fetch(url, {
+          method: "POST",
+          body: JSON.stringify(input),
+          headers: { Connection: "close" },
+        })
+      ).status,
+    ).toBe(401);
+    expect(applicationControl).not.toHaveBeenCalled();
+    const headers = { Authorization: "Bearer synthetic-instance-token", Connection: "close" };
+    const accepted = await fetch(url, { method: "POST", headers, body: JSON.stringify(input) });
+    expect(accepted.status).toBe(200);
+    expect(applicationControl).toHaveBeenCalledExactlyOnceWith(input.method, input.input);
+    expect(
+      (
+        await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ method: "inspect", input: "x".repeat(65536) }),
+        })
+      ).status,
+    ).toBe(413);
+    expect(applicationControl).toHaveBeenCalledTimes(1);
+  } finally {
+    await server.close();
+  }
+});

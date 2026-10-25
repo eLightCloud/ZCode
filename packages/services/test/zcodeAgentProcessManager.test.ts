@@ -864,6 +864,7 @@ setInterval(() => {}, 1000);
     createdDirs.push(workspacePath);
     vi.stubEnv("ZCODE_SERVER_AUTH_TOKEN", "synthetic-instance-token");
     vi.stubEnv("ZCODE_SERVER_AUTH_TOKEN_SHA256", "a".repeat(64));
+    vi.stubEnv("ZCODE_APPLICATION_HOST_TOKEN", "synthetic-host-admission-only");
     restoreEnv("NODE_ENV", nodeEnv);
     restoreEnv(ZCODE_RUNTIME_ENV_KEY, runtimeEnv);
     const manager = new ZCodeAgentProcessManager({
@@ -878,6 +879,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
     nodeEnv: process.env.NODE_ENV || "<empty>",
     runtimeEnv: process.env.ZCODE_RUNTIME_ENV || "<empty>",
     hasServerCredential: Boolean(process.env.ZCODE_SERVER_AUTH_TOKEN || process.env.ZCODE_SERVER_AUTH_TOKEN_SHA256),
+    hasApplicationHostCredential: Boolean(process.env.ZCODE_APPLICATION_HOST_TOKEN),
   } }) + "\\n");
 });
 `,
@@ -896,6 +898,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
         nodeEnv: "<empty>",
         runtimeEnv: expectedRuntimeEnv,
         hasServerCredential: false,
+        hasApplicationHostCredential: false,
       });
     } finally {
       await manager.disposeAllAndWait();

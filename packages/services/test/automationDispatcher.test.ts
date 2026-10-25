@@ -16,7 +16,11 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-async function fixture(manual = false, providerId = "controlled") {
+async function fixture(
+  manual = false,
+  providerId = "controlled",
+  beforeAutomationInput?: Parameters<typeof createAutomationDispatcher>[0]["beforeAutomationInput"],
+) {
   const directory = await mkdtemp(join(tmpdir(), "native-dispatcher-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
@@ -75,6 +79,7 @@ async function fixture(manual = false, providerId = "controlled") {
     clientMode: "web-remote-replayable",
     logWarn: warnings,
     onSessionCreated: report,
+    beforeAutomationInput,
   });
   cleanups.push(() => dispatcher.dispose());
   const request = {
@@ -270,6 +275,23 @@ describe("native shared automation dispatcher", () => {
   });
 });
 
+it("checks the exact input before any task or prompt is created", async () => {
+  const admission = vi.fn(async () => {
+    throw new Error("synthetic admission blocked");
+  });
+  const f = await fixture(false, "controlled", admission);
+  await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("synthetic admission blocked");
+  expect(admission).toHaveBeenCalledWith(
+    expect.objectContaining({
+      automationId: f.request.automationId,
+      inputId: f.request.runId,
+      prompt: f.request.prompt,
+    }),
+  );
+  expect(f.service.createTask).not.toHaveBeenCalled();
+  expect(f.service.sendPrompt).not.toHaveBeenCalled();
+});
+
 it.each([false, true])(
   "rejects an application model before native admission (fixed=%s)",
   async (fixed) => {
@@ -291,4 +313,24 @@ it("keeps personal-provider automation available in an application host", async 
   await f.dispatcher.dispatch(f.request);
   expect(f.service.createTask).toHaveBeenCalledOnce();
   expect(f.service.sendPrompt).toHaveBeenCalledOnce();
+});
+
+it("passes admitted context through native attachments without changing the fixed prompt", async () => {
+  const attachments = [
+    {
+      kind: "file" as const,
+      filename: "business.json",
+      mimeType: "application/json",
+      textContent: '{"fixed":true}',
+      sizeBytes: 14,
+    },
+  ];
+  const f = await fixture(false, "controlled", async () => attachments);
+  await f.dispatcher.dispatch(f.request);
+  expect(f.service.sendPrompt).toHaveBeenCalledWith(
+    expect.objectContaining({
+      content: f.request.prompt,
+      attachments,
+    }),
+  );
 });

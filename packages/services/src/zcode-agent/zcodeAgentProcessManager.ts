@@ -1076,6 +1076,8 @@ export class ZCodeAgentProcessManager {
         // The listener credential belongs to the Host, never the Agent or its tools.
         ZCODE_SERVER_AUTH_TOKEN: undefined,
         ZCODE_SERVER_AUTH_TOKEN_SHA256: undefined,
+        // 应用接纳证明仅属 Host；模型及工具子进程不能用它伪造来源或续签授权。
+        ZCODE_APPLICATION_HOST_TOKEN: undefined,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

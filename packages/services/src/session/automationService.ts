@@ -1,4 +1,5 @@
 import { assertValidAutomationScheduleRule } from "#src/session/automationCronValidation.js";
+import { isDeepStrictEqual } from "node:util";
 export { InvalidAutomationScheduleRuleError } from "#src/session/automationCronValidation.js";
 import type {
   ProjectExecutionSnapshot,
@@ -7,7 +8,11 @@ import type {
   ZCodeAutomationRun,
   ZCodeAutomationUpdateParams,
 } from "@zcode/shared";
-import { resolveWorkspaceKey } from "@zcode/shared";
+import {
+  resolveWorkspaceKey,
+  modelSelectionSchema,
+  zcodeAutomationScheduleRuleSchema,
+} from "@zcode/shared";
 import { AutomationRepo } from "#src/session/automationRepo.js";
 import {
   assertValidAutomationIntervalCarrier,
@@ -77,7 +82,40 @@ export class AutomationService {
   ) {}
 
   async create(params: ZCodeAutomationCreateParams): Promise<ZCodeAutomation> {
-    const createdAt = Date.now();
+    if (params.creationId) {
+      if (
+        params.enabled !== false ||
+        params.relativeDelayMinutes !== undefined ||
+        params.intervalUnit !== undefined
+      )
+        throw new Error("Creation identity requires a paused absolute schedule");
+      const existing = await this.repo.getCreated(params.creationId);
+      if (existing) return this.sameCreation(existing, params);
+    }
+    const { createParams, nextRunAt, endedBeforeFirstRun, enabled, creationId } =
+      this.normalizeCreation(params, Date.now());
+    let execution: ProjectExecutionSnapshot | undefined;
+    if (createParams.projectId) {
+      if (createParams.targetTaskId) throw new Error("project.bound-task");
+      if (!this.prepareProjectExecution) throw new Error("project.creation-unavailable");
+      execution = await this.prepareProjectExecution(createParams.projectId);
+    }
+    const created = await this.repo.create(
+      { ...createParams, ...execution },
+      {
+        nextRunAt: endedBeforeFirstRun || enabled === false ? null : nextRunAt,
+        creationId,
+        ...(endedBeforeFirstRun
+          ? { lifecycleStatus: "completed" as const }
+          : enabled === false
+            ? { lifecycleStatus: "paused" as const }
+            : {}),
+      },
+    );
+    return creationId ? this.sameCreation(created, params) : created;
+  }
+
+  private normalizeCreation(params: ZCodeAutomationCreateParams, createdAt: number) {
     const relativeDelayMinutes = params.relativeDelayMinutes;
     if (
       relativeDelayMinutes !== undefined &&
@@ -111,6 +149,8 @@ export class AutomationService {
       relativeDelayMinutes: _relativeDelayMinutes,
       intervalUnit: _intervalUnit,
       interval: _interval,
+      enabled,
+      creationId,
       ...persistedParams
     } = params;
     // 模型只知道日期时会自行猜测当前时刻，把“3 分钟后”算成两小时后或过去时间。
@@ -159,19 +199,49 @@ export class AutomationService {
     const nextRunAt = computeInitialAutomationNextRunAt(createParams, createdAt);
     const endedBeforeFirstRun =
       createParams.endAt !== undefined && (nextRunAt ?? Infinity) > createParams.endAt;
-    let execution: ProjectExecutionSnapshot | undefined;
-    if (createParams.projectId) {
-      if (createParams.targetTaskId) throw new Error("project.bound-task");
-      if (!this.prepareProjectExecution) throw new Error("project.creation-unavailable");
-      execution = await this.prepareProjectExecution(createParams.projectId);
-    }
-    return this.repo.create(
-      { ...createParams, ...execution },
-      {
-        nextRunAt: endedBeforeFirstRun ? null : nextRunAt,
-        ...(endedBeforeFirstRun ? { lifecycleStatus: "completed" as const } : {}),
-      },
+    return { createParams, nextRunAt, endedBeforeFirstRun, enabled, creationId };
+  }
+
+  preview(params: ZCodeAutomationCreateParams) {
+    const modelSelection = params.modelSelection
+      ? modelSelectionSchema.parse(params.modelSelection)
+      : undefined;
+    const scheduleRule = params.scheduleRule
+      ? zcodeAutomationScheduleRuleSchema.parse(params.scheduleRule)
+      : undefined;
+    const { nextRunAt, endedBeforeFirstRun } = this.normalizeCreation(
+      { ...params, modelSelection, scheduleRule },
+      Date.now(),
     );
+    return {
+      nextRunAt: endedBeforeFirstRun ? undefined : (nextRunAt ?? undefined),
+      modelSelection,
+      scheduleRule,
+    };
+  }
+
+  private sameCreation(
+    existing: ZCodeAutomation,
+    params: ZCodeAutomationCreateParams,
+  ): ZCodeAutomation {
+    const desiredRule =
+      params.scheduleRule ?? inferMinuteIntervalScheduleRule(params.cronExpr, existing.createdAt);
+    if (
+      existing.title !== params.title ||
+      existing.cronExpr !== params.cronExpr ||
+      existing.prompt !== params.prompt ||
+      existing.recurring !== params.recurring ||
+      existing.maxRuns !== params.maxRuns ||
+      existing.endAt !== params.endAt ||
+      existing.mode !== params.mode ||
+      (existing.projectId ?? null) !== (params.projectId ?? null) ||
+      (!params.projectId && existing.workspaceKey !== resolveWorkspaceKey(params)) ||
+      !isDeepStrictEqual(existing.modelSelection, params.modelSelection) ||
+      (existing.scheduleRule ? scheduleRuleDefinition(existing.scheduleRule) : undefined) !==
+        (desiredRule ? scheduleRuleDefinition(desiredRule) : undefined)
+    )
+      throw new Error("Automation creation identity conflicts with saved configuration");
+    return existing;
   }
 
   async list(scope?: {
@@ -378,7 +448,13 @@ export class AutomationService {
     enabled: boolean,
     scope?: AutomationWorkspaceScope,
   ): Promise<void> {
-    return this.repo.setEnabled(automationId, enabled, resolveScopeKey(scope));
+    // 暂停创建没有首次时间；原生 Repo 拿锁读取当前配置后，才在同事务调用本领域计算。
+    return this.repo.setEnabled(
+      automationId,
+      enabled,
+      resolveScopeKey(scope),
+      computeAutomationNextRunAt,
+    );
   }
 
   /** 失败任务手动重跑：回 active、清计数，按 cron 重算下次时间。 */
@@ -397,11 +473,12 @@ export class AutomationService {
   async runNow(
     automationId: string,
     scope?: AutomationWorkspaceScope,
-  ): Promise<{ automation: ZCodeAutomation; run: ZCodeAutomationRun } | null> {
+    requestId?: string,
+  ): Promise<{ automation: ZCodeAutomation; run: ZCodeAutomationRun; replayed?: boolean } | null> {
     const workspaceKey = resolveScopeKey(scope);
     const existing = await this.repo.get(automationId, workspaceKey);
     if (!existing) return null;
-    return this.repo.runNow(automationId, { now: Date.now() }, workspaceKey);
+    return this.repo.runNow(automationId, { now: Date.now(), requestId }, workspaceKey);
   }
 
   async listRuns(

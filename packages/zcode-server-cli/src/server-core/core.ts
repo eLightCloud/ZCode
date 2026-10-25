@@ -110,9 +110,13 @@ export async function runServerCore(generation: number): Promise<void> {
     let localMaintenance: LocalRuntimeMaintenance | undefined;
     let continuation: import("@zcode/shared").ConversationRuntimePort | undefined;
     let automation: ReturnType<typeof startServerAutomationRuntime> | undefined;
+    let applicationControl: import("@zcode/services/node").ApplicationHostControlPort | undefined;
     const sourceServerId = (await resolveCoreServerId()) ?? hostname() ?? "zcode-server";
     const { services, workspaceIdentityMapper, migrationFailedPathCount } =
       await createServerHostServices({
+        onApplicationControlReady: (port) => {
+          applicationControl = port;
+        },
         sourceServerId,
         onLocalMaintenanceReady: (port) => {
           localMaintenance = port;
@@ -150,6 +154,10 @@ export async function runServerCore(generation: number): Promise<void> {
     const serverId = sourceServerId;
     const ingressToken = authToken || authTokenHash ? undefined : await createIngressToken(layout);
     const http = await createCoreHttpServer(services, {
+      applicationControl: (method, input) => {
+        if (!applicationControl) throw new Error("Application control unavailable");
+        return applicationControl.control(method, input);
+      },
       continuation,
       continuationIdentity: () =>
         services.get(IApplicationHostService).call("conversationRuntimeIdentity", {}),
@@ -166,7 +174,13 @@ export async function runServerCore(generation: number): Promise<void> {
     });
     startupCleanup.push(() => http.close());
     if (automationEnabled) {
-      automation = startServerAutomationRuntime(services, { serverId });
+      automation = startServerAutomationRuntime(services, {
+        serverId,
+        applicationAdmission: (input) =>
+          applicationControl
+            ? applicationControl.beforeAutomationInput(input)
+            : Promise.resolve("admitted"),
+      });
       startupCleanup.push(() => automation!.dispose());
       await automation.ready;
     }

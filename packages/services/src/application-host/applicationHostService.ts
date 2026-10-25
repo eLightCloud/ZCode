@@ -1,14 +1,18 @@
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { IApplicationHostService } from "./contract.js";
+import type { ApplicationHostControlPort, IApplicationHostService } from "./contract.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import type { ICredentialService } from "../credential/credential.js";
 import type { ConversationSyncHost, ConversationRuntimePort } from "@zcode/shared";
+import type { IProjectService } from "../project/contract.js";
+import type { IModelSelectionService } from "../model-provider/providerFacadeServices.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 interface ApplicationHostExtension {
   call(method: string, input: unknown): Promise<unknown>;
   dispose(): Promise<void>;
+  control?: ApplicationHostControlPort["control"];
+  beforeAutomationInput?: ApplicationHostControlPort["beforeAutomationInput"];
 }
 const log = createServiceLogger("application-host");
 
@@ -17,10 +21,13 @@ export function createApplicationHostService(options: {
   native: IZCodeAgentService;
   conversations?: ConversationSyncHost;
   runtime?: ConversationRuntimePort;
+  projects?: Pick<IProjectService, "readProjects">;
+  models?: Pick<IModelSelectionService, "getView">;
   credentials: ICredentialService;
   storageRoot: string;
   modulePath?: string;
   surface?: string;
+  onControlReady?: (port: ApplicationHostControlPort) => void;
 }): IApplicationHostService & { dispose(): Promise<void> } {
   let pending: Promise<ApplicationHostExtension> | undefined;
   let disposed = false;
@@ -33,6 +40,8 @@ export function createApplicationHostService(options: {
         throw new Error("application_host_invalid_module");
       const value: unknown = await module.createApplicationHost({
         native: options.native,
+        projects: options.projects,
+        models: options.models,
         conversations: options.conversations,
         runtime: options.runtime,
         credentials: options.credentials,
@@ -63,6 +72,64 @@ export function createApplicationHostService(options: {
       log.warn(undefined, "Application Host startup failed", { outcome: "failed" }),
     );
   }
+  const privatePort: ApplicationHostControlPort = {
+    async control(method, input) {
+      if (
+        !/^[a-z][a-zA-Z0-9]{0,63}$/.test(method) ||
+        Buffer.byteLength(JSON.stringify(input) ?? "") > 65536
+      )
+        throw new Error("application_host_invalid_request");
+      try {
+        const port = await extension();
+        if (!port.control) throw new Error("application_control_unavailable");
+        const result = await port.control(method, input);
+        log.info(undefined, "Application control completed", { method, outcome: "completed" });
+        return result;
+      } catch {
+        log.warn(undefined, "Application control failed", { method, outcome: "failed" });
+        throw new Error("application_control_request_failed");
+      }
+    },
+    async beforeAutomationInput(input) {
+      if (!options.modulePath) return "admitted";
+      try {
+        const port = await extension();
+        const result = port.beforeAutomationInput
+          ? await port.beforeAutomationInput(input)
+          : "admitted";
+        const attached =
+          typeof result === "object" &&
+          result !== null &&
+          result.state === "admitted" &&
+          result.context &&
+          typeof result.context.filename === "string" &&
+          /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$/.test(result.context.filename) &&
+          typeof result.context.text === "string" &&
+          Buffer.byteLength(result.context.text) <= 16384;
+        if (
+          !(
+            typeof result === "string" && ["admitted", "blocked", "unavailable"].includes(result)
+          ) &&
+          !attached
+        )
+          throw new Error("application_admission_invalid");
+        log.info(undefined, "Application admission checked", {
+          outcome: typeof result === "string" ? result : result.state,
+          runId: input.inputId,
+          automationId: input.automationId,
+        });
+        return result;
+      } catch {
+        log.warn(undefined, "Application admission unavailable", {
+          outcome: "unavailable",
+          runId: input.inputId,
+          automationId: input.automationId,
+        });
+        return "unavailable";
+      }
+    },
+  };
+  options.onControlReady?.(privatePort);
   return {
     async call(method, input) {
       if (

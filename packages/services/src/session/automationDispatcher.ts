@@ -7,6 +7,8 @@ import {
   type ModelSelection,
   type ZCodeAutomationRunOutcome,
   type ZCodeTaskClientMode,
+  type AutomationInputAdmission,
+  type ZCodePromptAttachment,
 } from "@zcode/shared";
 import type { ServiceCollection } from "../collection.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
@@ -38,6 +40,9 @@ export function createAutomationDispatcher(options: {
   repo: AutomationRepo;
   resolveServices(request: AutomationDispatchRequest): ServiceCollection;
   clientMode: ZCodeTaskClientMode;
+  beforeAutomationInput?(
+    input: AutomationInputAdmission,
+  ): Promise<readonly ZCodePromptAttachment[] | void>;
   logWarn(message: string, error: unknown, diagnostic?: AutomationDiagnostic): void;
   onSessionCreated?(event: {
     sessionId: string;
@@ -270,6 +275,15 @@ export function createAutomationDispatcher(options: {
     const trigger = request.runId.includes(":manual:") ? "manual" : "schedule";
     const scheduledAt = parseCronRunScheduledAt(request.runId, request.automationId);
     try {
+      const attachments = await options.beforeAutomationInput?.({
+        automationId: request.automationId,
+        inputId: request.runId,
+        workspacePath: request.workspacePath,
+        workspaceIdentity: request.workspaceIdentity,
+        prompt: request.prompt,
+        modelSelection: submissionModelSelection,
+        mode: request.mode,
+      });
       const task = request.targetTaskId
         ? { taskId: request.targetTaskId }
         : await zcodeTaskService.createTask({
@@ -353,6 +367,7 @@ export function createAutomationDispatcher(options: {
         content: request.prompt,
         clientMode: options.clientMode,
         automationId: request.automationId,
+        ...(attachments?.length ? { attachments: [...attachments] } : {}),
       });
       // prompt 创建的定时任务带 targetTaskId，追加原会话不能计成 session_create。
       if (!request.targetTaskId) {

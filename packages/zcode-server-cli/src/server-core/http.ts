@@ -228,6 +228,7 @@ export async function createCoreHttpServer(
     initiallyPaused?: boolean;
     continuation?: ConversationRuntimePort;
     continuationIdentity?: () => Promise<unknown>;
+    applicationControl?: (method: string, input: unknown) => Promise<unknown>;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
@@ -330,6 +331,7 @@ export async function createCoreHttpServer(
         "/api/continuation-identity",
         "/api/continuation-control",
         "/api/continuation-content",
+        "/api/application-control",
       ].includes(context.req.path)
     )
       return await next();
@@ -354,6 +356,47 @@ export async function createCoreHttpServer(
       );
     } catch {
       return context.json({ error: "unavailable" }, 503);
+    }
+  });
+  // Launcher-only capability: never register this port on browser RPC or tokenless local HTTP.
+  app.post("/api/application-control", async (context) => {
+    if (!options.applicationControl || (!authToken && !authTokenHash))
+      return context.json({ error: "unavailable" }, 503);
+    const reader = context.req.raw.body?.getReader();
+    if (!reader) return context.json({ error: "invalid" }, 400);
+    let bytes = 0;
+    const chunks: Uint8Array[] = [];
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > 65536) {
+          await reader.cancel();
+          return context.json({ error: "limit" }, 413);
+        }
+        chunks.push(part.value);
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (
+        !body ||
+        typeof body.method !== "string" ||
+        !/^[a-z][a-zA-Z0-9]{0,63}$/.test(body.method) ||
+        Object.keys(body).some((key) => !["method", "input"].includes(key))
+      )
+        return context.json({ error: "invalid" }, 400);
+      const result = await options.applicationControl(body.method, body.input);
+      const encoded = JSON.stringify(result);
+      if (Buffer.byteLength(encoded ?? "") > 1048576) throw new Error("Application response limit");
+      return context.body(encoded, 200, { "Content-Type": "application/json" });
+    } catch {
+      log.warn(undefined, "Private application control failed", {
+        event: "application.control",
+        outcome: "failed",
+      });
+      return context.json({ error: "unavailable" }, 503);
+    } finally {
+      reader.releaseLock();
     }
   });
   // Private instance control uses the existing non-browser instance credential.

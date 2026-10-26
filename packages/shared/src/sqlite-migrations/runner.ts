@@ -50,7 +50,8 @@ async function migrateExclusive(
 ): Promise<MigrationResult> {
   if (db.isTransaction !== Boolean(options.transactionOpen))
     throw new Error("Migration transaction ownership mismatch");
-  if (!options.backupDirectories.length) throw new Error("Migration requires a backup directory");
+  if (!options.skipBackup && !options.backupDirectories.length)
+    throw new Error("Migration requires a backup directory");
   if (!options.transactionOpen) db.exec("begin immediate");
   try {
     const taskJournal = options.journalTable === "tasks_schema_migration";
@@ -82,9 +83,10 @@ async function migrateExclusive(
         );
       }
     }
-    const backup = pending.length
-      ? await createMigrationBackup(db, pending, options)
-      : { skipped: false };
+    const backup =
+      pending.length && !options.skipBackup
+        ? await createMigrationBackup(db, pending, options)
+        : { skipped: false };
     for (const migration of pending) {
       await options.onBeforeApply?.(migration.id);
       if (migration.apply) migration.apply(db);

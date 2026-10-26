@@ -38,6 +38,8 @@ export interface MigrationOptions {
   journalTable?: "schema_migration" | "tasks_schema_migration";
   /** 按优先级排列的可写卷目录；首项通常是 ~/.zcode/backup。 */
   backupDirectories: readonly string[];
+  /** 内存库没有持久状态，显式跳过备份；此时允许 backupDirectories 为空。 */
+  skipBackup?: boolean;
   /** 首选卷失败后探测；默认枚举平台已挂载卷，测试可注入受控临时目录。 */
   fallbackBackupDirectories?: () => Promise<readonly string[]>;
   /** 兼容现有 CLI schema_migration 列名，app 采用 applied_at。 */

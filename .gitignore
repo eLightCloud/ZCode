@@ -37,6 +37,8 @@ coverage/
 z-work/
 openclaw/
 .run-logs/
+# 内存库迁移不得在源码树留下备份；忽略既有测试产物，修复后仍保留精确防御。
+apps/zcode-cli/packages/*/backup/cli-*/
 # 旧开发目录：开发版运行时已改名为 .zcode-runtime，老机器上残留的目录仍需忽略，避免误提交 Electron.app 副本。
 .codex-runtime/
 .worktrees/

@@ -309,6 +309,14 @@ it("publishes confirmed migration demand when lock contention recurs after prech
   expect(waits.map((state) => state.migration?.kind)).toEqual([undefined, "initialize"]);
 });
 
+it("does not write a filesystem backup for in-memory session databases", async () => {
+  const db = open();
+  seedLegacy(db);
+  const result = await runSqliteSessionMigrations(db, ":memory:");
+  expect(result.backupPath).toBeUndefined();
+  expect(result.backupSkipped).toBe(false);
+});
+
 it("does not send malformed ledger IDs as telemetry or fail an otherwise prepared database", async () => {
   const db = open();
   await runSqliteSessionMigrations(db, ":memory:");

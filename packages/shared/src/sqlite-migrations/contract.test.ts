@@ -231,6 +231,18 @@ describe("sqlite-migrations contract with real SQLite", () => {
     expect(first.prepare("select count(*) as n from schema_migration").get()).toEqual({ n: 1 });
   });
 
+  it("skips backup explicitly for databases without durable storage", async () => {
+    const { db, directory } = await fixture();
+    const before = await readdir(directory);
+    const result = await port.migrate(db, [migration], {
+      database: "cli",
+      backupDirectories: [],
+      skipBackup: true,
+    });
+    expect(result).toEqual({ applied: ["0020"], backupSkipped: false });
+    expect(await readdir(directory)).toEqual(before);
+  });
+
   it("keeps the newest two backups", async () => {
     const { db, options, directory } = await fixture();
     for (const id of ["1", "2", "3"]) await port.migrate(db, [{ ...migration, id }], options);

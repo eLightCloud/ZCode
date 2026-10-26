@@ -102,8 +102,10 @@ export async function runSqliteSessionMigrationsAsync(
     migration!.lastAppliedMigrationId = baseline ? databaseMigrationIdSchema.safeParse(baseline.id).data : null;
     const directory = dirname(dbPath);
     const dataRoot = basename(directory) === "db" && basename(dirname(directory)) === "cli" ? dirname(dirname(directory)) : directory;
+    const memory = dbPath === ":memory:";
     const result = await sqliteMigrations.migrate(db, SQLITE_MIGRATIONS, {
-      database: "cli", transactionOpen: true, appliedAtColumn: "time_applied", backupDirectories: [join(dataRoot, "backup")],
+      database: "cli", transactionOpen: true, appliedAtColumn: "time_applied",
+      backupDirectories: memory ? [] : [join(dataRoot, "backup")], skipBackup: memory,
       onBeforeApply: async (id) => { migrationId = id; if (migration!.kind === "none") migration!.kind = "upgrade"; await progress("migrating", { migrationId: id, completed: migration!.executedCount, total: SQLITE_MIGRATIONS.length }); },
       onApplied: () => { migration!.executedCount++; },
       onCommitting: () => progress("committing"),

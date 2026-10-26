@@ -143,11 +143,30 @@ describe("desktop relay V2 transport", () => {
       retries.emit(String(ms));
       return timer;
     });
-    const waitForRetry = (ms: number) =>
-      once(retries, String(ms), { signal: AbortSignal.timeout(5000) });
+    const waitForRetry = (ms: number) => {
+      let registered = false;
+      const onRetry = () => {
+        registered = true;
+      };
+      retries.once(String(ms), onRetry);
+      return async () => {
+        const guard = AbortSignal.timeout(5000);
+        try {
+          while (!registered) {
+            guard.throwIfAborted();
+            // Bugfix：fetch 的零延时回调也受假时钟控制。只排空当前时刻并让出真实 IO，
+            // 避免冻结 HTTP 回调，或额外推进时间侵入下一轮退避的 1ms 边界。
+            await vi.advanceTimersByTimeAsync(0);
+            await delay(1);
+          }
+        } finally {
+          retries.off(String(ms), onRetry);
+        }
+      };
+    };
     const firstRetry = waitForRetry(1000);
     f.transport.start();
-    await firstRetry;
+    await firstRetry();
     let count = 1;
     const tokenCalls = () =>
       f.relay.httpCalls.filter((call) => call.path.endsWith("/token")).length;
@@ -158,7 +177,7 @@ describe("desktop relay V2 transport", () => {
       expect(tokenCalls()).toBe(count);
       const nextRetry = waitForRetry(delays[Math.min(index + 1, delays.length - 1)]!);
       await vi.advanceTimersByTimeAsync(1);
-      await nextRetry;
+      await nextRetry();
       count++;
       expect(tokenCalls()).toBe(count);
       failure = "network";
@@ -170,11 +189,11 @@ describe("desktop relay V2 transport", () => {
     failure = "network";
     const disconnected = waitForRetry(1000);
     f.relay.disconnect({ role: "device" });
-    await disconnected;
+    await disconnected();
     const before = tokenCalls();
     const networkRetry = waitForRetry(2000);
     await vi.advanceTimersByTimeAsync(1000);
-    await networkRetry;
+    await networkRetry();
     expect(tokenCalls()).toBe(before + 1);
     expect(f.states.at(-1)).toBe("connecting");
   });

@@ -268,11 +268,30 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
       retries.emit(String(ms));
       return timer;
     });
-    const waitForRetry = (ms: number) =>
-      once(retries, String(ms), { signal: AbortSignal.timeout(5000) });
+    const waitForRetry = (ms: number) => {
+      let registered = false;
+      const onRetry = () => {
+        registered = true;
+      };
+      retries.once(String(ms), onRetry);
+      return async () => {
+        const guard = AbortSignal.timeout(5000);
+        try {
+          while (!registered) {
+            guard.throwIfAborted();
+            // Bugfix：真实 fetch 的零延时回调也受假时钟控制。等待退避登记时只排空
+            // 当前时刻并让出真实 IO，不能推进下一轮退避或靠累计补偿放宽 1ms 断言。
+            await vi.advanceTimersByTimeAsync(0);
+            await delay(1);
+          }
+        } finally {
+          retries.off(String(ms), onRetry);
+        }
+      };
+    };
     const firstRetry = waitForRetry(500);
     h.terminal.start();
-    await firstRetry;
+    await firstRetry();
     const tokens = () =>
       h.relay.httpCalls.filter((r) => (r.body as { role?: string }).role === "terminal").length;
     let count = 1;
@@ -282,7 +301,7 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
       expect(tokens()).toBe(count);
       const nextRetry = waitForRetry(delays[Math.min(index + 1, delays.length - 1)]!);
       await vi.advanceTimersByTimeAsync(1);
-      await nextRetry;
+      await nextRetry();
       expect(tokens()).toBe(++count);
       fail = "network";
     }

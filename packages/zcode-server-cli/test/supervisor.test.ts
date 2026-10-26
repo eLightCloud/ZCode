@@ -1,4 +1,3 @@
-import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,61 +11,7 @@ import { ReleaseManager } from "../src/runtime/releaseManager.js";
 import { waitForServerStopped } from "../src/runtime/shutdownWait.js";
 import { readPersistedStatus } from "../src/runtime/statusSnapshot.js";
 import { Supervisor } from "../src/supervisor/supervisor.js";
-
-class FakeCore extends EventEmitter {
-  public readonly pid = 42;
-  public shutdownRequested = false;
-  public killRequested = false;
-  public exitOnShutdown = true;
-  public exitOnKill = true;
-  /** 模拟 SIGKILL 已发出但 OS 回收延迟（如 Rosetta/swap 下的不可中断等待）。 */
-  public killExitDelayMs: number | undefined;
-
-  public send(message: unknown): boolean {
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "command" in message &&
-      message.command === "shutdown"
-    ) {
-      this.shutdownRequested = true;
-      if (this.exitOnShutdown) queueMicrotask(() => this.emit("exit", 0, null));
-    }
-    return true;
-  }
-
-  public kill(): boolean {
-    this.killRequested = true;
-    if (this.killExitDelayMs !== undefined) {
-      setTimeout(() => this.emit("exit", null, "SIGKILL"), this.killExitDelayMs);
-    } else if (this.exitOnKill) this.emit("exit", null, "SIGKILL");
-    return true;
-  }
-
-  public reportReady(generation: number, version = "test", releaseId?: string): void {
-    queueMicrotask(() =>
-      this.emit("message", {
-        type: "ready",
-        host: "127.0.0.1",
-        port: 43123,
-        version,
-        ...(releaseId ? { releaseId } : {}),
-        generation,
-      }),
-    );
-  }
-}
-
-async function waitForState(supervisor: Supervisor, state: string): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    if (supervisor.status().state === state) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
-  throw new Error(
-    `Timed out waiting for supervisor state ${state}, got ${supervisor.status().state}`,
-  );
-}
+import { FakeCore, waitForState } from "./fixtures/supervisorFixture.js";
 
 describe("Supervisor lifecycle", () => {
   afterEach(() => {
@@ -286,10 +231,20 @@ describe("Supervisor lifecycle", () => {
     await expect(
       requestControl(layout.controlEndpoint, { command: "apply-update", force: true }, 15),
     ).rejects.toThrow(/timed out/i);
-    await waitForState(supervisor, "ready");
-    expect(supervisor.status().pid).toBe(42);
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    await supervisor.stop();
+    // Bugfix：客户端超时可能早于 update 接纳，ready 也可能只是旧 Core 或回滚 Core 的
+    // 中间状态。先确认旧 release 的第三代 Core，再等公开 stop 真正通过生命周期 gate；
+    // 固定 sleep 不能证明回滚持久化和 operation Promise 已经收口。
+    await vi.waitFor(() =>
+      expect(supervisor.status()).toMatchObject({
+        state: "ready",
+        version: "old",
+        generation: 3,
+        pid: 42,
+      }),
+    );
+    await vi.waitFor(async () => {
+      await expect(supervisor.stop()).resolves.toMatchObject({ state: "stopped", pid: null });
+    });
   });
 
   it("launches the recovered release after claiming a stale startup lock", async () => {
@@ -978,97 +933,4 @@ describe("Supervisor lifecycle", () => {
     vi.useRealTimers();
     await supervisor.stop();
   });
-});
-
-it.each(["blocked", "timeout", "accepted"])(
-  "keeps idle-stop %s inside native lifecycle without forced termination",
-  async (decision) => {
-    const root = await mkdtemp(join(tmpdir(), "idle-"));
-    const layout = resolveServerLayout(root);
-    const core = new FakeCore();
-    const original = core.send.bind(core);
-    core.send = (message: unknown) => {
-      if (
-        typeof message === "object" &&
-        message !== null &&
-        "command" in message &&
-        message.command === "shutdown-if-idle"
-      ) {
-        if (decision === "blocked")
-          queueMicrotask(() => core.emit("message", { type: "idle-stop-blocked" }));
-        if (decision === "accepted") queueMicrotask(() => core.emit("exit", 0, null));
-        return true;
-      }
-      return original(message);
-    };
-    const supervisor = new Supervisor({
-      layout,
-      version: "test",
-      coreStopGraceTimeoutMs: 40,
-      launcher: {
-        launch: (generation) => {
-          core.reportReady(generation);
-          return core as unknown as ChildProcess;
-        },
-      },
-    });
-    try {
-      await supervisor.start();
-      await waitForState(supervisor, "ready");
-      expect(
-        await requestControl(layout.controlEndpoint, { command: "stop-if-idle" }),
-      ).toMatchObject({ stopping: true });
-      if (decision === "accepted") await waitForState(supervisor, "stopped");
-      else if (decision === "timeout") await waitForState(supervisor, "stop-failed");
-      else {
-        const deadline = Date.now() + 2_000;
-        while (
-          supervisor.status().lastExitReason !== "idle-stop-blocked" &&
-          Date.now() < deadline
-        ) {
-          await new Promise((resolve) => setImmediate(resolve));
-        }
-        expect(supervisor.status().lastExitReason).toBe("idle-stop-blocked");
-        expect(supervisor.status().state).toBe("ready");
-      }
-      expect(core.killRequested).toBe(false);
-    } finally {
-      if (decision === "timeout") {
-        // state 先更新，失败 Promise 随后结算；等待该次失败后应能显式重试普通 stop。
-        await supervisor.stop().catch((error: unknown) => {
-          expect(String(error)).toContain("Idle stop was not confirmed");
-        });
-      }
-      await supervisor.stop();
-    }
-  },
-);
-
-it("rejects idle-stop admission while the native task owner reports active work", async () => {
-  const root = await mkdtemp(join(tmpdir(), "idle-busy-"));
-  const layout = resolveServerLayout(root);
-  const core = new FakeCore();
-  const supervisor = new Supervisor({
-    layout,
-    version: "test",
-    launcher: {
-      launch: (generation) => {
-        core.reportReady(generation);
-        return core as unknown as ChildProcess;
-      },
-    },
-  });
-  try {
-    await supervisor.start();
-    await waitForState(supervisor, "ready");
-    core.emit("message", { type: "task-activity", runningTaskCount: 1 });
-    expect(await requestControl(layout.controlEndpoint, { command: "stop-if-idle" })).toMatchObject(
-      { stopping: false },
-    );
-    expect(supervisor.status().state).toBe("ready");
-    expect(core.shutdownRequested).toBe(false);
-    expect(core.killRequested).toBe(false);
-  } finally {
-    await supervisor.stop();
-  }
 });

@@ -49,7 +49,7 @@ async function fixture(t) {
   await write("package.json", '{"type":"module"}');
   await write(
     "vitest.config.mjs",
-    'export default {test:{include:["*.test.mjs"],maxWorkers:1,setupFiles:["./vitest.setup.ts"],forceRerunTriggers:["**/package.json/**","**/{vitest,vite}.config.*/**","**/{vitest,vite}.config.*","**/vitest.setup.ts"]}}',
+    'export default {test:{name:"unit",include:["*.test.mjs"],maxWorkers:1,setupFiles:["./vitest.setup.ts"],forceRerunTriggers:["**/package.json/**","**/{vitest,vite}.config.*/**","**/{vitest,vite}.config.*","**/vitest.setup.ts"]}}',
   );
   await write("vitest.setup.ts", "// shared setup\n");
   await write("source.mjs", "export const value = 1;");
@@ -83,6 +83,29 @@ async function fixture(t) {
   return { root, write, git, base, invoke, hook, env };
 }
 const paths = (result) => JSON.parse(result.stdout).map((spec) => spec.path);
+
+test("共同依赖只选择 unit，不能加载 integration 项目", async (t) => {
+  const { write, invoke } = await fixture(t);
+  await write(
+    "vitest.config.mjs",
+    `export default {test:{maxWorkers:1,projects:[
+    {test:{name:"unit",include:["a.test.mjs","other.test.mjs"]}},
+    {test:{name:"integration",include:["integration.test.mjs"]}}
+  ]}}`,
+  );
+  await write("source.mjs", "export const value = 2;");
+  await write(
+    "integration.test.mjs",
+    'import "./source.mjs";throw new Error("INTEGRATION_MUST_NOT_LOAD")',
+  );
+  const preview = await invoke(["--files", "source.mjs", "--dry-run", "--json"]);
+  assert.equal(preview.code, 0, preview.stderr);
+  assert.deepEqual(paths(preview), ["a.test.mjs"]);
+  assert.equal(JSON.parse(preview.stdout)[0].project, "unit");
+  const result = await invoke(["--files", "source.mjs"]);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert(!result.stdout.includes("INTEGRATION_MUST_NOT_LOAD"));
+});
 
 test("官方预览与执行一致，不加载无关文件，不改写源码或 index", async (t) => {
   const { root, write, git, invoke } = await fixture(t);

@@ -2,13 +2,28 @@
 
 仓库现在通过 Husky 接管 Git 的 `pre-push`。
 
-组织推送策略要求每次实际执行完整根单测。静态与架构检查通过后，affected 只预览并校验 push 范围，随后必须经现有隔离入口执行 pnpm test:unit；无关联或选中全部都不能免除全量。任一检查或全量单测失败均阻止 push。affected 独立命令继续保留上游选择 / 跳过语义，不能把预览成功当作单测通过。该组织门禁覆盖此前“与官方 push 完全一致”的要求，Vitest 测试范围和已有组织 main / 默认应用 Root 适配保持，macOS 进程池见末节。
+组织推送策略要求每次实际执行完整的隔离单元 / 组件套件 `pnpm test:unit`。用户于 2026-10-26 明确授权将真实 IO、数据库、网络、子进程和构建集成从 push 中拆出；原来“完整根测试全部进入 push”的规则由本分层取代。静态检查与单测失败仍阻止 push，affected 只校验和预览单测范围，不能免除完整单测。
+
+## 测试分层合同
+
+| 入口 | 范围 | 自动进入 push |
+| --- | --- | --- |
+| `pnpm test:unit` / `pnpm test` | 隔离单元、内存组件和只读源码守卫；所有业务 IO 由替身提供 | 是 |
+| `pnpm test:integration` | 真实临时文件 / SQLite、HTTP / WS、子进程及构建 / 打包 | 否 |
+| `pnpm test:all` | 两套根测试及 schema / 工程门禁自身回归，任一失败非零退出 | 否，显式完整回归 |
+| `pnpm test:e2e` | 原有桌面 E2E 入口 | 否 |
+
+分类由 `scripts/test-suites.mjs` 唯一拥有，根 Vitest projects 按同一清单构成互不重叠的单元与集成集合。只读源码断言、mock RPC 和 jsdom 组件属于单测；导入 IO 类型、使用替身或文件名包含 integration 不自动成为集成。一个文件包含真实 IO 用例时，整个文件归集成；拆成更小文件后可以分别归属。混合测试按真实调用链分类，不按运行时间或是否偶发失败分类。
+
+新集成测试使用 `*.integration.test.ts` 或 `test/integration/` 约定；存量文件由清单登记。改变分类必须核对实际依赖，并验证完整收集集合守恒及两个套件互斥。`test:suites:check` 在 push 中只枚举文件与 project，不加载测试正文；重复、遗漏或失效分类均阻断。原有需串行的真实进程 / 原生模块测试仍串行运行；进程池策略与测试类别分别表达。工程 gate 的真实 Git / 工具子进程回归保留 `test:architecture` 独立入口，并由 `test:all` 包含；需要执行真实迁移的 `db:schema:check` 同样由 `test:all` 承接，不进入 push。
+
+所有根 Vitest 测试入口继续通过现有 HOME / XDG 隔离 runner，scope 与实际 project 选择写入低敏事件；不得用直接 Vitest 绕开隔离。集成缺少依赖或失败必须非零退出，不能改成 skip；原有平台适用性跳过保持。该分层不新增或修改远端 CI 配置，可由 CI 显式调用 `pnpm test:all`。
 
 - 安装依赖后会执行根脚本 `pnpm prepare`，自动完成 Husky 安装。
 - `pre-push` 会执行 `pnpm run verify:pre-push`。
 - 根 `pnpm test` 现在只跑单测，不再误把桌面端 `packages/desktop/test/e2e` 当成 Vitest 用例。
 - Bugfix：单测脚本里的 E2E exclude glob 必须加引号；否则 shell 会先把 `packages/desktop/test/e2e/**/*.test.ts` 展开成真实文件列表，导致 Vitest 把多余文件当成 filters，同时又被 exclude 排除，最终报 `No test files found` 并阻止 push。
-- `verify:pre-push` 依次执行 lint、schema、架构与门禁接线检查、push 范围预览、完整根单测；任何失败阻止 push。
+- `verify:pre-push` 依次执行 lint、架构静态检查、收集守恒检查、push 单测范围预览、完整隔离单测；任何失败阻止 push。
 
 这样可以在代码推到远端前，先用更快的静态检查拦住明显问题，再把单测问题拦在本地，同时保留 `pnpm test:e2e` 作为桌面端 E2E 的独立入口。
 
@@ -22,7 +37,7 @@ pre-push 直接使用当前 `PATH` 中的 pnpm / Node，不强制依赖 mise。�
 开发者准备 Node / pnpm（mise、nvm 或其他方式）
     → Git hook 保留 push ref 信息并清理 Git local env
     → pnpm run verify:pre-push
-    → lint / schema / 架构与门禁接线 / affected 预览 / 隔离全量根单测
+    → lint / 架构静态检查 / 收集守恒 / affected 单测预览 / 隔离完整单测
 ```
 
 - 仓库负责声明工具版本和执行检查；个人环境负责让合适的 Node / pnpm 可被 Git 找到。
@@ -63,13 +78,13 @@ Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽�
                                                      └─ 全部：说明原因，跳过 UT，exit 0
 ```
 
-- 粒度为测试文件；选中文件后执行文件内全部 case。根配置包含的项目构成整个根 UT 套件，排除 desktop E2E，不含 CLI 独立测试；scripts 下的 Node 原生测试另用 node --test，不自动关联。
+- 粒度为测试文件；选中文件后执行文件内全部 case。根配置的 unit 与 cua-placeholder 项目构成完整单测套件，排除 desktop E2E，不含 CLI 独立测试；scripts 下的 Node 原生测试另用 node --test，不自动关联。
 - 使用公开 getRelevantTestSpecifications 选择；globTestSpecifications 提供完整清单。预览只转换模块，不 collect/import 测试；执行使用同一 Vitest 实例和同一份精确规格，避免 CLI 文件名子串匹配扩大范围。
 - 官方 forceRerunTriggers 保留默认配置，补充配置文件模式 `**/{vitest,vite}.config.*`（当前默认 glob 尾部 `/**` 未匹配部分配置文件），再加入公共 vitest.setup.ts。原因：官方模块依赖分析不会额外纳入 setupFiles；公共 setup 改动必须作为全量影响，由入口说明并跳过 UT，成功退出。
 - 全量指选中完整套件（按 project/pool/path 识别规格），不是任意数量阈值。大量真实关联测试若未覆盖完整套件，照常运行。即使是 dry-run / JSON，选中整个非空套件说明后成功退出，不因此阻止 Push。
 - 无选中测试说明后 exit 0；这不代表所有改动已验证。官方依赖识别的限制照常适用，不增加字面量文件读取、类型依赖、删除文件基线等自建补偿。
 - 选择精度靠准确的模块图，不靠选择规则：官方选择是文件级传递闭包，经由 barrel 的 `export *` 会把一个模块的改动传给所有导入 barrel 的测试。高扇入的纯常量模块因此只走子路径，不进根 barrel。`packages/shared/src/test-ids.ts` 的常量只从 `@zcode/shared/test-ids` 导入，根入口不再 re-export，从根入口导入这些常量会被 typecheck 拒绝；工作流一族 `test-ids-workflow.ts` 仍由根入口导出，不在本规则内。原因：根入口由 100 多条 `export *` 汇总，改 test-ids 曾选中 1379/2638 个测试，其中直接引用 test-ids 的约 50 个。
-- 测试失败 exit 1；Git、参数、基线、Vitest 错误以及脏工作区 exit 2；全量跳过 exit 0，不代表测试通过。绝不自动回退全量、追加全量重试或静默吞掉选择器异常。pnpm test / pnpm test:unit 保持显式全量入口。
+- 测试失败 exit 1；Git、参数、基线、Vitest 错误以及脏工作区 exit 2；全量跳过 exit 0，不代表测试通过。绝不自动回退全量、追加全量重试或静默吞掉选择器异常。pnpm test / pnpm test:unit 保持完整单元套件入口；pnpm test:all 显式运行完整验证。
 - 输出选中数量与基线；跳过全量时说明官方选中整个套件，列出官方 related 改动文件。dry-run 列精确规格，JSON 包含 runner/project/pool/path，不伪造逐文件关联原因。
 - Git/文件操作异步；保留 hook local env 清理和 lint-staged JSON manifest，Windows 不经 shell 展开文件名。不修改工作区和 index。
 
@@ -81,15 +96,16 @@ Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽�
 
 ### 时序与真实子进程测试
 
-- 计时算法用受控时钟和数据事件验证先后顺序；真实 IO 接线保留独立集成覆盖，不把进程启动排队计入很短的算法测试窗口。
+- 计时算法用受控时钟和数据事件验证先后顺序；真实 IO 接线通过独立集成入口覆盖，不把进程启动排队计入很短的算法测试窗口。
 - 真实子进程的关闭测试先等待夹具在注册退出处理器后发出的 ready 事件，再开始关闭计时；固定 sleep 不能证明子进程已就绪。
-- 必须在短窗口内启动独立 Node、显示服务进程树或原生依赖的集成测试，放入 `vitest.config.ts` 的 `fork-isolated` 组。该组在普通测试后按单文件串行执行；保留真实进程、原断言和超时值，不跳过用例。
+- 必须在短窗口内启动独立 Node、显示服务进程树或原生依赖的集成测试，放入 `vitest.config.ts` 的 `integration-isolated` 组。该组在集成入口中按单文件串行执行；保留真实进程、原断言和超时值，不跳过用例。
 - 远控前端选源的 CI shell 集成测试会连续启动 Git、Bash 和 Node，归入上述串行组，保留真实选源、构建接线、清理验证和原 30 秒超时。
 - 原生文件监听的集成测试也在串行组验证真实事件送达；通知去重与事件顺序使用受控 watcher 事件单独验证，避免把逻辑断言绑定到系统事件的调度时机。Gen UI 状态覆盖外部写入、重复文件事件、同值写入 ACK，以及读取最新状态后仍能收到通知。
 - 正常完成同时断言退出码、`timedOut: false` 和 `aborted: false`。取消或截止不能把信号退出当作成功；资源清理断言应确认只移除本次创建的资源。
 
 ```text
-普通 unit（受控事件/时钟） → fork-isolated（真实进程，单文件串行）
+unit（受控事件/时钟）
+集成入口：integration → integration-isolated（真实进程，单文件串行）
                                      └─ 正常结束 / 取消 / 截止 → 核对状态与资源清理
 ```
 
@@ -101,7 +117,7 @@ affected 只选择根 Vitest UT，工具 Node 测试另行执行，不代替 CLI
 
 CLI 全量入口通过 pretest 构建根 workspace 的 `@zcode/model-option-map` 与 `packages/shared` 的正式 TypeScript 产物，确保 SEA 测试从干净 checkout 也能读取运行时资源；不能依赖先前手动构建的 dist。
 
-CLI `pnpm test` 和根 `pnpm test:unit` 共同使用 `scripts/run-isolated-tests.mjs`：在启动测试进程前分配独立 HOME / USERPROFILE / XDG 目录，保留调用者已经固定的 Node 与 PATH；根单测仍排除 desktop E2E，CLI 仍执行全部 Turbo test task，参数、失败退出码和测试原时限保持。成功与失败均清理本次临时目录。不要以直接执行 Turbo / Vitest 来替代这两个全量入口：只设置 storage.dir 或两条已知夹具的 dbPath 不能保护其它默认路径调用。相关低敏启动 / 结果 / 清理事件只记录 scope、关联 ID 和临时目录引用，不记录个人配置或正文。CLI Turbo 显式透传这些目录变量，测试输入包含隔离入口源码，防止缓存跨越隔离实现变更。必须实际全量复验时传 `--force`，不得把缓存结果标为本轮新执行。此隔离不回滚历史测试已经发生的默认库变化，也不宣称所有单独运行的测试命令都已具备同一隔离。
+CLI `pnpm test` 和根 `pnpm test:unit` / `pnpm test:integration` / `pnpm test:all` 的 Vitest 阶段共同使用 `scripts/run-isolated-tests.mjs`：在启动测试进程前分配独立 HOME / USERPROFILE / XDG 目录，保留调用者已经固定的 Node 与 PATH；根单测仍排除 desktop E2E，CLI 仍执行全部 Turbo test task，参数、失败退出码和测试原时限保持。成功与失败均清理本次临时目录。不要以直接执行 Turbo / Vitest 来替代这两个全量入口：只设置 storage.dir 或两条已知夹具的 dbPath 不能保护其它默认路径调用。相关低敏启动 / 结果 / 清理事件只记录 scope、关联 ID 和临时目录引用，不记录个人配置或正文。CLI Turbo 显式透传这些目录变量，测试输入包含隔离入口源码，防止缓存跨越隔离实现变更。必须实际全量复验时传 `--force`，不得把缓存结果标为本轮新执行。此隔离不回滚历史测试已经发生的默认库变化，也不宣称所有单独运行的测试命令都已具备同一隔离。
 
 ### Docker test grouping
 
@@ -112,4 +128,4 @@ existing unique names, networks, volumes, and cleanup ownership remain unchanged
 
 ### macOS 全量测试进程
 
-macOS 根 UT 默认采用 forks（普通组 4 个 worker、原有串行组不变），以隔离 fsevents 的原生 N-API 回收。真实 threads 全量的崩溃报告显示 uv_mutex_lock / napi_release_threadsafe_function / fse_instance_destroy 引发 SIGABRT；相同范围 forks 完整通过。ZCODE_TEST_POOL 可显式选择诊断池，其他平台默认沿 threads。此配置不删除测试、改变断言、扩大超时或失败后自动重试。隔离入口统一记录实际 termination_signal；信号终止仍返回失败并阻止 push，成功 / 失败均清理自身临时目录。
+macOS 根单元与集成默认采用 forks（普通组 4 个 worker，integration-isolated 单文件串行），以隔离 fsevents 的原生 N-API 回收。真实 threads 全量的崩溃报告显示 uv_mutex_lock / napi_release_threadsafe_function / fse_instance_destroy 引发 SIGABRT；相同范围 forks 完整通过。ZCODE_TEST_POOL 可显式选择诊断池，其他平台默认沿 threads。此配置不删除测试、改变断言、扩大超时或失败后自动重试。隔离入口统一记录实际 termination_signal；信号终止仍返回失败并阻止 push，成功 / 失败均清理自身临时目录。

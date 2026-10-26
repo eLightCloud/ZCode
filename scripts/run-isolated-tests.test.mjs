@@ -6,7 +6,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-for (const suite of ["cli", "unit"])
+for (const [suite, override] of [
+  ["unit", ["--project", "integration"]],
+  ["integration", ["--project=unit"]],
+]) {
+  test(`${suite}: rejects a caller override of the owned test projects`, () => {
+    const entry = fileURLToPath(new URL("./run-isolated-tests.mjs", import.meta.url));
+    const result = spawnSync(process.execPath, [entry, suite, ...override], { encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /test_scope_project_override/);
+    assert(!result.stdout.includes("engineering.native.tests"), "不能先启动错误的测试项目再报错");
+  });
+}
+
+for (const suite of ["cli", "unit", "integration", "all"])
   for (const [expectedCode, signal] of [
     [0, null],
     [7, null],
@@ -30,6 +43,10 @@ for (const suite of ["cli", "unit"])
         await copyFile(
           join(dirname(fileURLToPath(import.meta.url)), "run-isolated-tests.mjs"),
           entry,
+        );
+        await copyFile(
+          join(dirname(fileURLToPath(import.meta.url)), "test-suites.mjs"),
+          join(fixture, "scripts/test-suites.mjs"),
         );
         await writeFile(
           join(
@@ -61,7 +78,17 @@ ${signal ? `process.kill(process.pid, '${signal}');` : `process.exit(${expectedC
           probe.args,
           suite === "cli"
             ? ["run", "test", "--concurrency=1"]
-            : ["run", "--exclude", "packages/desktop/test/e2e/**/*.test.ts", "--concurrency=1"],
+            : [
+                "run",
+                "--exclude",
+                "packages/desktop/test/e2e/**/*.test.ts",
+                ...(suite === "unit"
+                  ? ["--project", "unit", "--project", "cua-placeholder"]
+                  : suite === "integration"
+                    ? ["--project", "integration", "--project", "integration-isolated"]
+                    : []),
+                "--concurrency=1",
+              ],
         );
         assert.equal(
           await readFile(join(outside, "existing-data"), "utf8"),
@@ -70,6 +97,15 @@ ${signal ? `process.kill(process.pid, '${signal}');` : `process.exit(${expectedC
         await assert.rejects(stat(probe.home), { code: "ENOENT" });
         assert.equal(rows.at(-1).outcome, "cleaned");
         const finished = rows.find((row) => row.outcome === "passed" || row.outcome === "failed");
+        assert.equal(finished.test_scope, suite);
+        assert.deepEqual(
+          finished.test_projects,
+          suite === "unit"
+            ? ["unit", "cua-placeholder"]
+            : suite === "integration"
+              ? ["integration", "integration-isolated"]
+              : [],
+        );
         assert.equal(finished.exit_code, expectedCode);
         assert.equal(finished.termination_signal, signal);
       } finally {

@@ -3,8 +3,8 @@
 import { readFileSync } from "node:fs";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WebRemoteControlDialog,
   isSameWebRemoteControlTarget,
@@ -96,18 +96,26 @@ function readWebRemoteControlDialogSource() {
 }
 
 describe("WebRemoteControlDialog layout", () => {
-  afterEach(() => {
-    cleanup();
-    platformMock.getWebRemoteControlStatus.mockClear();
-    platformMock.startWebRemoteControl.mockClear();
-    platformMock.stopWebRemoteControl.mockClear();
+  beforeEach(() => {
+    platformMock.getWebRemoteControlStatus.mockReset().mockResolvedValue({ status: "idle" });
+    platformMock.startWebRemoteControl.mockReset().mockResolvedValue({ status: "running" });
+    platformMock.stopWebRemoteControl.mockReset().mockResolvedValue(undefined);
     feedbackMocks.error.mockClear();
     feedbackMocks.info.mockClear();
     feedbackMocks.toast.mockClear();
+    feedbackMocks.requestLoginEntry.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
   });
 
   it("auth-required 显示登录入口，无二维码、生成中、复制链接或错误toast", async () => {
-    platformMock.getWebRemoteControlStatus.mockResolvedValueOnce({ status: "auth-required" });
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    // Bugfix：弹窗每秒轮询；只设置 Once 会让下一次查询回到默认 idle，导致全量负载下
+    // 登录入口刚被找到就消失。未登录场景必须在每次读取时持续返回 main 的 auth-required。
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({ status: "auth-required" });
     const onOpenChange = vi.fn();
     const view = render(
       createElement(WebRemoteControlDialog, {
@@ -117,6 +125,10 @@ describe("WebRemoteControlDialog layout", () => {
       }),
     );
     const login = await view.findByRole("button", { name: "webRemoteControl.authRequired.login" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(platformMock.getWebRemoteControlStatus).toHaveBeenCalledTimes(4);
     expect(view.container.textContent).toContain("webRemoteControl.authRequired.title");
     expect(view.container.textContent).toContain("webRemoteControl.authRequired.description");
     expect(view.container.textContent).not.toContain("webRemoteControl.generating");
@@ -130,8 +142,8 @@ describe("WebRemoteControlDialog layout", () => {
   });
   it("启动因缺少JWT失败时读取main的auth-required状态，不展示失败toast", async () => {
     platformMock.getWebRemoteControlStatus
-      .mockResolvedValueOnce({ status: "idle" })
-      .mockResolvedValueOnce({ status: "auth-required" });
+      .mockResolvedValue({ status: "auth-required" })
+      .mockResolvedValueOnce({ status: "idle" });
     platformMock.startWebRemoteControl.mockRejectedValueOnce(new Error("auth-required"));
     const view = render(
       createElement(WebRemoteControlDialog, {

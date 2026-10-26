@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createVitest } from "vitest/node";
+import { UNIT_TEST_PROJECTS } from "./test-suites.mjs";
 import { git, cleanGitEnv } from "./affected-unit-tests/process.mjs";
 import { resolveScope } from "./affected-unit-tests/scope.mjs";
 
@@ -67,7 +68,14 @@ export async function main(argv = process.argv.slice(2)) {
     if (!scope.deletedOnly) {
       vitest = await createVitest(
         "test",
-        { root, watch: false, run: true, reporters: ["default"], silent: "passed-only" },
+        {
+          root,
+          watch: false,
+          run: true,
+          project: UNIT_TEST_PROJECTS,
+          reporters: ["default"],
+          silent: "passed-only",
+        },
         { server: { watch: null } },
       );
       all = await vitest.globTestSpecifications();

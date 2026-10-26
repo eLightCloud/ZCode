@@ -6,8 +6,8 @@ export default defineConfig({
   test: {
     name: "cua-placeholder",
     include: ["test/**/*.test.ts"],
-    // 根项目已有普通与串行两组；独立分组避免不同 worker 数使整个单测入口退出。
+    // 独立单元项目；无需调度真实 IO 集成组，worker 数保持不变。
     maxWorkers: 1,
-    sequence: { groupOrder: 2 },
+    sequence: { groupOrder: 0 },
   },
 });

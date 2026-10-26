@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { UNIT_TEST_PROJECTS, INTEGRATION_TEST_PROJECTS } from "./test-suites.mjs";
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,7 +10,12 @@ import { fileURLToPath } from "node:url";
 // 在整棵测试进程树建立真实 HOME 边界；工具链仍沿调用者已固定的 Node/PATH。
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const [suite, ...args] = process.argv.slice(2);
-if (suite !== "cli" && suite !== "unit") throw new Error("test_scope_required");
+if (!["cli", "unit", "integration", "all"].includes(suite)) throw new Error("test_scope_required");
+const projects =
+  suite === "unit" ? UNIT_TEST_PROJECTS : suite === "integration" ? INTEGRATION_TEST_PROJECTS : [];
+// Scope 由入口拥有，调用方不能叠加 --project 把集成混入 push 单测。
+if (projects.length && args.some((arg) => arg === "--project" || arg.startsWith("--project=")))
+  throw new Error("test_scope_project_override");
 if (args[0] === "--") args.shift();
 const sandbox = await mkdtemp(join(tmpdir(), "zcode-cli-tests-"));
 await chmod(sandbox, 0o700);
@@ -29,6 +35,7 @@ const report = (outcome, extra = {}) =>
       event: "engineering.native.tests",
       event_schema_version: 1,
       test_scope: suite,
+      test_projects: projects,
       correlation_id: correlationId,
       outcome,
       home_isolated: true,
@@ -49,6 +56,7 @@ try {
           "run",
           "--exclude",
           "packages/desktop/test/e2e/**/*.test.ts",
+          ...projects.flatMap((project) => ["--project", project]),
           ...args,
         ];
   child = spawn(process.execPath, command, {

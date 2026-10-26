@@ -1,66 +1,17 @@
 import { applicationRootPlugin } from "./scripts/application-root-plugin.mjs";
 import { resolve } from "node:path";
+import {
+  ROOT_TEST_INCLUDES,
+  ROOT_TEST_EXCLUDES,
+  integrationTestPatterns,
+  isolatedIntegrationTests,
+} from "./scripts/test-suites.mjs";
+
 import { configDefaults, defineConfig } from "vitest/config";
 
-// macOS 的 fsevents 在线程回收时曾触发 N-API SIGABRT；进程隔离保留完整范围与原时限。
+// macOS 的 fsevents 在线程回收时曾触发 N-API SIGABRT；分类不改变既有进程隔离与原时限。
 const unitPool =
   process.env.ZCODE_TEST_POOL ?? (process.platform === "darwin" ? "forks" : "threads");
-
-const processLifecycleTests = [
-  "packages/services/test/processTreeTerminator.test.ts",
-  "packages/services/test/zcodeAgentService.test.ts",
-  "packages/services/test/zcodeAgentService.v4.test.ts",
-  "packages/services/test/zcodeAgentProcessManager.test.ts",
-  "packages/services/test/zcodeStdioTransport.test.ts",
-];
-const forkIsolatedTests = [
-  ...processLifecycleTests,
-  // 真实显示进程树和独立配置读者都在 5 秒内等待启动；并发调度延迟曾触发截止。
-  // 放入串行组保留真实进程和原时限，避免把启动排队误判为资源隔离或读锁失败。
-  "packages/desktop/test/r3RemoteProcess.test.ts",
-  "packages/provider-node/test/personal-config-read-lock.test.ts",
-  // 原生 fs.watch 集成在批量并发时曾等不到通知；串行验证真实接线，去重逻辑由受控事件单测覆盖。
-  "packages/services/src/gen-ui/adapters/stateStorage.test.ts",
-  // electron-builder 下载 NSIS 时把进程 stdio 传给子进程，不能使用 threads 的虚拟 stdio。
-  "packages/desktop/test/windowsInstallerCompile.test.ts",
-  "packages/desktop/test/cdnPreloadScript.test.ts",
-  "packages/desktop/test/desktopRuntimeEnv.test.ts",
-  "packages/desktop/test/e2eDesktopBuildCache.test.ts",
-  "packages/desktop/test/e2eSummarySpecCoverage.test.ts",
-  "packages/desktop/test/migrateStableFeedScript.test.ts",
-  "packages/desktop/test/pluginE2EAdmissionScripts.test.ts",
-  "packages/desktop/test/uploadOssScript.test.ts",
-  // 发布脚本会启动真实 Node/工具子进程，批量 threads 下曾打穿 30s；沿用发布类串行隔离。
-  "packages/desktop/test/notarizeMacosScript.test.ts",
-  "packages/desktop/test/publishReleaseScript.test.ts",
-  // 选源集成测试连续启动 Git、Bash 和 Node；并发启动排队会打穿 30s，沿用发布类串行隔离。
-  "packages/web/test/remoteFrontendBuildSource.test.ts",
-  // Sharp 闭包装配后要启动真实 Node 加载原生库；并行热启动曾触发其 15s 子进程限时。
-  "packages/desktop/test/dev-cua-plugin-runtime.test.ts",
-  // 全量并发时真实心跳与嵌套构建会被调度延迟打穿；单独运行均通过，沿用串行组保留原时限。
-  "packages/desktop/test/webRemoteControlTransport.test.ts",
-  "packages/web/test/webRemoteControlTransport.test.ts",
-  "packages/provider-node/test/builtin-provider-build.test.ts",
-  "packages/provider-node/test/builtin-provider-test-config-sync.test.ts",
-  "packages/server/test/remoteDeploy.test.ts",
-  // Bugfix: 该集成测试会启动数百个真实 Git 子进程；放在普通 threads 并发组会让
-  // macOS 进程启动队列饥饿，表现为 git init 长时间停在 dyld_start。
-  "packages/services/test/gitService.test.ts",
-  // Bugfix: checkpoint 集成测试同样会连续创建真实 Git 仓库；related 全量并发时会因
-  // 子进程与磁盘调度饥饿超过 30 秒，隔离串行后保持聚焦运行时的真实耗时口径。
-  "packages/services/test/gitCheckpointService.test.ts",
-  "packages/services/test/mcpSyncService.test.ts",
-  "packages/services/test/providerRuntimeResolver.test.ts",
-  "packages/services/test/runtimeToolResolver.test.ts",
-  // 该集成测试会真实启动 tsx、Supervisor 与多代 Core；放在普通 threads 中时，
-  // 并行 worker 的进程启动压力会让 15 秒 ready barrier 偶发超时。
-  "packages/zcode-server-cli/test/runtimeUpdateIntegration.test.ts",
-  // Bugfix: pdfjs-dist legacy build 在 threads worker 内偶发原生崩溃（0xC0000005，
-  // 测试自身通过、worker 收尾时崩，会把整场全量跑拦腰截断）。隔离到 fork 池后崩溃
-  // 波及面收敛到本文件，其余测试结果可完整收集；崩溃根因见
-  // docs/windows-test-compatibility.md。
-  "packages/ui/test/pdfJsCMapSupport.test.ts",
-];
 
 export default defineConfig({
   // 企业装配补丁的 virtual Root 仍解析为原生默认实现，不改变官方测试选择策略。
@@ -117,17 +68,8 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: [
-            "packages/*/test/**/*.test.ts",
-            // 架构治理要求 managed 模块自带 contract.test.ts（见 architecture-policy.yaml），放在模块目录内。
-            "packages/*/src/**/contract.test.ts",
-            // Gen UI 目录回归位于源码旁，默认入口也必须执行，避免只在手动定向运行时生效。
-            "packages/shared/src/node/genUiPaths.test.ts",
-            "packages/services/src/gen-ui/**/*.test.ts",
-            "scripts/assert-safe-cua-helper-zip.test.mjs",
-            "scripts/ci/ci-telemetry-keyword-guard.test.mjs",
-          ],
-          exclude: ["packages/desktop/test/e2e/**", "packages/zcode-cua/**", ...forkIsolatedTests],
+          include: ROOT_TEST_INCLUDES,
+          exclude: [...ROOT_TEST_EXCLUDES, ...integrationTestPatterns],
           pool: unitPool === "forks" ? "forks" : "threads",
           maxWorkers: unitPool === "forks" && process.platform !== "darwin" ? 2 : 4,
           sequence: { groupOrder: 0 },
@@ -136,12 +78,24 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: "fork-isolated",
-          include: forkIsolatedTests,
+          name: "integration",
+          include: integrationTestPatterns,
+          exclude: [...ROOT_TEST_EXCLUDES, ...isolatedIntegrationTests],
+          pool: unitPool === "forks" ? "forks" : "threads",
+          maxWorkers: 4,
+          sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "integration-isolated",
+          include: isolatedIntegrationTests,
+          exclude: ROOT_TEST_EXCLUDES,
           pool: "forks",
           fileParallelism: false,
           maxWorkers: 1,
-          sequence: { groupOrder: 1 },
+          sequence: { groupOrder: 2 },
         },
       },
       "packages/zcode-cua/vitest.config.ts",

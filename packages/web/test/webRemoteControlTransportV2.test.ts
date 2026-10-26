@@ -268,6 +268,11 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
       retries.emit(String(ms));
       return timer;
     });
+    // undici 复用 keep-alive 连接时把响应处理回调挂在全局 setTimeout 上，假定时器下
+    // 不会自行触发，fetch 永远完不成；排空式 tick(0) 泵解锁不了（实测确定性挂起），
+    // 须真实让位并按 1ms 推钟。推进带来的漂移用登记时刻 anchor 修正，
+    // 保住「差 1ms 不触发」断言而非放宽它。5 秒真实上限兜底真回归。
+    let now = 0;
     const waitForRetry = (ms: number) => {
       let registered = false;
       const onRetry = () => {
@@ -279,15 +284,20 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
         try {
           while (!registered) {
             guard.throwIfAborted();
-            // Bugfix：真实 fetch 的零延时回调也受假时钟控制。等待退避登记时只排空
-            // 当前时刻并让出真实 IO，不能推进下一轮退避或靠累计补偿放宽 1ms 断言。
-            await vi.advanceTimersByTimeAsync(0);
-            await delay(1);
+            await new Promise((resolve) => setImmediate(resolve));
+            if (!registered) {
+              await vi.advanceTimersByTimeAsync(1);
+              now += 1;
+            }
           }
         } finally {
           retries.off(String(ms), onRetry);
         }
       };
+    };
+    const advance = async (ms: number) => {
+      await vi.advanceTimersByTimeAsync(ms);
+      now += ms;
     };
     const firstRetry = waitForRetry(500);
     h.terminal.start();
@@ -296,12 +306,15 @@ describe("terminal 与 V2 假 relay 的线级契约", () => {
       h.relay.httpCalls.filter((r) => (r.body as { role?: string }).role === "terminal").length;
     let count = 1;
     const delays = [500, 1000, 2000, 4000, 8000, 10000, 10000];
+    let anchor = now; // 当前重试登记时刻（1ms 粒度上界），供未到点断言做安全推进
     for (const [index, ms] of delays.entries()) {
-      await vi.advanceTimersByTimeAsync(ms - 1);
+      const safe = ms - 2 - (now - anchor);
+      if (safe > 0) await advance(safe);
       expect(tokens()).toBe(count);
       const nextRetry = waitForRetry(delays[Math.min(index + 1, delays.length - 1)]!);
-      await vi.advanceTimersByTimeAsync(1);
+      await advance(2);
       await nextRetry();
+      anchor = now;
       expect(tokens()).toBe(++count);
       fail = "network";
     }

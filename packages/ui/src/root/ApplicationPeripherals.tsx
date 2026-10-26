@@ -10,6 +10,13 @@ export interface ApplicationShareCandidate {
 /** Trusted optional assembly; owns no session, credential or publication facts. */
 export interface ApplicationPeripherals {
   nativeCloudEnabled: boolean;
+  renderConversationContent?: (
+    context: Pick<import("./ApplicationPages.js").ApplicationPageContext, "openConversation">,
+  ) => ReactNode;
+  closeConversationContent?: () => void;
+  renderConversationList?: (nativeSessionIds: readonly string[]) => ReactNode;
+  /** Compact decoration in the task title row; never a second text row or navigation. */
+  renderConversationListStatus?: (sessionId: string) => ReactNode;
   renderConversationStatus?: (context: { sessionId: string; workspacePath: string }) => ReactNode;
   renderDeliverables?: (files: readonly NativeDeliverable[], workspacePath: string) => ReactNode;
   openHelp: () => void;

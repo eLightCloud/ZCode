@@ -120,4 +120,149 @@ export async function verifyDeletionChoice(
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+  await verifyOfflineDeletion(store, scope, checks);
+}
+
+/** Real PG decisions/journal; no browser-supplied runtime evidence or instance provisioning. */
+async function verifyOfflineDeletion(
+  store: ConversationSyncStore,
+  scope: SyncScope,
+  checks: string[],
+) {
+  const session = "delete-known-offline",
+    journal = store.continuations!;
+  for (const [id, content] of [
+    ["edit", checkpoint(session)],
+    ["deleted", null],
+  ] as const)
+    await store.execute(scope, {
+      session,
+      operation: randomUUID(),
+      command: {
+        kind: "receive",
+        version: {
+          id,
+          parent: null,
+          location: "source",
+          generation: 0,
+          checkpoint: content,
+        },
+      },
+    });
+  const state = (await store.state(scope, session))!;
+  const choice = {
+    session,
+    operation: randomUUID(),
+    command: {
+      kind: "select" as const,
+      revision: state.revision,
+      candidates: state.candidates,
+      version: "deleted",
+      location: null,
+      recoveryVerified: false as const,
+    },
+  };
+  const intent = {
+    session,
+    operation: randomUUID(),
+    kind: "offline" as const,
+    target: "known-offline",
+    version: "edit",
+    revision: state.revision,
+    candidates: state.candidates,
+  };
+  await journal.begin(scope, intent);
+  await assert.rejects(store.execute(scope, choice), { code: "blocked" });
+  await journal.requestCancel(scope, session, intent.operation);
+  await assert.rejects(store.execute(scope, choice), { code: "blocked" });
+  await journal.finish(scope, {
+    session,
+    operation: intent.operation,
+    status: "cancelled",
+    phase: "cancelled",
+    location: intent.target,
+    version: intent.version,
+  });
+  const offline = { ...intent, operation: randomUUID() };
+  await journal.begin(scope, offline);
+  await journal.commitOffline(scope, session, offline.operation);
+  await assert.rejects(store.execute(scope, choice), { code: "blocked" });
+  await journal.finish(scope, {
+    session,
+    operation: offline.operation,
+    status: "ready",
+    phase: "ready",
+    location: offline.target,
+    version: offline.version,
+  });
+  assert.deepEqual(await journal.offlineLocations(scope, session), [offline.target]);
+  await assert.rejects(store.execute(scope, choice), { code: "blocked" });
+  assert.deepEqual(await store.state(scope, session), state); // No new checkpoint, no implicit fencing.
+  // The trusted coordinator's later ready record proves settlement; this fixture tests PG authority only.
+  const settled = {
+    ...intent,
+    operation: randomUUID(),
+    kind: "select" as const,
+    target: "settled-target",
+  };
+  await journal.begin(scope, settled);
+  await journal.finish(scope, {
+    session,
+    operation: settled.operation,
+    status: "ready",
+    phase: "ready",
+    location: settled.target,
+    version: settled.version,
+  });
+  const deleted = await store.execute(scope, choice);
+  assert.equal(deleted.state.selected, "deleted");
+  assert.deepEqual(await store.execute(scope, choice), deleted);
+  checks.push(
+    "deletion_refuses_pending_cancelling_forward_only_and_ready_offline_without_checkpoint_then_exact_ACK_retry",
+  );
+
+  // Both writers take the session row lock; a new offline intent and deletion cannot both win.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const session = `delete-race-${attempt}`;
+    for (const [id, content] of [
+      ["edit", checkpoint(session)],
+      ["deleted", null],
+    ] as const)
+      await store.execute(scope, {
+        session,
+        operation: randomUUID(),
+        command: {
+          kind: "receive",
+          version: { id, parent: null, location: "source", generation: 0, checkpoint: content },
+        },
+      });
+    const state = (await store.state(scope, session))!;
+    const results = await Promise.allSettled([
+      store.execute(scope, {
+        session,
+        operation: randomUUID(),
+        command: {
+          kind: "select",
+          revision: state.revision,
+          candidates: state.candidates,
+          version: "deleted",
+          location: null,
+          recoveryVerified: false,
+        },
+      }),
+      journal.begin(scope, {
+        session,
+        operation: randomUUID(),
+        kind: "offline",
+        target: "race-offline",
+        version: "edit",
+        revision: state.revision,
+        candidates: state.candidates,
+      }),
+    ]);
+    assert.equal(results.filter((value) => value.status === "fulfilled").length, 1);
+    const rejected = results.find((value) => value.status === "rejected") as PromiseRejectedResult;
+    assert(["blocked", "stale"].includes(rejected.reason.code));
+  }
+  checks.push("deletion_and_offline_begin_are_atomic_on_the_same_PG_session_lock");
 }

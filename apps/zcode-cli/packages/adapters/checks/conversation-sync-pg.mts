@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -279,7 +279,138 @@ try {
   assert.equal(quotaUsage.rows[0].total, 1);
   checks.push("concurrent_cross_session_quota_and_UUID_case_use_one_subject_lock_no_partial_loser");
 
+  // Real PG quota/rollback races. Byte-port faults are controlled; SDK/MinIO are verified separately.
+  const fileScope = { tenant, subject: randomUUID() };
+  const fixed = new Map<
+    string,
+    { bytes: Uint8Array; receipt: { binding: string; version: string } }
+  >();
+  let uploads = 0,
+    failRead = false,
+    failPut = false,
+    failCommit = false;
+  const objects = {
+    async put(_scope: SyncScope, file: { sha256: string }, bytes: Uint8Array) {
+      if (!fixed.has(file.sha256)) {
+        uploads++;
+        fixed.set(file.sha256, {
+          bytes,
+          receipt: { binding: randomUUID(), version: String(uploads) },
+        });
+      }
+      if (failPut) {
+        failPut = false;
+        throw new Error("synthetic_upload_ACK_lost");
+      }
+      return fixed.get(file.sha256)!.receipt;
+    },
+    async read(_scope: SyncScope, file: { sha256: string }) {
+      if (failRead) {
+        failRead = false;
+        throw new Error("synthetic_read_failure");
+      }
+      return fixed.get(file.sha256)!.bytes;
+    },
+  };
+  const faultPool = new Proxy(runtime!, {
+    get(target, property, receiver) {
+      if (property !== "connect") return Reflect.get(target, property, receiver);
+      return async () => {
+        let fileWrite = false;
+        return new Proxy(await target.connect(), {
+          get(client, property, receiver) {
+            if (property !== "query") return Reflect.get(client, property, receiver);
+            return async (...args: unknown[]) => {
+              if (
+                typeof args[0] === "string" &&
+                args[0].startsWith("insert into zcode_sync.file_objects")
+              )
+                fileWrite = true;
+              if (args[0] === "commit" && fileWrite && failCommit) {
+                failCommit = false;
+                throw new Error("synthetic_before_commit_failure");
+              }
+              return Reflect.apply(client.query, client, args);
+            };
+          },
+        });
+      };
+    },
+  });
+  const fileStore = createConversationSyncStore({
+    ...options,
+    pool: faultPool,
+    allowedScopes: [fileScope],
+    maxSubjectBytes: 8,
+    objects,
+  });
+  const file = (bytes: Uint8Array) => ({
+    uri: `zcode-artifact://quota/tool-result-${randomUUID()}`,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes: bytes.length,
+    contentType: "text/plain",
+  });
+  const one = Buffer.from("file-one"),
+    two = Buffer.from("file-two"),
+    descriptor = file(one);
+  for (const phase of ["put", "read", "commit"]) {
+    failPut = phase === "put";
+    failRead = phase === "read";
+    failCommit = phase === "commit";
+    await assert.rejects(fileStore.files!.put(fileScope, descriptor, one));
+    assert.equal(
+      (
+        await owner.query(
+          "select count(*)::int as n from zcode_sync.file_objects where tenant=$1 and subject=$2",
+          [fileScope.tenant, fileScope.subject],
+        )
+      ).rows[0].n,
+      0,
+    );
+    assert.equal(uploads, 1);
+  }
+  await fileStore.files!.put(fileScope, descriptor, one);
+  const receipt = (
+    await owner.query(
+      "select receipt from zcode_sync.file_objects where tenant=$1 and subject=$2",
+      [fileScope.tenant, fileScope.subject],
+    )
+  ).rows[0].receipt;
+  assert.deepEqual(receipt, fixed.get(descriptor.sha256)!.receipt);
+  for (let retry = 0; retry < 3; retry++)
+    await assert.rejects(fileStore.files!.put(fileScope, file(two), two), { code: "limit" });
+  await Promise.all(
+    Array.from({ length: 4 }, () => fileStore.files!.put(fileScope, descriptor, one)),
+  );
+  assert.equal(uploads, 1);
+  checks.push(
+    "file_quota_before_IO_lost_upload_ACK_read_and_commit_failure_preserve_exact_retry_no_extra_versions",
+  );
+  const raceScope = { tenant, subject: randomUUID() };
+  const raceStore = createConversationSyncStore({
+    ...options,
+    pool: runtime,
+    allowedScopes: [raceScope],
+    maxSubjectBytes: 8,
+    objects: {
+      ...objects,
+      put: async (_scope, file, bytes) => {
+        uploads++;
+        return { binding: randomUUID(), version: Buffer.from(bytes).toString("hex") };
+      },
+      read: async (_scope, _file, receipt) => Buffer.from(receipt.version, "hex"),
+    },
+  });
+  const beforeRace = uploads;
+  const fileRace = await Promise.allSettled(
+    [one, two].map((bytes) => raceStore.files!.put(raceScope, file(bytes), bytes)),
+  );
+  assert.equal(fileRace.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(uploads - beforeRace, 1);
+  checks.push("concurrent_file_quota_has_one_PG_winner_and_only_one_external_upload");
+
   report.fixtureScope = scope;
+  report.fixtureSessions = await reopened.list(scope, null, 100);
   report.eventCount = events.length;
   report.nativeSchemaVersion = (
     await owner.query("select version from zcode_sync.schema_version")

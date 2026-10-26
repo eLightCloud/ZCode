@@ -145,7 +145,8 @@ export function PluginStorePage({
   const [detailPluginId, setDetailPluginId] = useState<string | null>(null);
   const [segment, setSegment] = useState<PluginStoreSegment>("public");
   useEffect(() => {
-    if (!applicationSection && segment === "application") setSegment("public");
+    if ((!applicationSection || applicationSection.visible === false) && segment === "application")
+      setSegment("public");
   }, [applicationSection, segment]);
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -663,6 +664,11 @@ export function PluginStorePage({
               size="lg"
               isWebRemoteControl={isWebRemoteControl}
               onCreateTask={onCreateTask}
+              onImport={
+                applicationSection?.onImport
+                  ? () => applicationSection.onImport?.(segment)
+                  : undefined
+              }
               onAddMarketplace={() => {
                 setAddMarketplaceError(null);
                 setAddSourceOpen(true);
@@ -837,6 +843,7 @@ export function PluginStorePage({
           applicationSection={
             applicationSection
               ? {
+                  visible: applicationSection.visible,
                   label: applicationSection.label,
                   marketplaceIds: applicationSection.marketplaceIds,
                   publicMarketplaceIds: applicationSection.publicMarketplaceIds,

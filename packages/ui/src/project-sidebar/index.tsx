@@ -1,3 +1,4 @@
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { SidebarTooltipProvider } from "@/ControlHintTooltip.js";
 export { readProjectSidebarView } from "@/project-sidebar/view-preference.js";
 import { SortableProjects } from "@/project-sidebar/SortableProjects.js";
@@ -78,6 +79,10 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
     deviceNames,
   } = useProjectDirectory();
   const { tree, pin } = useProjectPinIntent(authoritativeTree);
+  const peripherals = useApplicationPeripherals();
+  const savedConversations = peripherals?.renderConversationList?.(
+    tree.tasks.map((task) => task.taskId),
+  );
   const remoteSync = useProjectRemoteSync(props, directory);
   const diagnostics = useProjectConnectionDiagnostics(directory, props);
   const onSelectTask = useProjectTaskNavigation(props, tree, remoteService);
@@ -228,7 +233,11 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
               className="absolute inset-0 flex min-h-0 flex-col"
             >
               {/* 原因：顶层新建显式传 null 会抹掉当前项目；省略归属，让 Root 与快捷键共用继承路径。 */}
-              <ProjectSidebarNavigation props={props} onCreate={() => props.onCreateTask()} />
+              <ProjectSidebarNavigation
+                connected={Boolean(props.workspacePath)}
+                props={props}
+                onCreate={() => props.onCreateTask()}
+              />
               <div
                 data-testid="sidebar-task-list-region"
                 className="flex min-h-0 flex-1 flex-col border-t border-border/50 pt-3 [anchor-name:--sidebar-task-list-divider]"
@@ -261,6 +270,8 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
                             onReorder={reorder}
                           />
                           <ProjectSections
+                            canAddProject={Boolean(props.workspacePath)}
+                            savedConversations={savedConversations}
                             tree={tree}
                             projects={projects}
                             directory={directory}
@@ -300,15 +311,20 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
                               action(() => start(undefined, undefined, groupId))
                             }
                           />
+                          {savedConversations}
                         </>
                       ) : (
-                        <ProjectTaskRows
-                          key="timeline"
-                          kind="timeline"
-                          tasks={selectProjectRows(tree, { kind: view })}
-                          onSelect={onSelectTask}
-                          refresh={refresh}
-                        />
+                        <>
+                          <ProjectTaskRows
+                            key="timeline"
+                            kind="timeline"
+                            showEmptyState={!savedConversations}
+                            tasks={selectProjectRows(tree, { kind: view })}
+                            onSelect={onSelectTask}
+                            refresh={refresh}
+                          />
+                          {savedConversations}
+                        </>
                       )}
                       {loading && !homeOnlySwitcher ? (
                         <p className="px-4 text-ui-sm text-foreground-subtle">

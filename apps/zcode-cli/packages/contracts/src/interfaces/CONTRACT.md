@@ -7,3 +7,7 @@
 - 文本 / 文件可移植子集、静止检查点及 continuation 语义只复用原定义；不接受本机路径、额外权限、凭据或任意 metadata 扩权。
 - 既有 package exports 和 interfaces / workflow 子入口维持原兼容面；跨组件新增依赖只能使用显式公开入口，不因纳管开放任意源码。
 - 验证覆盖父 guarded 权限继承、附件路径拒绝及原有事件序号、淘汰、工作流和检查点回归。没有新增调度、迁移、IO 或环境变量；观测与错误传播保持原链路。
+
+Text checkpoint v4 的模型变更 timeline 使用原生 TimelineModelSelection，保留可选显示 label。模型身份与选项继续复用唯一 modelSelectionSchema 严格验证，不能把任意配置、凭据或未知字段混入；显示标签不是目标模型选择或执行授权。
+首条真实 user 输入之前可保留原生 system / timeline_event / provider hidden 的已校验维护记录；必须仍存在 user 输入，普通 assistant 回答及父子关系不放宽。
+原 commandId 提取由 checkpointOriginalCommandId 单一拥有，只取首次真实 user 输入，不能把前置维护 marker 视为原账号输入；Host 捕获及原生导出复用它。

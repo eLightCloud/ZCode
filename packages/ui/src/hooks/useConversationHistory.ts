@@ -12,7 +12,7 @@ export function useConversationHistory(reader: ConversationHistoryReader) {
   const [items, setItems] = useState<ConversationHistoryItem[]>([]);
   const [transcript, setTranscript] = useState<ConversationTranscript | null>(null);
   const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
   const [hasMore, setHasMore] = useState(false);
   const [choiceError, setChoiceError] = useState<ConversationChoiceError["code"] | null>(null);
   const [choiceDone, setChoiceDone] = useState(false);
@@ -24,16 +24,16 @@ export function useConversationHistory(reader: ConversationHistoryReader) {
     const current = new AbortController();
     request.current = current;
     const owner = ++generation.current;
-    setFailed(false);
+    setFailure(null);
     setLoading(true);
     try {
       await read(current.signal);
-    } catch {
+    } catch (error) {
       if (owner === generation.current && !current.signal.aborted) {
         // 账号撤销、超时和未知结果都不能继续显示另一身份的缓存正文。
         setItems([]);
         setTranscript(null);
-        setFailed(true);
+        setFailure(error);
       }
     } finally {
       if (owner === generation.current) setLoading(false);
@@ -135,17 +135,19 @@ export function useConversationHistory(reader: ConversationHistoryReader) {
       await reader
         .history("", controller.signal)
         .then((rows) => {
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
+            setFailure(null);
             setItems((old) => [
               ...rows,
               ...old.filter((row) => !rows.some((next) => next.session === row.session)),
             ]);
+          }
         })
-        .catch(() => {
+        .catch((error) => {
           if (!controller.signal.aborted) {
             setItems([]);
             setTranscript(null);
-            setFailed(true);
+            setFailure(error);
           }
         });
       if (!controller.signal.aborted)
@@ -165,10 +167,19 @@ export function useConversationHistory(reader: ConversationHistoryReader) {
     items,
     transcript,
     loading,
-    failed,
+    failed: failure !== null,
+    failure,
     hasMore,
     refresh,
     more,
+    close: () => {
+      ++generation.current;
+      request.current?.abort();
+      setTranscript(null);
+      setLoading(false);
+      choice.current = null;
+      setChoiceError(null);
+    },
     open,
     choiceError,
     choiceDone,

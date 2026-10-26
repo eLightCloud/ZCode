@@ -19,7 +19,7 @@ import type { Pool, PoolClient } from "pg";
 import { conversationHistorySchema } from "@zcode/shared";
 import type { ConversationCenterPolicy } from "@zcode/shared";
 import { readCenterPolicy } from "./policy.js";
-import { continuationJournal } from "./continuation-journal.js";
+import { continuationJournal, requireDeletionSettled } from "./continuation-journal.js";
 import { createConversationFileStore } from "./files.js";
 import { canonical, digest } from "./canonical.js";
 import { versionsFor, readVersion, assignedGenerations } from "./postgres-versions.js";
@@ -248,6 +248,9 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
             throw new ConversationSyncError("forward_only");
         }
         const current = (await state(client, request.session))!;
+        // 原回执已优先返回；新删除决定须在同一会话锁内拒绝未收口的离线位置与意图。
+        if (request.command.kind === "select" && request.command.location === null)
+          await requireDeletionSettled(client, request.session);
         if (request.command.kind === "begin") {
           const used = await client.query(
             "select 1 from zcode_sync.receipts where session=$1 and receipt #>> '{state,handoff,id}'=$2 limit 1",
@@ -362,7 +365,9 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
           }
         return [...effects].sort(([a], [b]) => a.localeCompare(b)).map(([, effect]) => effect);
       }),
-    files: options.objects ? createConversationFileStore(transaction, options.objects) : undefined,
+    files: options.objects
+      ? createConversationFileStore(transaction, options.objects, options.logger)
+      : undefined,
     continuations: continuationJournal(transaction),
     continuation: (scope, session, operation) =>
       continuationJournal(transaction).read(scope, session, operation),

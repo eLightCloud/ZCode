@@ -31,7 +31,8 @@ export async function listPdfJsCMapAssets(): Promise<PdfJsCMapAsset[]> {
 export function pdfJsCMapsPlugin(): Plugin {
   return {
     name: "zcode:pdfjs-cmaps",
-    async buildStart() {
+    // 开发态由 configureServer 提供 CMap；emitFile 仅在构建输出阶段可用。
+    async generateBundle() {
       for (const asset of await listPdfJsCMapAssets()) {
         this.emitFile({
           type: "asset",

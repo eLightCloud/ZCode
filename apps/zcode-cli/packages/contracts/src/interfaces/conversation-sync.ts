@@ -246,6 +246,7 @@ export interface ConversationObjectReceipt {
   version: string;
 }
 export interface ConversationObjectBytesPort {
+  /** Same binding/scope/content retry verifies and reuses a fixed version after an unknown receipt. */
   put(
     scope: SyncScope,
     file: ConversationFile,

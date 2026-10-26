@@ -23,7 +23,11 @@ export function ProjectSections({
   onToggleProjects,
   onReorder,
   loading,
+  savedConversations,
+  canAddProject = true,
 }: {
+  canAddProject?: boolean;
+  savedConversations?: ReactNode;
   tree: ProjectTree;
   projects: VirtualProject[];
   directory: RemoteProjectDirectory;
@@ -44,6 +48,7 @@ export function ProjectSections({
   );
   return (
     <PurposeSections
+      canAddProject={canAddProject}
       onAdd={onAddProject}
       hasExpandedProjects={hasExpandedProjects}
       canToggleProjects={canToggleProjects}
@@ -63,8 +68,9 @@ export function ProjectSections({
             tasks={localTasks}
             onSelect={onSelect}
             refresh={refresh}
-            showEmptyState={!loading}
+            showEmptyState={!loading && !savedConversations}
           />
+          {savedConversations}
         </div>
       }
     />

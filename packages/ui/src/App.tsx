@@ -1,3 +1,4 @@
+import { useNativeConversationNavigation } from "@/root/ApplicationPages.js";
 import { PluginUiWorkspaceProvider } from "@/plugin-ui/index.js";
 /* eslint-disable max-lines -- App 当前集中编排 workspace 级状态、导航、Git 派生数据和 shell wiring；已将新增 side pane memory 桥接抽出，剩余拆分需要按 shell 边界单独重构。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -125,6 +126,7 @@ export function App({
   webRemoteControlTerminalTransportState,
   allowRemoteWorkspace = true,
   workspaceAbsPath,
+  workspaceEntryContent,
   workspaceRemoteSessionId,
   workspaceIdentity: explicitWorkspaceIdentity,
   isWorkspaceVisible = true,
@@ -133,6 +135,8 @@ export function App({
   isWindowsDesktop,
   supportsEmbeddedBrowser: explicitSupportsEmbeddedBrowser,
 }: AppProps) {
+  const peripherals = useApplicationPeripherals();
+  const openSavedConversation = useNativeConversationNavigation(services);
   // 展示 label 统一从快捷键生效表取（用户改键后 tooltip 同步更新），不再硬编码键位。
   const toggleSidebarShortcutLabel = useShortcutCommandLabel("toggleSidebar");
   const newTaskShortcutLabel = useShortcutCommandLabel("newTask");
@@ -195,12 +199,14 @@ export function App({
   // Settings tab 覆盖 workspace 时 active tab 不是 workspace tab。
   // 这里必须使用 Root 传入的 workspaceIdentity 兜底，否则远程断连态会把 /home/... 当成本地 base workspace 预热。
   const workspaceIdentity = workspaceRpcTarget.workspaceIdentity;
-  const { rpcReady: workspaceRpcReady } = useWorkspaceServicesResolution(
+  const { rpcReady: connectedRpcReady } = useWorkspaceServicesResolution(
     workspaceAbsPath,
     workspaceRpcTarget.remoteSessionId,
     workspaceIdentity,
     workspaceRpcTarget.remoteTarget,
   );
+  // 未连接壳没有 workspace；不能把 base services 的存在当作会话订阅就绪。
+  const workspaceRpcReady = Boolean(workspaceAbsPath) && connectedRpcReady;
   const workspaceReadOnly = useTabStore((state) =>
     isWorkspaceReadOnly(state, workspaceAbsPath, workspaceIdentity),
   );
@@ -589,10 +595,11 @@ export function App({
   const handleCreateTaskIfWritable = useCallback(
     (request?: Parameters<typeof onCreateTask>[0]) => {
       if (!workspaceReadOnlyReason) {
+        peripherals?.closeConversationContent?.();
         onCreateTask(request);
       }
     },
-    [onCreateTask, workspaceReadOnlyReason],
+    [onCreateTask, workspaceReadOnlyReason, peripherals],
   );
   const handleToggleTerminalIfWritable = useCallback(() => {
     if (!workspaceReadOnlyReason) {
@@ -692,7 +699,6 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
-  const peripherals = useApplicationPeripherals();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const openFeedbackTickets = useFeedbackStore((state) => state.openTickets);
   const isLoggedIn = Boolean(user);
@@ -1181,6 +1187,10 @@ export function App({
       {!peripherals && <FeedbackHost feedbackService={baseFeedbackService} platform={platform} />}
       <PluginUiWorkspaceProvider onOpenSidePane={handleOpenPluginUi}>
         <WorkspaceShellLayout
+          workspaceEntryContent={
+            peripherals?.renderConversationContent?.({ openConversation: openSavedConversation }) ??
+            workspaceEntryContent
+          }
           services={services}
           workspaceReadOnlyReason={workspaceReadOnlyReason}
           workspaceMainView={workspaceMainView}

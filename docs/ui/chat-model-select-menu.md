@@ -36,6 +36,14 @@
 
 ## 兼容边界
 
+### 应用模型分区的浏览边界
+
+- `application-models:system` / `application-models:personal` 是目录展示分区，不是供应商连接。合并菜单中点击分区只更新 `ComposerModelMenu` 的临时浏览状态，不调用连接切换、不自动选择首个型号、不写入默认配置。
+- 在同一菜单展示当前分区的模型；空分区复用 `ModelConfigSelect` 的本地化空态和自定义模型配置入口。配置沿原有设置导航，不新增页面或另一份 Provider 表单。分区名称、空态和动作使用同一语言目录。
+- 点击具体型号才经现有 `onValueChange` 交给 V4 模型选择 owner，完整保留 provider / model 身份、锁定规则和原生档位解析。个人 / 团队的真实连接切换继续由既有 connection owner 负责。
+- 浏览未选中分区不显示当前另一分区的思考滑杆；关闭菜单后浏览状态丢弃，重新打开按真实模型定位。外部模型选择改变后旧浏览意图失效，目录刷新则使用最新分区内容。
+- 桌面子菜单和窄屏同层返回遵守相同语义；回归覆盖空分区、目录晚到、同名但不同 Provider 的型号、禁选型号、返回系统分区和配置导航。
+
 - 桌面端和 Web 端共用同一个 React 组件，菜单交互不引入平台专属逻辑。
 - picker 互斥只属于单个 composer 实例，不进入全局 store，也不跨 pane、window 或
   desktop continuous / web-remote replayable 边界同步。

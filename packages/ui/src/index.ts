@@ -154,3 +154,12 @@ export {
   ConversationHistory,
   type ConversationHistoryLabels,
 } from "./components/ConversationHistory.js";
+
+export {
+  useConversationHistory,
+  ConversationSidebar,
+  ConversationSaveIndicator,
+  ConversationConflict,
+} from "./conversation-workbench/contract.js";
+
+export { preserveConversationInputDraft } from "./root/ApplicationPages.js";

@@ -39,7 +39,8 @@ try {
     "http-session",
   );
   assert.equal((await store.state(connection.scope, "worker-http"))!.revision, 1);
-  assert.equal((await store.list(connection.scope, null, 100)).length, 6);
+  // 新增并发删除夹具也必须完整恢复；比较源端清单与准确状态，不能只改硬编码数量。
+  assert.deepEqual(await store.list(connection.scope, null, 100), connection.sessions);
   const continuation = await store.state(connection.scope, "session-runtime-continuation");
   // 最新接续夹具最后选定离线分支并在 cloud 激活，恢复后须保持该准确位置。
   assert.equal(continuation?.active?.location, "runtime-cloud");

@@ -386,7 +386,10 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       const mode = db
         .prepare("select mode from sync_bases where tenant=? and subject=? and session=?")
         .get(...scopeValues(scope), session)?.mode;
-      return mode === "offline" ? "offline" : "primary";
+      // 无基线是合法新会话；已有行的非法模式不能被伪装为在线主线。
+      if (mode === undefined) return "primary";
+      if (mode !== "offline" && mode !== "primary") throw new ConversationSyncError("schema");
+      return mode;
     },
     adopt(scope, raw, generation, operation, mode = "primary") {
       const version = syncVersionSchema.parse(raw),

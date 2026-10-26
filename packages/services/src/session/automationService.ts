@@ -83,12 +83,7 @@ export class AutomationService {
 
   async create(params: ZCodeAutomationCreateParams): Promise<ZCodeAutomation> {
     if (params.creationId) {
-      if (
-        params.enabled !== false ||
-        params.relativeDelayMinutes !== undefined ||
-        params.intervalUnit !== undefined
-      )
-        throw new Error("Creation identity requires a paused absolute schedule");
+      this.validateCreationIdentity(params);
       const existing = await this.repo.getCreated(params.creationId);
       if (existing) return this.sameCreation(existing, params);
     }
@@ -218,6 +213,24 @@ export class AutomationService {
       modelSelection,
       scheduleRule,
     };
+  }
+
+  async inspectCreation(
+    params: ZCodeAutomationCreateParams & { creationId: string },
+  ): Promise<ZCodeAutomation | null> {
+    // 创建回执丢失后只核对原生事实，不能借状态查询再次创建或启用计划。
+    this.validateCreationIdentity(params);
+    const existing = await this.repo.getCreated(params.creationId);
+    return existing ? this.sameCreation(existing, params) : null;
+  }
+
+  private validateCreationIdentity(params: ZCodeAutomationCreateParams): void {
+    if (
+      params.enabled !== false ||
+      params.relativeDelayMinutes !== undefined ||
+      params.intervalUnit !== undefined
+    )
+      throw new Error("Creation identity requires a paused absolute schedule");
   }
 
   private sameCreation(

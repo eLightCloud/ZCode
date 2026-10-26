@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   conversationIndexFactsSchema,
@@ -15,15 +14,19 @@ export function createConversationSyncHost(options: {
   agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
   continuation?: () => import("@zcode/shared").ConversationRuntimePort | undefined;
 }): ConversationSyncHost {
-  function target(taskId: string) {
-    return { workspacePath: getConversationWorkspaceDir(), taskId };
+  async function target(taskId: string) {
+    const matches = (await options.index.listConversationSyncTargets()).filter(
+      (row) => row.taskId === taskId,
+    );
+    if (matches.length > 1) throw new Error("conversation_sync_ambiguous_index");
+    return matches[0] ?? { workspacePath: getConversationWorkspaceDir(), taskId };
   }
   async function capture(
     session: string,
     management: import("@zcode/shared").ConversationIndexFacts,
   ) {
     const value = await options.agent.captureTextCheckpoint({
-      workspacePath: getConversationWorkspaceDir(),
+      workspacePath: (await target(session)).workspacePath,
       sessionId: session,
     });
     return { ...value, management };
@@ -31,7 +34,7 @@ export function createConversationSyncHost(options: {
   return {
     async legacy(session, attribute = false, expected) {
       return options.index.withConversationSyncFacts(
-        { ...target(session), legacy: true, attributeLegacy: attribute },
+        { ...(await target(session)), legacy: true, attributeLegacy: attribute },
         async (management) => {
           const value = await capture(session, management);
           if (
@@ -57,15 +60,16 @@ export function createConversationSyncHost(options: {
     },
     async captureContinuation(session, operation) {
       return options.index.withConversationSyncFacts(
-        { ...target(session), continuationOperation: operation },
+        { ...(await target(session)), continuationOperation: operation },
         async (management) => capture(session, management),
       );
     },
     async rebuildIndex(input) {
       const facts = conversationIndexFactsSchema.parse(input.management);
       if (facts.pinned === undefined) throw new Error("conversation_sync_rebuild_unsupported");
-      const params = { workspacePath: getConversationWorkspaceDir(), sessionId: input.session };
-      if (await options.index.getTaskMeta(target(input.session)))
+      const currentTarget = await target(input.session);
+      const params = { workspacePath: currentTarget.workspacePath, sessionId: input.session };
+      if (await options.index.getTaskMeta(currentTarget))
         throw new Error("conversation_sync_index_exists");
       if (!input.isCurrent()) throw new Error("conversation_sync_identity_changed");
       const captured = await options.agent.captureTextCheckpoint({
@@ -98,21 +102,12 @@ export function createConversationSyncHost(options: {
       });
     },
     async enumerate() {
-      const rows = await options.index.listTaskMetas({
-        workspacePath: getConversationWorkspaceDir(),
-        provider: "glm",
-        includeDeleted: true,
-      });
-      return rows
-        .filter(
-          (row) =>
-            !row.workspaceIdentity &&
-            resolve(row.workspacePath) === resolve(getConversationWorkspaceDir()),
-        )
-        .map((row) => row.taskId);
+      const rows = await options.index.listConversationSyncTargets();
+      // 同 ID 多目录不能任意选一个，保持逐会话受阻而不读取错误正文。
+      return [...new Set(rows.map((row) => row.taskId))];
     },
     async capture(session) {
-      return options.index.withConversationSyncFacts(target(session), async (management) => ({
+      return options.index.withConversationSyncFacts(await target(session), async (management) => ({
         ...(management.deleted ? { dataBase64: "" } : await capture(session, management)),
         management,
       }));

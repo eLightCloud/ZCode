@@ -21,6 +21,59 @@ import { createConversationSyncOutbox } from "../src/conversation-sync/outbox.js
 import { checkpoint } from "../checks/sync-fixture.mjs";
 import { textCheckpointSchema } from "@zcode/contracts";
 import { createConversationSyncHttpClient } from "../src/conversation-sync/client.js";
+import { createConversationSyncHttpHandler } from "../src/conversation-sync/http.js";
+import { createServer } from "node:http";
+import { logger } from "../checks/sync-fixture.mjs";
+
+it("dispatches first enrollment over HTTP and refuses missing source identity or invalid input", async () => {
+  const scope = { tenant: randomUUID(), subject: randomUUID() };
+  const calls: unknown[] = [];
+  const handler = createConversationSyncHttpHandler({
+    store: {} as never,
+    maxRequestBytes: 4096,
+    authenticate: async (request) => (request.headers.authorization === "synthetic" ? scope : null),
+    qualify: async () => false,
+    logger,
+    continuation: {
+      async enroll(...args: unknown[]) {
+        calls.push(args);
+        return null;
+      },
+    } as never,
+  });
+  const server = createServer((request, response) => {
+    void handler(request, response);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as import("node:net").AddressInfo;
+  const url = `http://127.0.0.1:${address.port}/enroll`;
+  const body = JSON.stringify({ session: "synthetic-session", version: "synthetic-version" });
+  const headers = {
+    authorization: "synthetic",
+    "content-type": "application/json",
+    "x-zcode-sync-location": "synthetic-source",
+  };
+  try {
+    expect((await fetch(url, { method: "POST", body })).status).toBe(401);
+    expect(
+      (
+        await fetch(url, {
+          method: "POST",
+          body,
+          headers: { ...headers, "x-zcode-sync-location": "" },
+        })
+      ).status,
+    ).toBe(400);
+    expect((await fetch(url, { method: "POST", body: "{}", headers })).status).toBe(400);
+    const response = await fetch(url, { method: "POST", body, headers });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toBeNull();
+    expect(calls).toEqual([[scope, "synthetic-source", "synthetic-session", "synthetic-version"]]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 
 function transition(state: SyncState, command: SyncCommand, versions: Map<string, SyncVersion>) {
   return applyTransition(

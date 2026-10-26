@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { AutomationRepo } from "../src/session/automationRepo.js";
 import { AutomationService } from "../src/session/automationService.js";
@@ -81,6 +81,46 @@ it("keeps paused creation and a completed manual request stable across retries",
     expect(replay?.replayed).toBe(true);
     expect(replay?.run.runId).toBe(claimed?.run.runId);
     expect(await service.listRuns(first.automationId)).toHaveLength(1);
+  } finally {
+    repo.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("inspects an original creation without creating, enabling or accepting changed parameters", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "zcode-creation-inspect-"));
+  let repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
+  try {
+    let service = new AutomationService(repo);
+    const params = {
+      creationId: randomUUID(),
+      enabled: false,
+      title: "synthetic recovery",
+      cronExpr: "*/10 * * * *",
+      prompt: "synthetic fixed input",
+      workspacePath: directory,
+      recurring: true,
+    };
+    const create = vi.spyOn(repo, "create");
+    expect(await service.inspectCreation(params)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    const first = await service.create(params);
+    create.mockClear();
+    expect(await service.inspectCreation(params)).toEqual(first);
+    expect(await service.inspectCreation(params)).toEqual(first);
+    await expect(service.inspectCreation({ ...params, prompt: "changed" })).rejects.toThrow(
+      "conflicts",
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(await service.list()).toEqual([first]);
+    expect(first.enabled).toBe(false);
+    expect(await service.listRuns(first.automationId)).toEqual([]);
+    repo.close();
+    repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
+    service = new AutomationService(repo);
+    const createAfterRestart = vi.spyOn(repo, "create");
+    expect(await service.inspectCreation(params)).toEqual(first);
+    expect(createAfterRestart).not.toHaveBeenCalled();
   } finally {
     repo.close();
     await rm(directory, { recursive: true, force: true });

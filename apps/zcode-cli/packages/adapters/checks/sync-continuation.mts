@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { createServer } from "node:http";
 import type { ConversationSyncStore, SyncScope, SessionId } from "@zcode/contracts";
 import {
   ConversationRuntimeError,
@@ -11,6 +12,7 @@ import {
 import {
   createConversationContinuation,
   createConversationSyncOutbox,
+  createConversationSyncHttpHandler,
 } from "@zcode/adapters/conversation-sync";
 import { createSqliteSessionStore } from "@zcode/adapters/storage";
 import { checkpoint, logger } from "./sync-fixture.mjs";
@@ -119,8 +121,37 @@ export async function verifyContinuation(
       candidates: state.candidates,
     };
   }
-  const first = await intent("select", "runtime-desktop", "runtime-base");
-  assert.equal((await orchestrator().run(scope, first)).status, "ready");
+  // 首次登记必须穿过真实 HTTP 分发，直接调用 run 不能发现 /enroll 白名单遗漏。
+  const handler = createConversationSyncHttpHandler({
+    store: center,
+    logger,
+    maxRequestBytes: 4096,
+    authenticate: async () => scope,
+    qualify: async () => false,
+    continuation: orchestrator(),
+  });
+  const server = createServer((request, response) => {
+    void handler(request, response);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address() as import("node:net").AddressInfo;
+    const enroll = () =>
+      fetch(`http://127.0.0.1:${address.port}/enroll`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-zcode-sync-location": "runtime-desktop" },
+        body: JSON.stringify({ session, version: "runtime-base" }),
+      });
+    const response = await enroll();
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.status, "ready");
+    assert.deepEqual(await (await enroll()).json(), result);
+    checks.push("first_enrollment_HTTP_PG_SQLite_activation_and_exact_retry");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
   assert.equal((await center.state(scope, session))?.active?.generation, 1);
   await local.store.savePart({
     id: "part-assistant",

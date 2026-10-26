@@ -45,6 +45,7 @@ export function PluginStoreListView({
   applicationSection,
 }: {
   applicationSection?: {
+    visible?: boolean;
     label: string;
     marketplaceIds: readonly string[];
     content: ReactNode;
@@ -201,7 +202,7 @@ export function PluginStoreListView({
             })}
             onClick={() => onSegmentChange("personal")}
           />
-          {applicationSection ? (
+          {applicationSection && applicationSection.visible !== false ? (
             <SegmentPill
               active={segment === "application"}
               testId="plugin-store-segment-application"
@@ -246,7 +247,7 @@ export function PluginStoreListView({
 
       {segment === "public" && applicationSection?.publicContent}
       {segment === "personal" && applicationSection?.personalContent}
-      {segment === "application" && applicationSection ? (
+      {segment === "application" && applicationSection && applicationSection.visible !== false ? (
         applicationSection.content
       ) : keyword ? (
         <StoreSection

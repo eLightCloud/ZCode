@@ -395,11 +395,13 @@ export function useGitRepository(options: {
     workspaceIdentity,
     remoteTarget,
   );
-  const workspaceRpcEnabled = shouldEnableWorkspaceRpc({
-    workspaceIdentity,
-    remoteSessionId,
-    remoteTarget,
-  });
+  const workspaceRpcEnabled =
+    Boolean(workspacePath.trim()) &&
+    shouldEnableWorkspaceRpc({
+      workspaceIdentity,
+      remoteSessionId,
+      remoteTarget,
+    });
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   // store 收尾：per-turn 变更摘要 map（setPerTurnSummaries/setPerTurnFileChanges）
   // 的写入链路随旧 ChatView 流订阅删除，store 不再保存该派生态（删除前也恒为空）。

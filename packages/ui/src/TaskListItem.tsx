@@ -1,4 +1,5 @@
 import { RemoteTaskDeviceLabel } from "@/remote-connection/RemoteTaskDeviceLabel.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 /* eslint-disable max-lines -- task item 同时承载默认列表和 timeline 两行布局的共享交互，先保持动作链路集中避免归档/置顶回归。 */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -173,6 +174,7 @@ export const MemoTaskItem = memo(function TaskListItem({
   actionsDisabled = false,
   actionsDisabledReason,
 }: TaskListItemProps) {
+  const peripherals = useApplicationPeripherals();
   const [hoverActionsVisible, setHoverActionsVisible] = useState(false);
   const [focusActionsVisible, setFocusActionsVisible] = useState(false);
   const [isHoverNone] = useState(
@@ -653,6 +655,7 @@ export const MemoTaskItem = memo(function TaskListItem({
                       这里统一改为右侧渐隐，避免同一侧栏里出现两种截断语义。 */}
               {taskTitle}
             </TaskTitleOverflowText>
+            {peripherals?.renderConversationListStatus?.(task.taskId)}
             {task.pendingInteraction ? (
               <TaskInteractionBadge
                 interaction={task.pendingInteraction}
@@ -759,6 +762,7 @@ export const MemoTaskItem = memo(function TaskListItem({
                         使用 mask 渐隐而不是省略号，和 grouped task row 保持一致。 */}
                 {taskTitle}
               </TaskTitleOverflowText>
+              {peripherals?.renderConversationListStatus?.(task.taskId)}
               {changeSummaryNode ? (
                 <span
                   className={cn(

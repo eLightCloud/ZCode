@@ -823,6 +823,9 @@ export interface IZCodeAgentService {
   listAllAutomations(): Promise<ZCodeAutomation[]>;
   getAutomationCapabilities(): Promise<{ manualDispatchAvailable: boolean; timezone: string }>;
   createAutomation(params: ZCodeAgentCreateAutomationParams): Promise<ZCodeAutomation>;
+  inspectAutomationCreation(
+    params: ZCodeAgentCreateAutomationParams & { creationId: string },
+  ): Promise<ZCodeAutomation | null>;
   previewAutomation(params: ZCodeAgentCreateAutomationParams): Promise<{
     nextRunAt?: number;
     modelSelection?: ModelSelection;

@@ -1,5 +1,6 @@
 import {
   textCheckpointSchema,
+  checkpointOriginalCommandId,
   type LogContext,
   type Logger,
   type ProjectId,
@@ -80,6 +81,100 @@ async function setup() {
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
+  it("round-trips native model-change labels without allowing unknown model fields", async () => {
+    const { store, target } = await setup();
+    const base = example();
+    const marker = {
+      id: "model-marker",
+      type: "timeline",
+      timelineType: "model_change",
+      display: "separator",
+      toModel: { providerId: "test", modelId: "test-model", label: "Synthetic model" },
+    };
+    const input = {
+      ...base,
+      version: 1,
+      messages: [
+        { ...base.messages[0], parts: [marker, ...base.messages[0].parts] },
+        base.messages[1],
+      ],
+    };
+    const checkpoint = textCheckpointSchema.parse(input);
+    try {
+      await store.importTextCheckpoint({ checkpoint, target });
+      expect(await store.exportTextCheckpoint({ sessionID: checkpoint.session.id })).toEqual(
+        checkpoint,
+      );
+      const invalid = {
+        ...input,
+        messages: [
+          {
+            ...input.messages[0],
+            parts: [{ ...marker, toModel: { ...marker.toModel, token: "synthetic-private" } }],
+          },
+          input.messages[1],
+        ],
+      };
+      expect(textCheckpointSchema.safeParse(invalid).success).toBe(false);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it("preserves an initial native model timeline before the real user input", async () => {
+    const { store, target } = await setup();
+    const base = example();
+    const first = {
+      info: {
+        ...base.messages[1].info,
+        id: "model-initial",
+        parentID: "model-initial",
+        finish: "completed",
+        semantics: {
+          origin: "system",
+          kind: "timeline_event",
+          uiVisibility: "visible",
+          providerVisibility: "hidden",
+          transcriptVisibility: "visible",
+        },
+      },
+      parts: [
+        {
+          id: "model-part",
+          type: "timeline",
+          timelineType: "model_change",
+          display: "separator",
+          toModel: { ...base.modelSelection, label: "Synthetic model" },
+        },
+      ],
+    };
+    const input = {
+      ...base,
+      version: 4,
+      execution: {
+        id: "execution-entry",
+        time: { created: 1, updated: 1 },
+        data: { mode: "build", planEnabled: false },
+      },
+      messages: [first, ...base.messages],
+    };
+    const checkpoint = textCheckpointSchema.parse(input);
+    expect(checkpointOriginalCommandId(checkpoint)).toBe("command-1");
+    try {
+      await store.importTextCheckpoint({ checkpoint, target });
+      const actual = await store.exportTextCheckpoint({ sessionID: checkpoint.session.id });
+      expect(actual.version).toBe(4);
+      expect(actual.messages).toEqual(checkpoint.messages);
+      expect(
+        textCheckpointSchema.safeParse({
+          ...input,
+          messages: [{ ...first, info: { ...first.info, semantics: undefined } }, ...base.messages],
+        }).success,
+      ).toBe(false);
+    } finally {
+      await store.close();
+    }
+  });
   it("replacing v4 with a legacy checkpoint clears outcomes absent from the chosen body", async () => {
     const { store, target, dbPath } = await setup();
     const legacy = example();

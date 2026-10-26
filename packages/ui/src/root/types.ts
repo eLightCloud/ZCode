@@ -54,6 +54,11 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
 }
 
 export interface RootProps {
+  applicationConversationNavigation?: (
+    target: import("./ApplicationPages.js").ApplicationConversationTarget,
+  ) => Promise<void>;
+  /** Native shell before any execution connection; never implies a workspace or input. */
+  workspaceEntry?: import("../workspace-entry/contract.js").WorkspaceEntry;
   applicationSettings?: import("./ApplicationSettings.js").ApplicationSettings;
   applicationHeaderPageId?: string;
   applicationPeripherals?: import("./ApplicationPeripherals.js").ApplicationPeripherals;

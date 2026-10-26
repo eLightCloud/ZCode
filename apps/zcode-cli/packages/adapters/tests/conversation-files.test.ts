@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, rm, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,6 +11,35 @@ import {
 } from "@zcode/contracts";
 import { createNodeToolArtifactStore, createSqliteSessionStore } from "../src/storage/index.js";
 import { checkpoint } from "../checks/sync-fixture.mjs";
+import { createConversationFileStore } from "../src/conversation-sync/files.js";
+
+it("refuses cumulative quota before any object upload on every retry", async () => {
+  const scope = { tenant: randomUUID(), subject: randomUUID() },
+    bytes = Buffer.from("test");
+  const file = {
+    uri: `zcode-artifact://session/tool-result-${randomUUID()}`,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes: bytes.length,
+    contentType: "text/plain",
+  };
+  const put = vi.fn(),
+    read = vi.fn();
+  const store = createConversationFileStore(
+    async (_scope, work) =>
+      work(
+        {
+          query: async (sql: string) =>
+            sql.includes("sum(bytes)") ? { rows: [{ bytes: "100" }] } : { rows: [], rowCount: 0 },
+        } as never,
+        { maxSubjectBytes: 100 },
+      ),
+    { put, read },
+  );
+  for (let retry = 0; retry < 3; retry++)
+    await expect(store.put(scope, file, bytes)).rejects.toMatchObject({ code: "limit" });
+  expect(put).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled();
+});
 
 const roots: string[] = [];
 afterEach(async () => {

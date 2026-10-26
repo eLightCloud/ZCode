@@ -822,6 +822,7 @@ const zhCN: Record<string, string> = {
   "settings.resourceGroup.item.other": "{count} 项",
   "pluginCreator.add": "添加",
   "pluginCreator.create": "创建插件",
+  "pluginCreator.importArchive": "导入插件 ZIP",
   "pluginCreator.addMarketplace": "添加插件市场",
   "pluginCreator.unavailable":
     "插件创建器暂不可用。请检查连接，并在插件市场启用或恢复“插件创建器”后重试。",
@@ -4734,7 +4735,7 @@ const zhCN: Record<string, string> = {
   "settings.plugins.store.info.website": "网站",
   "settings.plugins.store.info.privacyPolicy": "隐私政策",
   "settings.plugins.store.info.termsOfService": "服务条款",
-  "settings.plugins.store.personalEmpty": "个人来源还没有插件。用右上角「创建」添加市场源。",
+  "settings.plugins.store.personalEmpty": "暂无个人插件。使用右上角「添加」创建插件或添加市场源。",
   "settings.plugins.filter.label": "启用状态",
   "settings.plugins.footerSummary": "共 {total} 个插件 · {enabled} 个已启用",
   "settings.plugins.searchPlaceholder": "搜索插件...",

@@ -276,6 +276,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayout(
 const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent({
   services,
   workspaceReadOnlyReason,
+  workspaceEntryContent,
   workspaceMainView,
   pluginStoreOpenVersion,
   openAutomationId,
@@ -2090,7 +2091,11 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
         }
         chatOverlay={workspaceMainView === "chat" ? renderChatFindDialog() : undefined}
         chatContent={
-          workspaceMainView === "automations" && !isWebRemoteControlShell ? (
+          workspaceEntryContent ? (
+            <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+              {workspaceEntryContent}
+            </main>
+          ) : workspaceMainView === "automations" && !isWebRemoteControlShell ? (
             <main
               id={AUTOMATIONS_TOAST_ANCHOR_ID}
               className="flex h-full min-h-0 flex-1 flex-col bg-background"
@@ -2527,7 +2532,11 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                         </Button>
                       ) : null}
                       <div className="min-h-0 flex-1 overflow-hidden">
-                        {workspaceMainView === "automations" && !isWebRemoteControlShell ? (
+                        {workspaceEntryContent ? (
+                          <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+                            {workspaceEntryContent}
+                          </main>
+                        ) : workspaceMainView === "automations" && !isWebRemoteControlShell ? (
                           <main
                             id={AUTOMATIONS_TOAST_ANCHOR_ID}
                             className="flex h-full min-h-0 flex-1 flex-col bg-background"

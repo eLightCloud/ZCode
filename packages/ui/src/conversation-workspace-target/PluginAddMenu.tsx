@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, Plus, Sparkles } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Sparkles, Upload } from "lucide-react";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -13,6 +13,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 export function PluginAddMenu({
   onCreateTask,
   onAddMarketplace,
+  onImport,
   testId,
   variant = "default",
   size = "default",
@@ -20,6 +21,7 @@ export function PluginAddMenu({
 }: {
   onCreateTask?: (request?: CreateTaskRequest) => void;
   onAddMarketplace: () => void;
+  onImport?: () => void;
   testId: string;
   /** 市场顶栏与相邻动作统一 secondary + lg；设置页插件区保持默认主按钮。 */
   variant?: "default" | "secondary";
@@ -46,6 +48,12 @@ export function PluginAddMenu({
           <Sparkles className="size-4" aria-hidden="true" />
           {intl.formatMessage({ id: "pluginCreator.create" })}
         </DropdownMenuItem>
+        {onImport && (
+          <DropdownMenuItem data-testid="plugin-import-menu-item" onSelect={onImport}>
+            <Upload className="size-4" aria-hidden="true" />
+            {intl.formatMessage({ id: "pluginCreator.importArchive" })}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           data-testid="plugin-store-add-source-menu-item"
           onSelect={onAddMarketplace}

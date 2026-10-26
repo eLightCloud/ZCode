@@ -1,3 +1,4 @@
+import { WorkspaceEntryContent } from "@/workspace-entry/contract.js";
 import type { ReactNode } from "react";
 import { ProjectDirectoryProvider } from "@/project-sidebar/ProjectDirectoryProvider.js";
 import { RemoteProjectPicker } from "@/project-sidebar/RemoteProjectPicker.js";
@@ -225,7 +226,11 @@ function NativeRoot(props: RootProps) {
                                 headerPageId={props.applicationHeaderPageId}
                               >
                                 <ApplicationPluginLocationEffect />
-                                <RootInner {...props} />
+                                {props.workspaceEntry ? (
+                                  <WorkspaceEntryContent props={props} />
+                                ) : (
+                                  <RootInner {...props} />
+                                )}
                               </ApplicationPages>
                             </ApplicationPluginStoreProvider>
                           </NativeCloudProviders>

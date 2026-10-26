@@ -1,9 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { createConversationSyncHost } from "#src/session/conversationSyncHost.js";
+import { createProjectService } from "#src/project/index.js";
 import { createFileService } from "#src/file/fileService.js";
 import { setDataBaseDir, getConversationWorkspaceDir } from "#src/paths.js";
 let root: string, index: TaskIndexRepo;
@@ -191,4 +192,69 @@ it("requires exact legacy preview before marking purpose and rejects directory o
   await expect(host.legacy!("summary")).rejects.toThrow("unsupported_index");
   await index.applyCliFacts({ meta: meta("directory", join(root, "project")) });
   await expect(host.legacy!("directory")).rejects.toThrow("ineligible");
+});
+
+it("registers each native no-project draft before its first metadata write and captures its exact path", async () => {
+  const service = createProjectService({
+    workspaceDirectory: dirname(getConversationWorkspaceDir()),
+    repository: () => index.getProjectRepository(),
+    registerConversationWorkspace: (path) => index.registerConversationWorkspace(path),
+  });
+  const prepared = await service.prepareSession({
+    draftId: "4022e859-2b0a-4588-9081-af8d6c43c411",
+  });
+  const item = meta("new-draft", prepared.workspacePath);
+  await index.applyCliFacts({ meta: item });
+  expect((await index.getTaskMeta(item))?.workspacePurpose).toBe("conversation");
+  const agent = { captureTextCheckpoint: vi.fn(async () => ({ dataBase64: "opaque" })) };
+  const host = createConversationSyncHost({ index, agent });
+  expect(await host.enumerate()).toEqual([item.taskId]);
+  await host.capture(item.taskId);
+  expect(agent.captureTextCheckpoint).toHaveBeenCalledWith({
+    workspacePath: prepared.workspacePath,
+    sessionId: item.taskId,
+  });
+  const project = await service.saveProject({
+    name: "Explicit project",
+    roots: [prepared.workspacePath],
+  });
+  await service.moveTask({
+    task: { workspacePath: prepared.workspacePath, taskId: item.taskId },
+    projectId: project.id,
+  });
+  expect(await host.enumerate()).toEqual([]);
+});
+it("requires explicit attribution for an existing unknown internal draft", async () => {
+  const path = join(
+    dirname(getConversationWorkspaceDir()),
+    "draft-4022e859-2b0a-4588-9081-af8d6c43c412",
+  );
+  const item = meta("old-draft", path);
+  await index.applyCliFacts({ meta: item });
+  const host = createConversationSyncHost({
+    index,
+    agent: { captureTextCheckpoint: async () => ({ dataBase64: "opaque" }) },
+  });
+  expect(await host.enumerate()).toContain(item.taskId);
+  await expect(host.capture(item.taskId)).rejects.toThrow("unsupported_index");
+  const preview = await host.legacy!(item.taskId);
+  expect((await index.getTaskMeta(item))?.workspacePurpose).toBeUndefined();
+  await host.legacy!(item.taskId, true, preview);
+  await expect(host.capture(item.taskId)).resolves.toHaveProperty("dataBase64", "opaque");
+  await expect(index.registerConversationWorkspace(join(root, "user-project"))).rejects.toThrow(
+    "ineligible",
+  );
+});
+it("keeps native uniqueness protection across internal draft directories", async () => {
+  const paths = ["1", "2"].map((suffix) =>
+    join(
+      dirname(getConversationWorkspaceDir()),
+      "draft-4022e859-2b0a-4588-9081-af8d6c43c41" + suffix,
+    ),
+  );
+  for (const path of paths) await index.registerConversationWorkspace(path);
+  await index.applyCliFacts({ meta: meta("duplicate", paths[0]) });
+  await expect(index.applyCliFacts({ meta: meta("duplicate", paths[1]) })).rejects.toThrow(
+    "UNIQUE",
+  );
 });

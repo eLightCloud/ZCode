@@ -1,6 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applicationNativeProxy, applicationRootPlugin } from "./application-root-plugin.mjs";
+import {
+  applicationAccountProxy,
+  applicationNativeProxy,
+  applicationRootPlugin,
+} from "./application-root-plugin.mjs";
+
+test("application proxy supports scoped conversation HTTP and rejects broad native/RPC access", () => {
+  const env = {
+    ZCODE_APPLICATION_ACCOUNT_API: "http://127.0.0.1:3101",
+    ZCODE_APPLICATION_API_PREFIXES: "/api/enterprise,/api/native/conversations",
+  };
+  const proxy = applicationAccountProxy(env);
+  assert.equal(proxy["/api/native/conversations"].target, env.ZCODE_APPLICATION_ACCOUNT_API);
+  assert.equal(proxy["/api/native/conversations"].changeOrigin, false);
+  for (const prefix of [
+    "/api/native",
+    "/api/native/rpc",
+    "/api/native/rpc-host",
+    "/api/platform",
+    "/api/platform/settings",
+    "/api/native/../rpc",
+    "/api/native?token=private",
+  ]) {
+    assert.throws(
+      () => applicationAccountProxy({ ...env, ZCODE_APPLICATION_API_PREFIXES: prefix }),
+      /invalid-api-prefix/,
+    );
+  }
+});
 
 test("native ingress remains opt-in and preserves the caller origin", () => {
   assert.deepEqual(applicationNativeProxy({}), {});

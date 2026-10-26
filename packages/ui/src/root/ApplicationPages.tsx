@@ -1,5 +1,7 @@
+import { persistV4ComposerDraft, readV4ComposerDraft } from "@/v4/composer/composerDraftStore.js";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -34,10 +36,12 @@ export interface ApplicationPage {
 }
 
 export interface ApplicationPageContext {
+  /** Close the current page without reloading or changing the native workspace. */
+  close(): void;
   workspace?: ZCodeAgentWorkspaceTarget;
   rpcReady: boolean;
   /** Native navigation only; never sends input or grants execution. */
-  openConversation?(session: string): Promise<void>;
+  openConversation?(session: string, draft?: string): Promise<void>;
 }
 
 const ApplicationPageActionContext = createContext<ReactNode>(null);
@@ -56,14 +60,57 @@ export function ApplicationPageHeaderAction() {
   return useContext(ApplicationPageActionContext);
 }
 
+/** Transfers an unaccepted editor draft through the existing native per-session draft owner. */
+export function preserveConversationInputDraft(
+  path: string,
+  identity: string | undefined,
+  session: string,
+  text: string,
+) {
+  const existing = readV4ComposerDraft(path, identity, session);
+  if (existing?.text.trim() && existing.text !== text)
+    throw new Error("conversation_draft_conflict");
+  persistV4ComposerDraft(path, identity, session, { ...existing, text });
+  if (readV4ComposerDraft(path, identity, session)?.text !== text)
+    throw new Error("conversation_draft_unavailable");
+}
+export interface ApplicationConversationTarget {
+  session: string;
+  instanceId: string;
+  scope?: string;
+  draft?: string;
+}
+
+/** Navigation only, shared by application details and pages after native continuation. */
+export function useNativeConversationNavigation(
+  services: import("@zcode/services").IServiceAccessor,
+) {
+  const tabs = useTabStoreApi();
+  const setActiveTaskId = useZCodeSessionStore((s) => s.setActiveTaskId);
+  return useCallback(
+    async (session: string, draft?: string) => {
+      if (!services.projectService) throw new Error("conversation_navigation_unavailable");
+      const target = await services.projectService.prepareSession();
+      if (draft)
+        preserveConversationInputDraft(
+          target.workspacePath,
+          target.workspaceIdentity,
+          session,
+          draft,
+        );
+      tabs.getState().addTab(target.workspacePath, { workspacePurpose: "conversation" });
+      setActiveTaskId(target.workspacePath, session, target.workspaceIdentity);
+    },
+    [services, tabs, setActiveTaskId],
+  );
+}
+
 export function ApplicationPageContent({
   render,
   onNavigate,
   standalone,
 }: Pick<ApplicationPage, "render" | "standalone"> & { onNavigate?(): void }) {
-  const tabs = useTabStoreApi();
   const base = useBaseWorkspaceServices();
-  const setActiveTaskId = useZCodeSessionStore((s) => s.setActiveTaskId);
   const active = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
   const workspace = active && isWorkspaceTab(active) ? active : undefined;
   const resolution = useWorkspaceServicesResolution(
@@ -74,15 +121,14 @@ export function ApplicationPageContent({
   );
   // 独立历史页始终使用当前窗口的基础 Host，不能借活动远端 tab 操作另一执行位置。
   const services = standalone ? base : resolution.services;
+  const openConversation = useNativeConversationNavigation(services);
   return (
     <ServiceProvider services={services}>
       {render({
+        close: () => onNavigate?.(),
         rpcReady: Boolean(workspace) && resolution.rpcReady,
-        openConversation: async (session) => {
-          if (!services.projectService) throw new Error("conversation_navigation_unavailable");
-          const target = await services.projectService.prepareSession();
-          tabs.getState().addTab(target.workspacePath, { workspacePurpose: "conversation" });
-          setActiveTaskId(target.workspacePath, session, target.workspaceIdentity);
+        openConversation: async (session, draft) => {
+          await openConversation(session, draft);
           onNavigate?.();
         },
         workspace: workspace

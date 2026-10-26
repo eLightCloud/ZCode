@@ -88,6 +88,20 @@ including after completion. No additional run ledger or execution queue is added
 native model/schedule carriers without writing a definition. Its next time is a
 preview from now, not the next-run fact of a still-paused definition.
 
+`inspectAutomationCreation` is a read-only recovery query with the original
+creation UUID and creation parameters. The native service reuses its creation
+identity/configuration comparison (including native schedule normalization),
+returns the matching current definition, returns null when absent, and rejects
+changed parameters. It never creates, enables, updates or dispatches a definition.
+Callers can rebuild their own association after a lost creation acknowledgement;
+current caller authorization and application readiness must still be checked.
+
+```text
+persist original control → native paused create → association → receipt
+                                 │ lost ACK
+original control query → native inspect same creation → association → readiness
+```
+
 The trusted launcher may receive a private Application Host control port. It is
 never registered on the browser RPC service. Server exposes its bounded opaque
 control calls only behind the private instance credential. A configured extension

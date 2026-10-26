@@ -8,6 +8,7 @@ import {
 } from "../compact/index.js";
 import { completedToolPartMetadataSchema } from "../tools/tool-result-metadata.js";
 import { portableFileMetadata } from "./text-input-facts.js";
+import type { TimelineModelSelection } from "./session-message-parts.js";
 
 /** Portable message/part whitelist; checkpoint graph and ledger validation remain with their owner. */
 const id = z.string().min(1);
@@ -16,6 +17,15 @@ const timestamp = z.number().int().nonnegative();
 export const portableModelSelectionSchema = z.custom<ModelSelection>(
   (value) => modelSelectionSchema.safeParse(value).success,
 );
+// 原生 timeline 携带显示 label；不能用严格 ModelSelection 误拒绝普通首轮检查点。
+const portableTimelineModelSelectionSchema = z.custom<TimelineModelSelection>((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const { label, ...selection } = value as Record<string, unknown>;
+  return (
+    (label === undefined || typeof label === "string") &&
+    modelSelectionSchema.safeParse(selection).success
+  );
+});
 const tokens = z
   .object({
     total: z.number().nonnegative().optional(),
@@ -321,8 +331,8 @@ export const portableMessagePartSchema = z.discriminatedUnion("type", [
       targetMessageId: id.optional(),
       targetCheckpointId: id.optional(),
       restoredFileCount: timestamp.optional(),
-      fromModel: portableModelSelectionSchema.optional(),
-      toModel: portableModelSelectionSchema.optional(),
+      fromModel: portableTimelineModelSelectionSchema.optional(),
+      toModel: portableTimelineModelSelectionSchema.optional(),
       operationId: id.optional(),
       trigger: compactBoundaryPayloadSchema.shape.trigger.optional(),
       phase: compactBoundaryPayloadSchema.shape.phase,

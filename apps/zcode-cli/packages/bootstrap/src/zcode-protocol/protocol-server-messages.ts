@@ -2,7 +2,7 @@ import { normalizeStoredTitleSource } from "./v4-bridge-session-facts.js";
 import { networkCaptureControlSchema } from "@zcode/shared";
 import { runtimeMaintenanceParamsSchema } from "@zcode/shared";
 import { conversationCheckpointParamsSchema } from "@zcode/shared";
-import { TextCheckpointError, type SessionId } from "@zcode/contracts";
+import { TextCheckpointError, checkpointOriginalCommandId, type SessionId } from "@zcode/contracts";
 import { resolve } from "node:path";
 
 import { zcodeProtocolMethods } from "@zcode/shared";
@@ -134,11 +134,7 @@ export async function handleRequest(
       });
       return this.ok(request.id, {
         dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
-        originCommandId:
-          checkpoint.messages[0]?.info.anchor?.sourceCommandId ??
-          checkpoint.inputs.find(
-            (input) => input.promotedMessageID === checkpoint.messages[0]?.info.id,
-          )?.payload.conversationInputIntent?.sourceCommandId,
+        originCommandId: checkpointOriginalCommandId(checkpoint),
         ...(request.method === zcodeProtocolMethods.sessionTextCheckpointIndex
           ? { indexProjection: checkpointIndexProjection(checkpoint, directory, cliFacts) }
           : {}),

@@ -153,3 +153,22 @@ describe("trusted application page lifecycle", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+it("closes history through its context and keeps the underlying draft and focus", async () => {
+  const pages: ApplicationPage[] = [
+    {
+      id: "history",
+      label: "History",
+      standalone: true,
+      render: (context) => createElement("button", { onClick: context.close }, "Return to work"),
+    },
+  ];
+  render(element(pages, "history"));
+  const trigger = screen.getByRole("button", { name: "History" });
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("button", { name: "Return to work" }));
+  await vi.waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Return to work" })).toBeNull(),
+  );
+  await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+});

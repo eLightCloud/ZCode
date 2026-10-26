@@ -51,6 +51,7 @@ import type { ComposerModelOptions } from "@/chat-input-toolbar/ComposerModelMen
 import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadge.js";
 import type { ProviderConfigObject } from "@zcode/provider";
 import { ProviderLogo } from "@/settings/model-provider-section/ProviderLogo.js";
+import { useApplicationSettings } from "@/root/ApplicationSettings.js";
 import { ComposerTriggerTransition } from "@/chat-input-toolbar/ComposerTriggerTransition.js";
 /* eslint-disable max-lines -- 模型菜单同时维护触发器、模型项、provider family 连接方式子菜单和焦点恢复，拆开会增加受控 Dropdown 状态同步成本。 */
 
@@ -245,6 +246,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   triggerBadge,
 }: ModelConfigSelectProps) {
   const applicationIntl = useOptionalZCodeIntl();
+  const selectApplicationModelEntry = useApplicationSettings()?.selectModelEntry;
   const presentation = useRef({ composerOptions, modelGroups, normalizedValue, triggerLabel });
   if (
     composerOptions?.providerMenu?.pending &&
@@ -463,6 +465,47 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
       </span>
     ),
     [applicationIntl],
+  );
+
+  const renderGroupFooter = useCallback(
+    (group: ModelSelectGroup) => (
+      <>
+        {group.key.startsWith("application-models:") && group.items.length === 0 ? (
+          <div className="px-2 py-1 text-ui-sm text-foreground-subtle" role="status">
+            {group.key === "application-models:personal"
+              ? (applicationIntl?.intl.formatMessage({
+                  id: "chat.toolbar.model.customEmpty",
+                }) ?? "No custom models yet")
+              : (applicationIntl?.intl.formatMessage({
+                  id: "chat.toolbar.model.systemEmpty",
+                }) ?? "No system models available")}
+          </div>
+        ) : null}
+        {group.key === "application-models:personal" && showManageModelsAction && onManageModels ? (
+          <DropdownMenuItem
+            className="min-h-8 gap-2 px-2 text-ui-base"
+            data-model-footer-action="add-custom-model"
+            onSelect={() => {
+              // 添加入口应准确打开原生自定义 Tab，不能受上次企业 / 系统 Tab 影响。
+              selectApplicationModelEntry?.(null);
+              handlePopoverOpenChange(false);
+              onManageModels();
+            }}
+          >
+            {applicationIntl?.intl.formatMessage({
+              id: "chat.toolbar.model.addCustom",
+            }) ?? "Add custom model"}
+          </DropdownMenuItem>
+        ) : null}
+      </>
+    ),
+    [
+      applicationIntl,
+      showManageModelsAction,
+      onManageModels,
+      handlePopoverOpenChange,
+      selectApplicationModelEntry,
+    ],
   );
 
   const renderProviderConnectionHeader = useCallback(
@@ -736,6 +779,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
               onSelectModel={handleModelValueChange}
               renderItems={renderModelItems}
               renderConnection={renderProviderConnectionHeader}
+              renderGroupFooter={renderGroupFooter}
               providerFooter={
                 showManageModelsAction && manageModelsLabel ? (
                   <DropdownMenuItem
@@ -775,33 +819,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
                       <DropdownMenuRadioGroup value={normalizedValue}>
                         {group.items.map((item) => renderModelItem(item))}
                       </DropdownMenuRadioGroup>
-                      {group.key.startsWith("application-models:") && group.items.length === 0 ? (
-                        <div className="px-2 py-1 text-ui-sm text-foreground-subtle" role="status">
-                          {group.key === "application-models:personal"
-                            ? (applicationIntl?.intl.formatMessage({
-                                id: "chat.toolbar.model.customEmpty",
-                              }) ?? "No custom models yet")
-                            : (applicationIntl?.intl.formatMessage({
-                                id: "chat.toolbar.model.systemEmpty",
-                              }) ?? "No system models available")}
-                        </div>
-                      ) : null}
-                      {group.key === "application-models:personal" &&
-                      showManageModelsAction &&
-                      onManageModels ? (
-                        <DropdownMenuItem
-                          className="min-h-8 gap-2 px-2 text-ui-base"
-                          data-model-footer-action="add-custom-model"
-                          onSelect={() => {
-                            handlePopoverOpenChange(false);
-                            onManageModels();
-                          }}
-                        >
-                          {applicationIntl?.intl.formatMessage({
-                            id: "chat.toolbar.model.addCustom",
-                          }) ?? "Add custom model"}
-                        </DropdownMenuItem>
-                      ) : null}
+                      {renderGroupFooter(group)}
                     </div>
                   </Fragment>
                 );

@@ -117,3 +117,22 @@ it("excludes managed and public sources from personal discovery while rendering 
   expect(screen.queryByText("managed-private")).toBeNull();
   expect(screen.queryByRole("button", { name: "Tenant Scene" })).toBeNull();
 });
+
+it("hides the optional segment without losing personal catalog projection or source filtering", () => {
+  render(
+    element("personal", "", createElement("p", null, "tenant-only"), {
+      visible: false,
+      personalContent: createElement("p", null, "my-content"),
+      managedMarketplacePrefix: "vantage-hosted-",
+    }),
+  );
+  expect(screen.queryByRole("button", { name: "企业", exact: true })).toBeNull();
+  expect(screen.getByText("my-content")).toBeTruthy();
+  expect(screen.queryByText("tenant-scene")).toBeNull();
+  expect(screen.queryByText("managed-private")).toBeNull();
+});
+
+it("never renders a hidden application segment while its old selection is being cleared", () => {
+  render(element("application", "", createElement("p", null, "tenant-only"), { visible: false }));
+  expect(screen.queryByText("tenant-only")).toBeNull();
+});

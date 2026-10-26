@@ -913,6 +913,7 @@ const enUS: Record<string, string> = {
   "settings.resourceGroup.item.other": "{count} items",
   "pluginCreator.add": "Add",
   "pluginCreator.create": "Create plugin",
+  "pluginCreator.importArchive": "Import plugin ZIP",
   "pluginCreator.addMarketplace": "Add plugin marketplace",
   "pluginCreator.unavailable":
     "Plugin Creator is unavailable. Check the connection, then enable or restore Plugin Creator in the marketplace and retry.",
@@ -5082,7 +5083,7 @@ const enUS: Record<string, string> = {
   "settings.plugins.store.info.privacyPolicy": "Privacy policy",
   "settings.plugins.store.info.termsOfService": "Terms of service",
   "settings.plugins.store.personalEmpty":
-    "No plugins from personal sources yet. Use Create to add a marketplace source.",
+    "No personal plugins yet. Use Add to create a plugin or add a marketplace source.",
   "settings.plugins.filter.label": "Status filter",
   "settings.plugins.footerSummary": "{total} plugins · {enabled} enabled",
   "settings.plugins.searchPlaceholder": "Search plugins...",

@@ -21,6 +21,27 @@ function record(row: {
     result: row.result_json,
   });
 }
+/** Same predicate for readers and the session-locked deletion/enrollment writers. */
+export async function offlineLocationsFor(client: PoolClient, session: string): Promise<string[]> {
+  const result = await client.query(
+    `select distinct input_json->>'target' as location from zcode_sync.continuations
+    where session=$1 and input_json->>'kind'='offline' and result_json->>'status'='ready'
+      and ordinal>coalesce((select max(ordinal) from zcode_sync.continuations where session=$1
+        and input_json->>'kind'<>'offline' and result_json->>'status'='ready'),0)`,
+    [session],
+  );
+  return result.rows.map((row) => String(row.location));
+}
+
+/** Caller holds the session row lock; a missing checkpoint is not proof of an idle owner. */
+export async function requireDeletionSettled(client: PoolClient, session: string): Promise<void> {
+  const pending = await client.query(
+    "select 1 from zcode_sync.continuations where session=$1 and (result_json is null or result_json->>'status' in ('forward_only','cancelling')) limit 1",
+    [session],
+  );
+  if (pending.rowCount || (await offlineLocationsFor(client, session)).length)
+    throw new ConversationSyncError("blocked");
+}
 export function continuationJournal(transaction: Transaction): ConversationContinuationJournal {
   async function latch(
     scope: SyncScope,
@@ -58,16 +79,7 @@ export function continuationJournal(transaction: Transaction): ConversationConti
   }
   return {
     offlineLocations: (scope, session) =>
-      transaction(scope, async (client) => {
-        const result = await client.query(
-          `select distinct input_json->>'target' as location from zcode_sync.continuations
-        where session=$1 and input_json->>'kind'='offline' and result_json->>'status'='ready'
-          and ordinal>coalesce((select max(ordinal) from zcode_sync.continuations where session=$1
-            and input_json->>'kind'<>'offline' and result_json->>'status'='ready'),0)`,
-          [session],
-        );
-        return result.rows.map((row) => String(row.location));
-      }),
+      transaction(scope, (client) => offlineLocationsFor(client, session)),
     requestCancel: (scope, session, operation) => latch(scope, session, operation, "cancelling"),
     commitOffline: (scope, session, operation) => latch(scope, session, operation, "forward_only"),
     begin: (scope, raw, enrollment = false) =>
@@ -94,18 +106,13 @@ export function continuationJournal(transaction: Transaction): ConversationConti
         if (pending.rowCount) throw new ConversationSyncError("blocked");
         const state = syncStateSchema.parse(session.rows[0].state);
         if (enrollment) {
-          const offline = await client.query(
-            `select 1 from zcode_sync.continuations where session=$1 and input_json->>'kind'='offline'
-            and result_json->>'status'='ready' and ordinal>coalesce((select max(ordinal) from zcode_sync.continuations where session=$1
-              and input_json->>'kind'<>'offline' and result_json->>'status'='ready'),0) limit 1`,
-            [input.session],
-          );
+          const offline = await offlineLocationsFor(client, input.session);
           if (
             state.active ||
             state.pending ||
             state.selected ||
             state.candidates.length !== 1 ||
-            offline.rowCount
+            offline.length
           )
             throw new ConversationSyncError("blocked");
         }
@@ -155,6 +162,10 @@ export function continuationJournal(transaction: Transaction): ConversationConti
         const input = conversationContinuationResultSchema.parse(raw);
         if (!["ready", "cancelled"].includes(input.status))
           throw new ConversationSyncError("invalid");
+        // 删除与 offline-ready 发布必须共用同一行锁，不能在删除预检后新增接纳 owner。
+        await client.query("select session from zcode_sync.sessions where session=$1 for update", [
+          input.session,
+        ]);
         const row = await client.query(
           "select * from zcode_sync.continuations where session=$1 and operation=$2 for update",
           [input.session, input.operation],

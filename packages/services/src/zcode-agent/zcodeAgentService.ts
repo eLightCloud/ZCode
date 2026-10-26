@@ -4297,15 +4297,44 @@ export function createZCodeAgentService(
     async captureTextCheckpoint(params) {
       // 来源恢复需要扫描已落盘、但 Core 已回收的会话；使用原生只读启动路径，
       // 不调用 resume/模型同步/输入接纳，也不申请云端执行实例。
-      const client = await getReadOnlyClient(params);
-      return client.request(
-        params.includeIndexProjection
-          ? zcodeProtocolMethods.sessionTextCheckpointIndex
-          : zcodeProtocolMethods.sessionTextCheckpoint,
-        { sessionId: params.sessionId },
-        conversationCheckpointResultSchema,
-        { lifecycle: "observation", timeoutMs: 15000 },
-      );
+      try {
+        const client = await getReadOnlyClient(params);
+        return await client.request(
+          params.includeIndexProjection
+            ? zcodeProtocolMethods.sessionTextCheckpointIndex
+            : zcodeProtocolMethods.sessionTextCheckpoint,
+          { sessionId: params.sessionId },
+          conversationCheckpointResultSchema,
+          { lifecycle: "observation", timeoutMs: 15000 },
+        );
+      } catch (cause) {
+        // RPC 会丢失原生错误原型；保留低敏类别定位真实捕获失败，不输出正文或异常详情。
+        const error = cause as {
+          name?: string;
+          message?: string;
+          code?: unknown;
+          data?: { code?: unknown };
+        };
+        const nativeCode = error?.data?.code ?? error?.code;
+        const checkpointCode =
+          /^Text checkpoint: (invalid_checkpoint|unsupported_state|identity_conflict|session_not_found|storage_failure)$/.exec(
+            error?.message ?? "",
+          )?.[1];
+        logger.warn(undefined, "Native checkpoint export unconfirmed", {
+          event: "conversation.sync.export",
+          sessionId: params.sessionId,
+          outcome: "unconfirmed",
+          errorType: /^[A-Za-z]{1,64}$/.test(error?.name ?? "") ? error.name : "unknown",
+          code:
+            checkpointCode ??
+            (typeof nativeCode === "number"
+              ? nativeCode
+              : typeof nativeCode === "string" && /^[a-z_]{1,64}$/.test(nativeCode)
+                ? nativeCode
+                : "unknown"),
+        });
+        throw cause;
+      }
     },
 
     async readSession(params: ZCodeAgentReadSessionParams) {
@@ -5274,6 +5303,30 @@ export function createZCodeAgentService(
         endAt: params.endAt,
         scheduleRule: params.scheduleRule,
       });
+    },
+
+    async inspectAutomationCreation(
+      params: ZCodeAgentCreateAutomationParams & { creationId: string },
+    ) {
+      try {
+        const definition = await automationService.inspectCreation({
+          ...params,
+          recurring: params.recurring ?? true,
+          mode: params.mode as ZCodeTaskMode | undefined,
+        });
+        logger.info("Automation creation inspected", {
+          event: "automation.creation.inspect",
+          operationId: params.creationId,
+          outcome: definition ? "found" : "not_found",
+        });
+        return definition;
+      } catch (error) {
+        logger.warn("Automation creation inspection rejected", {
+          event: "automation.creation.inspect",
+          outcome: "rejected",
+        });
+        throw error;
+      }
     },
 
     async updateAutomation(params: ZCodeAgentUpdateAutomationParams) {

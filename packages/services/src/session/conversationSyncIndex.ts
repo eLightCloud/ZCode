@@ -7,6 +7,7 @@ import {
 } from "@zcode/shared";
 import { getConversationWorkspaceDir } from "../paths.js";
 import type { TaskIndexRow } from "./taskIndexRepo.js";
+import { isConversationWorkspaceCandidate } from "./tasksDatabase/conversation-classification-v4.js";
 
 /** Internal task-index read boundary. Only its facade supplies rows and serializes writers. */
 export async function captureConversationIndexFacts<T>(options: {
@@ -34,13 +35,26 @@ export async function captureConversationIndexFacts<T>(options: {
     !row ||
     row.workspace_identity ||
     options.target.workspaceIdentity ||
-    resolve(row.workspace_path) !== resolve(getConversationWorkspaceDir()) ||
+    row.project_id ||
+    row.execution_directories != null ||
+    !isConversationWorkspaceCandidate(row.workspace_path) ||
+    resolve(row.workspace_path) !== resolve(options.target.workspacePath) ||
     row.provider !== "glm" ||
     row.migration_source ||
     row.cron_automation_id ||
     row.off_peak_task_id
   )
     throw new Error("conversation_sync_ineligible");
+  const registered =
+    database
+      .prepare("select purpose from conversation_workspace_purpose where workspace_key=?")
+      .get(row.workspace_key)?.purpose === "conversation";
+  if (
+    !options.target.legacy &&
+    !registered &&
+    resolve(row.workspace_path) !== resolve(getConversationWorkspaceDir())
+  )
+    throw new Error("conversation_sync_unsupported_index");
   const raw: unknown = JSON.parse(row.meta_json),
     parsed = zcodeTaskMetaSchema.safeParse(raw);
   if (
@@ -53,7 +67,7 @@ export async function captureConversationIndexFacts<T>(options: {
     throw new Error("conversation_sync_unsupported_index");
   const meta = parsed.data;
   if (
-    !isConversationSyncMeta(meta, options.target.legacy) ||
+    !isConversationSyncMeta(meta, options.target.legacy, row.workspace_path) ||
     meta.taskId !== row.task_id ||
     resolve(meta.workspacePath) !== resolve(row.workspace_path)
   )
@@ -80,6 +94,11 @@ export async function captureConversationIndexFacts<T>(options: {
           "update tasks set meta_json=json_set(meta_json,'$.workspacePurpose','conversation') where workspace_key=? and task_id=?",
         )
         .run(row.workspace_key, row.task_id);
+      database
+        .prepare(
+          "insert into conversation_workspace_purpose values(?,'conversation') on conflict do nothing",
+        )
+        .run(row.workspace_key);
       database.exec("commit");
     } catch (error) {
       database.exec("rollback");
@@ -90,11 +109,16 @@ export async function captureConversationIndexFacts<T>(options: {
 }
 
 /** capture 与 create-only rebuild 共享资格；新增事实不能只在一端被接受。 */
-export function isConversationSyncMeta(meta: ZCodeTaskMeta, legacy = false): boolean {
+export function isConversationSyncMeta(
+  meta: ZCodeTaskMeta,
+  legacy = false,
+  workspacePath = getConversationWorkspaceDir(),
+): boolean {
   return (
     (meta.workspacePurpose === "conversation" || (legacy && meta.workspacePurpose === undefined)) &&
     !meta.workspaceIdentity &&
-    resolve(meta.workspacePath) === resolve(getConversationWorkspaceDir()) &&
+    isConversationWorkspaceCandidate(workspacePath) &&
+    resolve(meta.workspacePath) === resolve(workspacePath) &&
     meta.provider === "glm" &&
     !meta.target &&
     !meta.cronAutomationId &&

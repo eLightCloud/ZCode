@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { logger } from "@/logger.js";
 import { ScrollFadeViewport } from "@/components/ui/scroll-fade-viewport.js";
 import type { ComposerPlanGroup } from "@/lib/composerPlanGroups.js";
 import type { ModelSelectGroup } from "@/ModelConfigSelect.js";
@@ -105,6 +106,7 @@ export function ComposerModelMenu({
   options,
   renderItems,
   renderConnection,
+  renderGroupFooter,
   providerFooter,
   isItemLocked,
   onSelectModel,
@@ -114,18 +116,26 @@ export function ComposerModelMenu({
   options: ComposerModelOptions;
   renderItems: (items: ModelSelectGroup["items"]) => ReactNode;
   renderConnection: (group: ModelSelectGroup) => ReactNode;
+  renderGroupFooter?: (group: ModelSelectGroup) => ReactNode;
   providerFooter?: ReactNode;
   isItemLocked: (value: string) => boolean;
   onSelectModel: (value: string) => void;
 }) {
   // 无可用模型的分组仍可浏览配置；实际选择始终由 Composer owner 回传。
   const [browse, setBrowse] = useState<{ key: string; selection: string } | null>(null);
+  const selectionKey = JSON.stringify([normalizedValue, options.providerMenu?.selectedKey]);
+  const lastSelectionKey = useRef(selectionKey);
+  if (lastSelectionKey.current !== selectionKey) {
+    // 只比较当前值会在 A → B → A 时复活旧浏览分组；真实选择变化后必须废弃旧意图。
+    lastSelectionKey.current = selectionKey;
+    if (browse) setBrowse(null);
+  }
   const menuGroups: readonly ComposerPlanGroup[] = options.providerMenu?.groups ?? groups;
   const selected =
     menuGroups.find((group) => group.key === options.providerMenu?.selectedKey) ??
     menuGroups.find((group) => group.items.some((item) => item.value === normalizedValue));
   const group =
-    (browse?.selection === normalizedValue
+    (browse?.selection === selectionKey
       ? menuGroups.find((item) => item.key === browse.key)
       : undefined) ??
     selected ??
@@ -138,7 +148,10 @@ export function ComposerModelMenu({
   const { label } = getComposerThoughtDisplay(options);
   const sliderRef = useRef<HTMLInputElement>(null);
   const catalogPending = groups.length === 0 && Boolean(normalizedValue);
-  const showEffort = options.levels.length > 0 || catalogPending;
+  // 应用分区只在浏览；尚未选型号时不能把另一分区的思考档位带进空态。
+  const showEffort =
+    (options.levels.length > 0 || catalogPending) &&
+    (!group?.key.startsWith("application-models:") || currentGroupSelected);
   const [hoveredStop, setHoveredStop] = useState<string | null>(null);
   const sliderDisabled =
     Boolean(options.providerMenu?.pending) || !currentGroupSelected || options.levels.length < 2;
@@ -173,11 +186,21 @@ export function ComposerModelMenu({
         label={options.providerLabel}
         providerFooter={providerFooter}
         onSelect={(candidate) => {
+          // 应用分区聚合多个 Provider，空分区也必须可浏览；不能把它当成真实连接切换。
+          if (candidate.key.startsWith("application-models:")) {
+            setBrowse({ key: candidate.key, selection: selectionKey });
+            logger.lifecycle.info("[composer-model-menu] group browsed", {
+              groupKey: candidate.key,
+              modelCount: candidate.items.length,
+            });
+            return;
+          }
           if (options.providerMenu) {
+            setBrowse(null);
             options.providerMenu.onSelect(candidate as ComposerPlanGroup);
             return;
           }
-          setBrowse({ key: candidate.key, selection: normalizedValue });
+          setBrowse({ key: candidate.key, selection: selectionKey });
           // 复用唯一选择链路，供应商页只负责导航，不缓存模型状态。
           const model =
             candidate.items.find(
@@ -198,6 +221,7 @@ export function ComposerModelMenu({
         >
           {group ? renderItems(group.items) : null}
         </ScrollFadeViewport>
+        {group ? renderGroupFooter?.(group) : null}
         {showEffort ? (
           <>
             <DropdownMenuSeparator className="bg-border/50" />

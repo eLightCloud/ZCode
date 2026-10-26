@@ -201,6 +201,8 @@ export class ConversationChoiceError extends Error {
   }
 }
 export interface ConversationHistoryReader {
+  /** Display binding only; never grants resource or execution authority. */
+  scope?(): string | null;
   continuation?: {
     /** Optional platform provisioning intent; never sends business input or restores a body. */
     prepareTarget?(session: string, signal: AbortSignal): Promise<void>;

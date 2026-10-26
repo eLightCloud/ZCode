@@ -2217,6 +2217,7 @@ export function createLocalServices(options: {
     resolveHost: options?.resolveProjectHostService,
     repository: () => taskIndexRepo.getProjectRepository(),
     workspaceDirectory: join(projectDataRoot(), "workspace"),
+    registerConversationWorkspace: (path) => taskIndexRepo.registerConversationWorkspace(path),
     afterChange: publishProjectChange,
   });
   const taskGroupService = createTaskGroupService({

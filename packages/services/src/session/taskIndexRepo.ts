@@ -4,7 +4,10 @@ import {
   type ConversationIndexFacts,
   type ConversationIndexProjection,
 } from "@zcode/shared";
-import { preserveConversationPurpose } from "./tasksDatabase/conversation-classification-v4.js";
+import {
+  preserveConversationPurpose,
+  isConversationWorkspaceCandidate,
+} from "./tasksDatabase/conversation-classification-v4.js";
 import { captureConversationIndexFacts, isConversationSyncMeta } from "./conversationSyncIndex.js";
 import { TaskGroupRepository } from "#src/task-groups/index.js";
 import {
@@ -51,6 +54,8 @@ type DatabaseSyncInstance = InstanceType<typeof DatabaseSync>;
 type SQLInputValue = import("node:sqlite").SQLInputValue;
 
 export interface TaskIndexRow {
+  project_id?: string | null;
+  execution_directories?: string | null;
   cli_title?: string | null;
   cli_title_source?: string | null;
   cli_created_at?: number | null;
@@ -1442,21 +1447,38 @@ export class TaskIndexRepo {
   }
 
   /** Explicit native application purpose; no existing row is relabelled. */
-  async registerConversationWorkspace(): Promise<void> {
+  async registerConversationWorkspace(
+    workspacePath = getConversationWorkspaceDir(),
+  ): Promise<void> {
+    if (!isConversationWorkspaceCandidate(workspacePath))
+      throw new Error("conversation_sync_ineligible");
     await this.ensureReady();
-    this.recordConversationWorkspacePurpose();
+    this.recordConversationWorkspacePurpose(workspacePath);
   }
 
-  private recordConversationWorkspacePurpose(): void {
+  private recordConversationWorkspacePurpose(workspacePath = getConversationWorkspaceDir()): void {
     this.getDatabase()
       .prepare(
         "insert into conversation_workspace_purpose values(?,'conversation') on conflict do nothing",
       )
-      .run(resolveWorkspaceKey({ workspacePath: getConversationWorkspaceDir() }));
+      .run(resolveWorkspaceKey({ workspacePath }));
     logger.info(undefined, "Conversation workspace purpose registered", {
       event: "conversation.sync.qualification",
       outcome: "registered",
     });
+  }
+
+  /** Native index candidates, including old internal rows requiring explicit attribution. */
+  async listConversationSyncTargets(): Promise<Array<{ workspacePath: string; taskId: string }>> {
+    await this.ensureReady();
+    const rows = this.getDatabase()
+      .prepare(
+        "select workspace_path,task_id from tasks where provider='glm' and (workspace_identity is null or workspace_identity='') and project_id is null and execution_directories is null",
+      )
+      .all() as Array<{ workspace_path: string; task_id: string }>;
+    return rows
+      .filter((row) => isConversationWorkspaceCandidate(row.workspace_path))
+      .map((row) => ({ workspacePath: row.workspace_path, taskId: row.task_id }));
   }
 
   /** Native Host control only. SQL trigger protects unique actions across all connections. */

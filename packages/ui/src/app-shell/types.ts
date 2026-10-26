@@ -1,6 +1,6 @@
 import type { FileManagerTarget } from "@/lib/workspaceSidePane.js";
 import type { ComposerDraftHandoff } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type {
   ZCodeProvider,
   SessionCreateSource,
@@ -149,6 +149,8 @@ export interface RemoteConnectionOpenPreference {
 }
 
 export interface AppProps {
+  /** Display-only content while no execution workspace is connected. */
+  workspaceEntryContent?: ReactNode;
   services: IServiceAccessor;
   baseFeedbackService: IFeedbackService;
   onConnectRemote: (options: RemoteTarget, requestId?: string) => Promise<string>;

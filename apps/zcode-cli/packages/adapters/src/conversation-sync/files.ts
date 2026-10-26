@@ -7,6 +7,7 @@ import {
   type ConversationObjectBytesPort,
   type ConversationObjectReceipt,
   type SyncScope,
+  type Logger,
 } from "@zcode/contracts";
 import { conversationFileSchema, type ConversationFile } from "@zcode/shared";
 import { canonical } from "./canonical.js";
@@ -26,6 +27,7 @@ function verify(file: ConversationFile, bytes: Uint8Array) {
 export function createConversationFileStore(
   transaction: Transaction,
   objects: ConversationObjectBytesPort,
+  logger?: Logger,
 ): ConversationFileStore {
   async function known(scope: SyncScope, file: ConversationFile) {
     return transaction(scope, async (client, limits) => {
@@ -46,41 +48,55 @@ export function createConversationFileStore(
       const scope = syncScopeSchema.parse(rawScope);
       const file = conversationFileSchema.parse(raw);
       verify(file, bytes);
-      const existing = await known(scope, file);
-      if (existing) {
-        verify(file, await objects.read(scope, file, existing));
-        return;
-      }
-      // Scope is validated before IO. A failed metadata commit leaves an unreferenced
-      // fixed object, never a false saved version or a changed accepted binding.
-      const receipt = await objects.put(scope, file, bytes);
-      verify(file, await objects.read(scope, file, receipt));
-      await transaction(scope, async (client, limits) => {
-        await client.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-          canonical(scope),
-        ]);
-        const previous = await client.query(
-          "select bytes from zcode_sync.file_objects where sha256=$1",
-          [file.sha256],
-        );
-        if (previous.rowCount) {
-          if (Number(previous.rows[0].bytes) !== file.bytes)
-            throw new ConversationSyncError("storage");
-          return;
-        }
-        const used =
-          await client.query(`select ((select coalesce(sum(bytes),0) from zcode_sync.payloads)+
+      try {
+        const existing = await known(scope, file);
+        if (existing) verify(file, await objects.read(scope, file, existing));
+        else
+          await transaction(scope, async (client, limits) => {
+            // 与正文共用主体锁；检查后直到有界上传和回执提交结束都不能让并发写占走配额。
+            await client.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+              canonical(scope),
+            ]);
+            const previous = await client.query(
+              "select bytes,receipt from zcode_sync.file_objects where sha256=$1",
+              [file.sha256],
+            );
+            if (previous.rowCount) {
+              if (Number(previous.rows[0].bytes) !== file.bytes)
+                throw new ConversationSyncError("storage");
+              verify(file, await objects.read(scope, file, previous.rows[0].receipt));
+              return;
+            }
+            const used =
+              await client.query(`select ((select coalesce(sum(bytes),0) from zcode_sync.payloads)+
           (select coalesce(sum(bytes),0) from zcode_sync.file_objects))::text as bytes`);
-        if (Number(used.rows[0].bytes) + file.bytes > limits.maxSubjectBytes)
-          throw new ConversationSyncError("limit");
-        await client.query("insert into zcode_sync.file_objects values($1,$2,$3,$4,$5)", [
-          scope.tenant,
-          scope.subject,
-          file.sha256,
-          file.bytes,
-          receipt,
-        ]);
-      });
+            if (Number(used.rows[0].bytes) + file.bytes > limits.maxSubjectBytes)
+              throw new ConversationSyncError("limit");
+            // 未确认上传由资源 owner 按派生内容键核对准确版本；事务失败后重试不重复造版本。
+            const receipt = await objects.put(scope, file, bytes);
+            verify(file, await objects.read(scope, file, receipt));
+            await client.query("insert into zcode_sync.file_objects values($1,$2,$3,$4,$5)", [
+              scope.tenant,
+              scope.subject,
+              file.sha256,
+              file.bytes,
+              receipt,
+            ]);
+          });
+        logger?.info("Conversation file saved", {
+          event: "conversation.sync.file",
+          artifactRef: file.uri,
+          outcome: "saved",
+        });
+      } catch (cause) {
+        logger?.warn("Conversation file unconfirmed", {
+          event: "conversation.sync.file",
+          artifactRef: file.uri,
+          outcome: "unconfirmed",
+          code: cause instanceof ConversationSyncError ? cause.code : "storage",
+        });
+        throw cause;
+      }
     },
     async read(rawScope, raw) {
       const scope = syncScopeSchema.parse(rawScope);

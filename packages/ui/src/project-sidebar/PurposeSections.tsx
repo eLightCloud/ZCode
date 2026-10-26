@@ -36,7 +36,9 @@ export function PurposeSections({
   hasExpandedProjects,
   canToggleProjects,
   onToggleProjects,
+  canAddProject = true,
 }: {
+  canAddProject?: boolean;
   projects: ReactNode;
   tasks: ReactNode;
   onAdd(): void;
@@ -126,6 +128,7 @@ export function PurposeSections({
                         className="text-foreground-subtle hover:text-foreground"
                         data-testid={isProject ? "virtual-project-add" : "virtual-project-new-task"}
                         aria-label={msg(isProject ? "new" : "createTask")}
+                        disabled={isProject && !canAddProject}
                         onClick={isProject ? onAdd : onCreate}
                       >
                         {isProject ? (

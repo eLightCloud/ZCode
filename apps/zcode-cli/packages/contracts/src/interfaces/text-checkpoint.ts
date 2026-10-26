@@ -243,6 +243,12 @@ export const textCheckpointSchema = z
     const ref = (key: string | undefined) => {
       if (key && !allMessages.has(key)) issue("Unresolved checkpoint message reference");
     };
+    const isNativeTimeline = ({ info, parts }: (typeof value.messages)[number]) =>
+      info.semantics?.origin === "system" &&
+      info.semantics.kind === "timeline_event" &&
+      info.semantics.providerVisibility === "hidden" &&
+      parts.length > 0 &&
+      parts.every((part) => part.type === "timeline" || part.type === "compaction");
     for (const fact of value.commandFacts ?? []) unique(`entry:${fact.id}`);
     for (const [index, { info, parts }] of value.messages.entries()) {
       if (info.role === "user" && info.metadata && "conversationInputIntent" in info.metadata) {
@@ -260,11 +266,7 @@ export const textCheckpointSchema = z
       }
       unique(`message:${info.id}`);
       if (value.version < 4 && info.role !== (index % 2 === 0 ? "user" : "assistant")) issue();
-      const nativeTimeline =
-        info.semantics?.origin === "system" &&
-        info.semantics.kind === "timeline_event" &&
-        info.semantics.providerVisibility === "hidden" &&
-        parts.every((part) => part.type === "timeline" || part.type === "compaction");
+      const nativeTimeline = isNativeTimeline({ info, parts });
       // 原生维护 timeline 的 parent 是最近消息，可为 assistant 或首次记录自身；模型回答仍必须关联先前 user。
       if (
         info.role === "assistant" &&
@@ -401,14 +403,35 @@ export const textCheckpointSchema = z
       } else if (item.promotedMessageID !== undefined || item.promotedSequence !== undefined)
         issue();
     }
+    // 原生首轮可先落模型变更 timeline；只允许已验证的隐藏维护前缀，不放宽模型回答的父子关系。
+    const firstUser = value.messages.findIndex((message) => message.info.role === "user");
     if (
-      value.messages[0]?.info.role !== "user" ||
+      firstUser < 0 ||
+      (firstUser > 0 &&
+        (value.version < 4 ||
+          value.messages.slice(0, firstUser).some((message) => !isNativeTimeline(message)))) ||
       (value.version < 4 && value.messages.at(-1)?.info.role !== "assistant")
     )
       issue();
   });
 
 export type TextCheckpoint = z.infer<typeof textCheckpointSchema>;
+/** 原归属来自首次真实人工输入；首轮模型维护 marker 不是输入 owner。 */
+export function checkpointOriginalCommandId(value: TextCheckpoint): string | undefined {
+  const first = value.messages.find(
+    (message) =>
+      message.info.role === "user" &&
+      !message.info.synthetic &&
+      !message.info.summary &&
+      message.info.visibility !== "model-only" &&
+      message.info.semantics?.kind !== "compact_summary",
+  );
+  return (
+    first?.info.anchor?.sourceCommandId ??
+    value.inputs.find((input) => first && input.promotedMessageID === first.info.id)?.payload
+      .conversationInputIntent?.sourceCommandId
+  );
+}
 export function checkpointArtifactUris(value: {
   messages: Array<{
     info: {

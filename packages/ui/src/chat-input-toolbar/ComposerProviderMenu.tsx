@@ -62,6 +62,12 @@ export function ComposerProviderMenu({
   error?: string | null;
 }) {
   const { intl } = useZCodeIntl();
+  const groupLabel = (candidate: ModelSelectGroup) =>
+    candidate.key === "application-models:system"
+      ? intl.formatMessage({ id: "chat.toolbar.model.systemModels" })
+      : candidate.key === "application-models:personal"
+        ? intl.formatMessage({ id: "chat.toolbar.model.customModels" })
+        : candidate.label;
   const narrow = useSyncExternalStore(subscribe, snapshot, () => false);
   const [open, setOpen] = useState(false);
   // 切换失败后回到对应操作区域，避免错误藏在已关闭的 Provider 子菜单。
@@ -91,7 +97,7 @@ export function ComposerProviderMenu({
             <DropdownMenuRadioItem
               disabled={disabled || isDisabled?.(candidate)}
               value={candidate.key}
-              aria-label={[candidate.label, candidate.labelBadge].filter(Boolean).join(" ")}
+              aria-label={[groupLabel(candidate), candidate.labelBadge].filter(Boolean).join(" ")}
               data-testid={testId(TID_CHAT_MODEL_SELECT_GROUP, candidate.key)}
               data-model-provider-key={candidate.key}
               className="min-h-8 gap-2 pl-2 pr-8"
@@ -102,7 +108,7 @@ export function ComposerProviderMenu({
               }}
             >
               {/* 名称不占满剩余空间，避免把接入标签推到行尾。 */}
-              <span className="min-w-0 whitespace-normal break-words">{candidate.label}</span>
+              <span className="min-w-0 whitespace-normal break-words">{groupLabel(candidate)}</span>
               <ProviderAccessBadge group={candidate} />
             </DropdownMenuRadioItem>
           </Fragment>
@@ -119,7 +125,7 @@ export function ComposerProviderMenu({
   const title = (
     <span className="flex min-w-0 flex-1 items-center gap-1.5">
       {group ? <ProviderLogo logo={group.logo} className="size-4" /> : null}
-      <span className="truncate">{group?.label ?? "—"}</span>
+      <span className="truncate">{group ? groupLabel(group) : "—"}</span>
       {group ? <ProviderAccessBadge group={group} /> : null}
     </span>
   );
@@ -135,7 +141,7 @@ export function ComposerProviderMenu({
   ) : undefined;
   const triggerProps = {
     "data-testid": "composer-provider-trigger",
-    "aria-label": `${label}: ${group?.label ?? "—"}`,
+    "aria-label": `${label}: ${group ? groupLabel(group) : "—"}`,
     disabled: disabled || loading || (!group && !providerFooter),
     "aria-busy": loading || undefined,
     className:

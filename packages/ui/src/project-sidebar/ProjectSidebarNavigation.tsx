@@ -10,7 +10,9 @@ import { WebRemoteControlDeviceHeader } from "@/web-remote-control/WebRemoteCont
 export function ProjectSidebarNavigation({
   props,
   onCreate,
+  connected = true,
 }: {
+  connected?: boolean;
   props: Pick<
     ProjectSidebarProps,
     | "isWebRemoteControl"
@@ -34,6 +36,7 @@ export function ProjectSidebarNavigation({
       <NewTaskButtonGroup onCreateTask={onCreate} />
       {props.onOpenAutomations ? (
         <Button
+          disabled={!connected}
           variant="ghost"
           size="lg"
           className={`w-full justify-start gap-2 ${props.automationsActive ? "bg-selected text-foreground" : ""}`}
@@ -47,6 +50,7 @@ export function ProjectSidebarNavigation({
         </Button>
       ) : null}
       <Button
+        disabled={!connected}
         variant="ghost"
         size="lg"
         className={`w-full justify-start gap-2 ${props.pluginStoreActive ? "bg-selected text-foreground" : ""}`}

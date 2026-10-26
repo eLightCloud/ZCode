@@ -2,6 +2,7 @@ import type { NodeHttpIncomingRequest, NodeHttpOutgoingResponse } from "../http/
 import {
   ConversationSyncError,
   syncRequestSchema,
+  syncVersionSchema,
   type ConversationSyncStore,
   type Logger,
   type SyncScope,
@@ -66,6 +67,8 @@ export function createConversationSyncHttpHandler(options: {
         request.method === "POST" &&
         [
           "/versions",
+          // 首次登记与内部 enroll 分支必须使用同一分发入口，否则保存后始终 404。
+          "/enroll",
           "/deletion-choice",
           "/continue",
           "/continue-cancel",
@@ -122,14 +125,15 @@ export function createConversationSyncHttpHandler(options: {
             .object({ session: z.string().min(1), version: z.string().min(1) })
             .strict()
             .safeParse(body);
-          const location = request.headers["x-zcode-sync-location"];
-          if (!parsed.success || typeof location !== "string")
-            throw new ConversationSyncError("invalid");
+          const location = syncVersionSchema
+            .innerType()
+            .shape.location.safeParse(request.headers["x-zcode-sync-location"]);
+          if (!parsed.success || !location.success) throw new ConversationSyncError("invalid");
           reply(
             200,
             await options.continuation.enroll(
               scope,
-              location,
+              location.data,
               parsed.data.session,
               parsed.data.version,
             ),

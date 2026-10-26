@@ -11,6 +11,9 @@ export type ApplicationPluginStoreRender = (
 ) => ReactNode;
 
 export interface ApplicationPluginStoreSection {
+  /** Presentation only; the application server still authorizes every request. */
+  visible?: boolean;
+  onImport?: (segment: "public" | "community" | "personal" | "application") => void;
   label: string;
   marketplaceIds: readonly string[];
   onRefresh: () => void;

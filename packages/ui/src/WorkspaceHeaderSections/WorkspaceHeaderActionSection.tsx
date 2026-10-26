@@ -65,16 +65,18 @@ export function WorkspaceHeaderActionSection({
         <>
           {!hideHelpMenu ? <WorkspaceHelpMenuButton isDesktop={Boolean(isDesktop)} /> : null}
           {/* Bugfix: 远程控制移动端头部空间过窄，终端入口在这里会和核心操作争抢宽度。 */}
-          <WorkspaceTerminalToggleButton
-            isTerminalOpen={isTerminalOpen}
-            onToggleTerminal={onToggleTerminal}
-            disabledReason={readOnlyReason}
-            useWindowsCaptionSpacing={useWindowsCaptionSpacing}
-          />
+          {workspaceAbsPath && (
+            <WorkspaceTerminalToggleButton
+              isTerminalOpen={isTerminalOpen}
+              onToggleTerminal={onToggleTerminal}
+              disabledReason={readOnlyReason}
+              useWindowsCaptionSpacing={useWindowsCaptionSpacing}
+            />
+          )}
         </>
       ) : null}
       {/* 远程控制移动端只保留图标，避免 diff 数字把按钮撑宽导致标题拥挤。 */}
-      {!isSidePaneOpen ? (
+      {workspaceAbsPath && !isSidePaneOpen ? (
         <WorkspaceSidePaneToggleButton
           isSidePaneOpen={isSidePaneOpen}
           onToggleSidePane={onToggleSidePane}

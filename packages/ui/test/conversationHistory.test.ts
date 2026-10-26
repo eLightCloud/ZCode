@@ -178,3 +178,27 @@ it("an unconfirmed choice explicitly retries the same operation and stale candid
   expect(reader.chooseDeletion.mock.calls[1]?.[0]).toEqual(first);
   expect(screen.queryByRole("button", { name: "Check original choice" })).toBeNull();
 });
+
+it("shows a trusted failure message and clears it after a successful retry", async () => {
+  const error = new Error("private upstream details");
+  const reader: ConversationHistoryReader = {
+    history: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+    transcript: vi.fn(),
+  };
+  render(
+    createElement(ConversationHistory, {
+      reader,
+      labels: {
+        ...labels,
+        readError: (failure) => (failure === error ? "History service unavailable" : "Unexpected"),
+      },
+      onWorkspace: vi.fn(),
+    }),
+  );
+  expect((await screen.findByRole("alert")).textContent).toBe("History service unavailable");
+  expect(screen.queryByText("private upstream details")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await screen.findByText("Empty");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText(labels.continuationUnavailable)).toBeNull();
+});

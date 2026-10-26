@@ -1,3 +1,4 @@
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { Fragment, memo, useCallback, useContext, useMemo, useState } from "react";
 import type { ProjectTask, ProjectSidebarProps } from "@/project-sidebar/contract.js";
 import { TaskGroupTaskMenu } from "@/project-sidebar/TaskGroupTaskMenu.js";
@@ -25,17 +26,17 @@ export const ProjectTaskRow = memo(function Row({
   showFiles: boolean;
 }) {
   const presentation = useContext(ProjectTaskListContext);
+  const peripherals = useApplicationPeripherals();
   const { remoteSessionId, rename, pin, archive, unread } = useProjectTaskActions(task, refresh);
   const workspaceKey = task.workspaceIdentity?.trim() || task.workspacePath;
   const activeId = useZCodeSessionStore(
     (state) => state.workspaces[workspaceKey]?.activeTaskId ?? null,
   );
   const rows = useMemo(() => [task], [task]);
-  const select = useCallback(
-    () =>
-      onSelect(task.workspacePath, task.taskId, task.workspaceIdentity, undefined, task.unreadAt),
-    [onSelect, task],
-  );
+  const select = useCallback(() => {
+    peripherals?.closeConversationContent?.();
+    onSelect(task.workspacePath, task.taskId, task.workspaceIdentity, undefined, task.unreadAt);
+  }, [onSelect, task, peripherals]);
   const openFiles = useCallback(
     () => presentation.onOpenTaskFiles?.(task, remoteSessionId ?? undefined),
     [presentation.onOpenTaskFiles, task, remoteSessionId],

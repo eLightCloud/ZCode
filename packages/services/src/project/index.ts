@@ -75,6 +75,7 @@ const saveProjectSchema = z
 export function createProjectService(options: {
   repository(): Promise<ProjectRepositoryContract>;
   workspaceDirectory: string;
+  registerConversationWorkspace?(path: string): Promise<void>;
   ownerHostId?: string;
   directories?: ProjectDirectoryPort;
   /** 只解析现有连接；连接缺失拒绝，不创建替代 Host。 */
@@ -222,6 +223,7 @@ export function createProjectService(options: {
           if (params?.reuseDraft) {
             if (!(await stat(path)).isDirectory()) throw new Error("project.directory-required");
           } else await mkdir(path, { recursive: true });
+          await options.registerConversationWorkspace?.(path);
           return { workspacePath: path, additionalDirectories: [], projectId: null };
         }
         const repo = await options.repository();

@@ -95,7 +95,15 @@ export function applicationAccountProxy(env) {
   ];
   const reserved = ["/api/server-info", "/api/rpc-host-capability", "/api/native"];
   for (const prefix of prefixes) {
-    if (!/^\/api\/[a-z][a-z0-9-]*$/.test(prefix) || reserved.includes(prefix)) {
+    // 会话公开 HTTP 使用窄前缀；不能为嵌套接线开放整个 native / RPC 命名空间。
+    if (
+      !/^\/api\/[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*){0,2}$/.test(prefix) ||
+      reserved.includes(prefix) ||
+      prefix === "/api/platform" ||
+      prefix.startsWith("/api/platform/") ||
+      prefix === "/api/native/rpc" ||
+      prefix.startsWith("/api/native/rpc")
+    ) {
       throw new Error("application-root.invalid-api-prefix");
     }
   }

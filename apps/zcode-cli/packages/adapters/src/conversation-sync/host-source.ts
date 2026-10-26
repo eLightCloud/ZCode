@@ -3,6 +3,7 @@ import {
   TextCheckpointError,
   ConversationSyncError,
   textCheckpointSchema,
+  checkpointOriginalCommandId,
   type SyncScope,
 } from "@zcode/contracts";
 import type { ConversationSyncOutbox } from "./outbox.js";
@@ -40,11 +41,7 @@ export function createHostConversationSyncSource(options: {
             throw new ConversationSyncError("invalid");
           if (checkpoint && checkpoint.session.id !== session)
             throw new Error("checkpoint_identity");
-          const first =
-            checkpoint?.messages[0]?.info.anchor?.sourceCommandId ??
-            checkpoint?.inputs.find(
-              (input) => input.promotedMessageID === checkpoint.messages[0]?.info.id,
-            )?.payload.conversationInputIntent?.sourceCommandId;
+          const first = checkpoint ? checkpointOriginalCommandId(checkpoint) : undefined;
           if (
             !options.trustedInstance &&
             !options.outbox.ownsSession(options.scope, session, first, checkpoint?.session.parentID)

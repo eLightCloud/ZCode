@@ -6447,6 +6447,9 @@ const zhCN: Record<string, string> = {
   "chat.error.remoteNoAvailableModel":
     "此远程设备尚无可用模型，请先在本机配置模型，保存后会自动同步到远程设备",
   "chat.error.sendFailed": "发送失败，请稍后重试。",
+  "chat.error.inputPreparationUnconfirmed": "发送前准备尚未完成，输入已保留，请重试。",
+  "chat.error.inputPreparationRejected": "发送前检查未通过，输入已保留。请检查会话状态。",
+  "chat.error.draftSessionFailed": "草稿会话创建失败，输入已保留，请重试。",
   "chat.error.modelSettings": "模型设置",
   "chat.error.setModels": "配置",
   "chat.quota.startPlan.bucketDailyLow": "{model} 今日额度剩余 {percent}（{remaining} tokens）。",

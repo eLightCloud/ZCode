@@ -106,6 +106,7 @@ export const integrationTests = [
   "packages/web/test/webRemoteControlDeviceClient.test.ts",
   "packages/web/test/webRemoteControlTransportV2.test.ts",
   "packages/zcode-server-cli/test/coreHttp.test.ts",
+  "packages/zcode-server-cli/test/coreDiagnostics.test.ts",
   "packages/zcode-server-cli/test/ipc.test.ts",
   "packages/zcode-server-cli/test/proxyStdio.test.ts",
   "packages/zcode-server-cli/test/releaseDownload.test.ts",

@@ -14,12 +14,43 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { CommandAck, CommandType, SessionConfigState } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
+import {
+  getV4CommandFailureDiagnostics,
+  type V4CommandFailureDiagnostics,
+} from "@/v4/commandAckObservability.js";
 
 type DispatchCommand = (
   type: CommandType,
   payload: Record<string, unknown>,
   targetSessionId: string | null,
 ) => Promise<CommandAck>;
+
+type DraftFailureDiagnostics = Pick<
+  V4CommandFailureDiagnostics,
+  "stage" | "reason" | "nativeDispatch"
+> & {
+  source: V4CommandFailureDiagnostics["source"] | "command-ack";
+  status?: CommandAck["status"];
+};
+
+/** 仅携带可展示的机器码；原异常正文、堆栈与 cause 不进入草稿错误投影。 */
+export class DraftSessionCreationError extends Error {
+  constructor(
+    readonly code: string,
+    readonly diagnostics: DraftFailureDiagnostics,
+  ) {
+    super(code);
+    this.name = "DraftSessionCreationError";
+  }
+}
+
+function draftCreationFailure(error: unknown): DraftSessionCreationError {
+  const { reasonCode, ...diagnostics } = getV4CommandFailureDiagnostics(error);
+  return new DraftSessionCreationError(
+    reasonCode === "transport_error" ? "create_session_failed" : reasonCode,
+    diagnostics,
+  );
+}
 
 export interface DraftPrewarmController {
   /** 首条 admission 命令已发出、ACK 未收口；dispose 不得删除结果未知的会话。 */
@@ -40,12 +71,14 @@ export function startDraftSessionPrewarm(params: {
   workspaceKey: string;
   dispatchCommand: DispatchCommand;
   onReady: (sessionId: string) => void;
+  onFailed?: (failure: DraftSessionCreationError) => void;
   /** single-flight owner 用于等待不可取消的 createSession 收口；无论成功失败都只调用一次。 */
   onSettled?: () => void;
   /** 预热会话初始 config（全局「上次选择」，同步解析）；让投影首帧即全局、不闪。 */
   resolveInitialConfig?: () => Partial<SessionConfigState> | undefined;
 }): DraftPrewarmController {
-  const { workspaceKey, dispatchCommand, onReady, onSettled, resolveInitialConfig } = params;
+  const { workspaceKey, dispatchCommand, onReady, onFailed, onSettled, resolveInitialConfig } =
+    params;
   let disposed = false;
   let promotionState: "draft" | "pending" | "promoted" | "discarded" = "draft";
   let createdSessionId: string | null = null;
@@ -89,11 +122,20 @@ export function startDraftSessionPrewarm(params: {
         return;
       }
       if (ack.status !== "accepted" || ack.result?.type !== "createSession") {
-        logger.warn("[v4-draft-prewarm] createSession 被拒", {
+        const code =
+          ack.reasonCode && /^[a-zA-Z][a-zA-Z0-9_.]{0,95}$/.test(ack.reasonCode)
+            ? ack.reasonCode
+            : "create_session_failed";
+        const failure = new DraftSessionCreationError(code, {
+          source: "command-ack",
           status: ack.status,
-          reasonCode: ack.reasonCode ?? null,
+        });
+        logger.warn("[v4-draft-prewarm] createSession 被拒", {
+          ...failure.diagnostics,
+          reasonCode: failure.code,
           workspaceKey,
         });
+        onFailed?.(failure);
         return;
       }
       createdSessionId = ack.result.sessionId;
@@ -109,10 +151,13 @@ export function startDraftSessionPrewarm(params: {
       onReady(createdSessionId);
     })
     .catch((error) => {
+      const failure = draftCreationFailure(error);
       logger.warn("[v4-draft-prewarm] createSession 失败", {
-        error: error instanceof Error ? error.message : String(error),
+        ...failure.diagnostics,
+        reasonCode: failure.code,
         workspaceKey,
       });
+      onFailed?.(failure);
     })
     .finally(() => {
       onSettled?.();
@@ -173,6 +218,7 @@ interface DraftPrewarmCurrent {
   invalidationVersion: number;
   controller: DraftPrewarmController;
   binding: DraftPrewarmBinding | null;
+  failure: DraftSessionCreationError | null;
   settled: boolean;
   completion: Promise<void>;
   retiring: boolean;
@@ -189,6 +235,13 @@ interface DraftPrewarmCurrent {
  * 成功，所以这里做有界退避而不是放弃。
  */
 const PREWARM_RETRY_DELAYS_MS = [500, 1000, 2000];
+// 只停止已确认的应用策略拒绝；未确认和未知码仍沿原生有界退避，不用 owner/sync 前缀猜测。
+const NON_RETRYABLE_APPLICATION_INPUT_CODES = new Set([
+  "conversation_owner_elsewhere",
+  "conversation_original_owner_elsewhere",
+  "conversation_sync_limit",
+  "conversation_sync_blocked",
+]);
 
 /**
  * 同一逻辑 draft pane 的预热协调器。
@@ -265,7 +318,12 @@ class DraftSessionPrewarmCoordinator {
       this.requestedInvalidationVersion() !== invalidationVersion
     )
       throw new Error("草稿会话已切换，请重新发送");
-    if (!current.binding) throw new Error("草稿会话创建失败，请重试");
+    // 失败必须属于等待时捕获的同一代；否则准备超时/明确拒绝会被统一文案吞掉。
+    if (!current.binding)
+      throw (
+        current.failure ??
+        new DraftSessionCreationError("create_session_failed", { source: "transport" })
+      );
     return current.binding;
   }
 
@@ -351,6 +409,17 @@ class DraftSessionPrewarmCoordinator {
    * 瞬态的，按退避重排一次创建；用尽后保留失败态，由下一次生命周期失效重新创建。
    */
   private scheduleRetryAfterFailure(failed: DraftPrewarmCurrent): void {
+    if (
+      failed.failure?.diagnostics.source === "application-input" &&
+      NON_RETRYABLE_APPLICATION_INPUT_CODES.has(failed.failure.code)
+    ) {
+      logger.info("[v4-draft-prewarm] 明确拒绝后停止自动重试", {
+        reasonCode: failed.failure.code,
+        workspaceKey: this.workspaceKey,
+        retryAttempt: failed.retryAttempt,
+      });
+      return;
+    }
     const delay = PREWARM_RETRY_DELAYS_MS[failed.retryAttempt];
     if (delay === undefined) return;
     this.clearRetryTimer();
@@ -411,6 +480,9 @@ class DraftSessionPrewarmCoordinator {
         current.binding = binding;
         this.emitBindings();
       },
+      onFailed: (failure) => {
+        if (this.current === current && !current.retiring) current.failure = failure;
+      },
       onSettled: () => {
         current.settled = true;
         complete();
@@ -433,6 +505,7 @@ class DraftSessionPrewarmCoordinator {
       invalidationVersion,
       controller,
       binding: null,
+      failure: null,
       settled: false,
       completion,
       retiring: false,

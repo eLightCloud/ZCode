@@ -1,4 +1,6 @@
-import { createServiceLogger } from "@zcode/services/node";
+import { createServiceLogger, type ServiceLogger } from "@zcode/services/node";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { createServerHostServices } from "@zcode/services/node";
 import { disposeServiceResourcesAndWait } from "@zcode/services/node";
@@ -25,7 +27,157 @@ import { readMaintenanceOperation } from "./maintenance.js";
 
 declare const __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: string | undefined;
 
-export async function runServerCore(generation: number): Promise<void> {
+export interface CoreDiagnosticLog {
+  logger: ServiceLogger;
+  flush(timeoutMs?: number): Promise<{ flushed: boolean; dropped: number; writeFailures: number }>;
+}
+
+/** Core-owned metadata log, deliberately independent from arbitrary child stdio. */
+export function createCoreDiagnosticLog(
+  directory: string,
+  generation: number,
+  limits: { maxFileBytes?: number; maxQueuedBytes?: number } = {},
+): CoreDiagnosticLog {
+  const maxFileBytes = limits.maxFileBytes ?? 1024 * 1024;
+  const maxQueuedBytes = limits.maxQueuedBytes ?? 64 * 1024;
+  if (
+    !Number.isSafeInteger(maxFileBytes) ||
+    maxFileBytes < 512 ||
+    !Number.isSafeInteger(maxQueuedBytes) ||
+    maxQueuedBytes < 512
+  )
+    throw new Error("Invalid Core diagnostic bounds");
+  const path = join(directory, "core.log");
+  let pending = Promise.resolve();
+  let queuedBytes = 0,
+    dropped = 0,
+    unreportedDrops = 0,
+    writeFailures = 0;
+  async function ignoreMissing(work: () => Promise<unknown>): Promise<void> {
+    try {
+      await work();
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+  async function append(line: string): Promise<void> {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await ignoreMissing(async () => {
+      if ((await lstat(path)).isSymbolicLink()) throw new Error("Core diagnostic symlink rejected");
+    });
+    const flags =
+      constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0);
+    let file = await open(path, flags, 0o600);
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile()) throw new Error("Core diagnostic target is not a file");
+      if (stat.size + Buffer.byteLength(line) > maxFileBytes) {
+        // Windows 不允许重命名仍打开的文件；所有平台先关闭 append，再轮转固定的三个路径。
+        await file.close();
+        await ignoreMissing(() => unlink(path + ".2"));
+        await ignoreMissing(() => rename(path + ".1", path + ".2"));
+        await ignoreMissing(() => rename(path, path + ".1"));
+        file = await open(path, flags, 0o600);
+      }
+      await file.writeFile(line);
+    } finally {
+      await file.close();
+    }
+  }
+  function record(level: "info" | "warn" | "error", args: unknown[]): void {
+    const metadata = args.at(-1);
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return;
+    const value = metadata as Record<string, unknown>;
+    if (
+      typeof value.event !== "string" ||
+      ![
+        "application.host.call",
+        "application.host.control",
+        "application.host.lifecycle",
+        "server.rpc.failure",
+        "server.startup",
+      ].includes(value.event)
+    )
+      return;
+    // 只复制逐字段白名单；不能 stringify 输入对象、异常、扩展日志正文或 RPC 的附加参数。
+    const safe: Record<string, string | number> = {
+      timestamp: new Date().toISOString(),
+      level,
+      generation,
+      pid: process.pid,
+      event: value.event,
+    };
+    for (const key of ["method", "channel", "outcome", "reasonCode", "correlationId", "clientMode"])
+      if (typeof value[key] === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(value[key]))
+        safe[key] = value[key];
+    for (const key of ["commandId", "sessionId"])
+      if (
+        typeof value[key] === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value[key])
+      )
+        safe[key] = value[key];
+    if (
+      typeof value.durationMs === "number" &&
+      Number.isFinite(value.durationMs) &&
+      value.durationMs >= 0
+    )
+      safe.durationMs = Math.round(value.durationMs * 10) / 10;
+    const line = JSON.stringify(safe) + "\n";
+    const bytes = Buffer.byteLength(line);
+    if (bytes > maxFileBytes || queuedBytes + bytes > maxQueuedBytes) {
+      dropped++;
+      unreportedDrops++;
+      return;
+    }
+    queuedBytes += bytes;
+    pending = pending.then(async () => {
+      try {
+        await append(line);
+        if (unreportedDrops) {
+          const count = unreportedDrops;
+          await append(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: "warn",
+              event: "server.diagnostics.dropped",
+              generation,
+              count,
+            }) + "\n",
+          );
+          unreportedDrops -= count;
+        }
+      } catch {
+        writeFailures++;
+      } finally {
+        queuedBytes -= bytes;
+      }
+    });
+  }
+  return {
+    logger: {
+      debug: () => undefined,
+      info: (_traceId, ...args) => record("info", args),
+      warn: (_traceId, ...args) => record("warn", args),
+      error: (_traceId, ...args) => record("error", args),
+    },
+    async flush(timeoutMs = 500) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const flushed = await Promise.race([
+        pending.then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), timeoutMs);
+        }),
+      ]);
+      clearTimeout(timer);
+      return { flushed, dropped, writeFailures };
+    },
+  };
+}
+
+export async function runServerCore(
+  generation: number,
+  diagnostics?: CoreDiagnosticLog,
+): Promise<void> {
   let shutdown: ((reason: string) => Promise<void>) | undefined;
   let parentDisconnected = false;
   let startupStopReason: string | undefined;
@@ -114,6 +266,7 @@ export async function runServerCore(generation: number): Promise<void> {
     const sourceServerId = (await resolveCoreServerId()) ?? hostname() ?? "zcode-server";
     const { services, workspaceIdentityMapper, migrationFailedPathCount } =
       await createServerHostServices({
+        applicationHostLogger: diagnostics?.logger,
         onApplicationControlReady: (port) => {
           applicationControl = port;
         },
@@ -154,6 +307,7 @@ export async function runServerCore(generation: number): Promise<void> {
     const serverId = sourceServerId;
     const ingressToken = authToken || authTokenHash ? undefined : await createIngressToken(layout);
     const http = await createCoreHttpServer(services, {
+      diagnosticLogger: diagnostics?.logger,
       applicationControl: (method, input) => {
         if (!applicationControl) throw new Error("Application control unavailable");
         return applicationControl.control(method, input);
@@ -293,6 +447,7 @@ export async function runServerCore(generation: number): Promise<void> {
       await http.close().catch(() => undefined);
       await automation?.dispose();
       await disposeServiceResourcesAndWait(services).catch(() => undefined);
+      await diagnostics?.flush();
       await send({ type: "shutdown-ack" });
       await send({ type: "exit", reason });
       try {
@@ -341,12 +496,17 @@ export async function runServerCore(generation: number): Promise<void> {
         cleanupError ??= failure;
       }
     }
-    createServiceLogger("server-core").error(undefined, "Native Core startup failed", {
-      event: "server.startup",
-      outcome: "failed",
-      generation,
-      reasonCode: cleanupError ? "cleanup_unconfirmed" : "initialization_failed",
-    });
+    (diagnostics?.logger ?? createServiceLogger("server-core")).error(
+      undefined,
+      "Native Core startup failed",
+      {
+        event: "server.startup",
+        outcome: "failed",
+        generation,
+        reasonCode: cleanupError ? "cleanup_unconfirmed" : "initialization_failed",
+      },
+    );
+    await diagnostics?.flush();
     // An unconfirmed drain keeps the writer guard until process termination.
     if (cleanupError)
       throw new AggregateError([error, cleanupError], "Core startup cleanup incomplete");

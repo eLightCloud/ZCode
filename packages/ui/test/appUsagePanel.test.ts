@@ -144,6 +144,9 @@ describe("AppUsageLifetimeSummaryStrip", () => {
     // 「正在统计中」Suspense fallback 消失不了（a7cade07fb 曾放宽到 5s 仍不够）。
     // 渲染前用与组件内 lazy 完全一致的 specifier 预热模块，动态 import 命中缓存立即
     // resolve，占位不再依赖机器负载；若图表模块本身加载失败，预热会在此处直接报错。
+    // 预热 import 自身要在隔离 worker 里首编译整张图表模块图，全量高负载下仍会顶穿
+    // 全局 testTimeout 30s（实测复现）；按 settingsPage 冷启动先例放宽本用例到 90s
+    // （per-test 参数是覆盖全局而非取大，必须 ≥ 30s）。
     await Promise.all([
       import("@/settings/usage-stats/AppUsageDailyModelTrendChart.js"),
       import("@/settings/usage-stats/AppUsageModelUsagePieChart.js"),
@@ -190,5 +193,5 @@ describe("AppUsageLifetimeSummaryStrip", () => {
     expect(screen.queryByText("消息数量")).toBeNull();
     expect(screen.queryByText("活跃天数")).toBeNull();
     expect(screen.queryByText("最常用模型")).toBeNull();
-  });
+  }, 90_000);
 });

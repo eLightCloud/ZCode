@@ -26,6 +26,8 @@ UI 纠偏：分区复用 WorkspacePurposeSection 和原折叠/顺序偏好；项
 
 桌面本地项目添加目录通过 IPlatformService.selectDirectories 调起系统多选；结果仅合并去重到编辑器草稿，保存才提交。远端与 Web/手机目录浏览通过 projectService.readDirectory(hostId)，不从当前 tab 推导文件服务；DirectoryBrowser 的迟到响应沿用请求序号判定。选择在途与保存/关闭互斥，取消不修改草稿。见 docs/ui/project-local-directory-picker.md。
 
+新建表单「此电脑」的 local 是服务 owner 占位值，不是 Web 的真实 Host：读取目录和保存省略占位值，已有项目与明确远端保留真实 Host。创建后是否登记额外设备沿用该次保存选择；不得因 Web owner 返回 remote:server ID 就要求其拥有额外设备成员资格。
+
 有源文件夹的新建（含恢复）在 Host 成员登记和 saveProject 前显示本次目录信任确认，展示所选设备及完整 roots。ProjectEditor 是唯一草稿和确认请求 owner；取消保留表单，隐藏/卸载令旧查询与确认失效，单次保存以在途引用去重。确认只授权本次创建，不持久化、不改变 Hook Trust；重复使用目录仍确认，本地零 roots 直接创建。编辑和添加已有远程项目保持原行为；已保存项目的入口登记重试复用 created，不再次创建或确认。见 docs/specs/project-creation-folder-confirmation.md。
 
 本地项目行根据 roots 数量和展开态显示文件夹：0/1 root 使用 Folder/FolderOpen，多个 root 使用 Folders/FoldersOpen。composer 当前项目和菜单候选复用同一数量规则，保持收起图标。图标直接派生自当前项目，不维护副本。远程项目行复用连接展示模型的五态图标，已连接为中性云，展开/收起不改变设备图标。不显示独立箭头；连接进度与错误诊断沿用原有入口。hover/focus/touch 保留更多、查看文件、新建任务三个入口，右键复用相同操作定义；按钮不触发行折叠。查看文件沿用现有 WorkspaceFileTree，多 root 先选择，空 root 禁用；远端经现有连接/身份绑定，手机经 shared-host 切换，迟到结果不能覆盖新目标。

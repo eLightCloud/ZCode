@@ -77,6 +77,7 @@ export function ProjectCreation({
     return { workspaceKey, activeTaskId, draftFocusVersion, draftProjectId };
   });
   const active = useRef(true);
+  const creationHostId = useRef(defaultDeviceId ?? "local");
   const admittedHosts = useRef(new Map(directory.hosts.map((host) => [host.id, host])));
   const [connection, setConnection] = useState<{
     device?: ProjectDevice;
@@ -142,7 +143,9 @@ export function ProjectCreation({
   };
   const saved = async (project: VirtualProject) => {
     if (!active.current) return;
-    if (project.hostId !== "local") {
+    // Web 当前服务返回真实 remote:server Host ID；是否登记额外设备必须沿用保存时的选择，
+    // 不能按返回 ID 的字面值把当前 owner 当成缺失成员的远端。重试仍复用同一次保存目标。
+    if (creationHostId.current !== "local") {
       const host = admittedHosts.current.get(project.hostId);
       if (!host) throw new Error("remote-project.host-removed");
       await remoteService.addEntry({
@@ -230,6 +233,7 @@ export function ProjectCreation({
         onSaved={saved}
         onBeforeSave={async (hostId) => {
           await prepareHost(hostId);
+          creationHostId.current = hostId;
         }}
         remoteService={remoteService}
         onSavedExisting={async (isCurrent) => {

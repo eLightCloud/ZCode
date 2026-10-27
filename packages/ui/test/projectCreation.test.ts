@@ -176,6 +176,26 @@ it("opens the complete form directly and creates a local project without folders
     ),
   );
 });
+it("finishes Web owner creation without registering the owner as an additional remote device", async () => {
+  const { service, remoteService, props } = await setup();
+  service.saveProject.mockResolvedValueOnce({
+    id: "web-project",
+    hostId: "remote:server:web-owner",
+    name: "Web",
+    roots: [],
+  });
+  fireEvent.click(screen.getByTestId("virtual-project-save"));
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce());
+  expect(remoteService.readDirectory).not.toHaveBeenCalled();
+  expect(remoteService.addEntry).not.toHaveBeenCalled();
+  expect(props.onSaved).toHaveBeenCalledOnce();
+  expect(props.onCreateTask).toHaveBeenCalledWith(
+    expect.objectContaining({
+      projectId: "web-project",
+      hostId: "remote:server:web-owner",
+    }),
+  );
+});
 it("selects the saved project only after directory refresh and preserves the draft group", async () => {
   const { props } = await setup();
   let finish!: () => void;

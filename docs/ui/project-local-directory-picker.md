@@ -18,6 +18,7 @@ ProjectEditor 仍是名称、roots、primary 的唯一草稿 owner；多选结�
 ## 边界与失败语义
 
 - 仅 `hostId` 未指定或为 `local`，且平台提供 `selectDirectories` 时使用系统选择器；判定不依赖当前 tab/cwd。远端项目继续浏览所属 Host，Web/手机未提供该能力，不能选择浏览器所在设备的目录作为 Host root。
+- 新建设备菜单的「此电脑」是当前项目服务 owner 的占位选项：目录读取和保存均省略该选项的 `local`，由服务端解析 owner；已有项目、固定目录和明确远端继续携带真实 Host ID。Web owner 返回 `remote:server:*` 不表示额外设备，创建完成只对显式远端选择登记成员入口，不能按返回 ID 的字面值误判。
 - 原生选择在途期间禁用编辑、保存、删除和关闭，避免异步返回与草稿修改交错；选择完成后再合并一次。组件卸载后的结果不能触发持久化或重新打开编辑器。
 - 取消不修改草稿；调用失败显示原错误区域、保留草稿并允许重试，不自动切换到另一选择方式。
 - 目录选择不改变 Host 组织态、workspaceIdentity、owner/lease、桌面 continuous 或手机 replayable 语义；无数据库/CLI 协议迁移。

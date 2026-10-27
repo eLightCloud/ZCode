@@ -137,8 +137,13 @@ export function ProjectEditor({
   const sidebar = useOptionalProjectDirectory();
   const platform = useOptionalPlatform();
   const [selectedDeviceId, setSelectedDeviceId] = useState(defaultDeviceId ?? "local");
+  // “此电脑”的 local 是设备选择占位值；Web 服务 owner 有独立 Host ID。
+  // 新建时省略该占位值，让目录读取与保存都由当前服务裁决；已有项目和明确远端仍使用真实 Host。
   const hostId =
-    project?.hostId ?? fixedFolder?.hostId ?? host?.id ?? (devices ? selectedDeviceId : undefined);
+    project?.hostId ??
+    fixedFolder?.hostId ??
+    host?.id ??
+    (devices && selectedDeviceId !== "local" ? selectedDeviceId : undefined);
   const remote = Boolean(hostId && hostId !== "local");
   const msg = (id: string) => intl.formatMessage({ id: `project.${id}` });
   const [name, setName] = useState(

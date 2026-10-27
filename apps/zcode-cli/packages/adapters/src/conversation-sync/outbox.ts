@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
+import { migrateOutboxObservation, outboxObservation } from "./outbox-observation.js";
 import { outboxControlIdentity } from "./outbox-control-identity.js";
 import type { NativeControlIdentityView } from "./contract.js";
 import {
@@ -17,6 +18,7 @@ import {
 import { canonical, digest } from "./canonical.js";
 
 export interface ConversationSyncOutbox {
+  observation: ReturnType<typeof outboxObservation>;
   legacyAttribution(
     scope: SyncScope,
     session: string,
@@ -73,7 +75,7 @@ export interface ConversationSyncOutbox {
   close(): void;
 }
 const OUTBOX_APPLICATION_ID = 0x5a435359;
-const OUTBOX_SCHEMA_VERSION = 6;
+const OUTBOX_SCHEMA_VERSION = 7;
 const OUTBOX_BUSY_TIMEOUT_MS = 5000;
 
 /** Separate native sync metadata file; never opens or migrates a session/plugin database. */
@@ -84,7 +86,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     const application = Number(db.prepare("pragma application_id").get()?.application_id);
     const tables = db.prepare("select name from sqlite_master where type='table'").all();
     if (
-      ![0, 1, 2, 3, 4, 5, OUTBOX_SCHEMA_VERSION].includes(version) ||
+      ![0, 1, 2, 3, 4, 5, 6, OUTBOX_SCHEMA_VERSION].includes(version) ||
       (version === 0 && (tables.length > 0 || application !== 0)) ||
       (version > 0 && application !== OUTBOX_APPLICATION_ID)
     )
@@ -131,6 +133,10 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       db.exec(
         `create table sync_legacy_attribution(session text primary key,tenant text not null,subject text not null,checkpoint text not null,operation text not null); create table sync_rejections(tenant text not null,subject text not null,session text not null,operation text not null,code text not null,primary key(tenant,subject,session)); pragma user_version=6;`,
       );
+    if (version < 7) {
+      migrateOutboxObservation(db);
+      db.exec("pragma user_version=7");
+    }
     db.prepare(
       "insert into sync_installation(singleton,location) values(1,?) on conflict do nothing",
     ).run("host:" + randomUUID());
@@ -140,6 +146,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     db.close();
     throw cause;
   }
+  const observation = outboxObservation(db);
   function scopeValues(scope: SyncScope) {
     const parsed = syncScopeSchema.parse(scope);
     return [parsed.tenant, parsed.subject];
@@ -164,8 +171,9 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       .get(...values);
     const hash = digest(request.command);
     if (previous && previous.fingerprint !== hash) throw new ConversationSyncError("conflict");
-    db.prepare(`insert into sync_outbox(tenant,subject,session,operation,fingerprint,request)
-      values(?,?,?,?,?,?) on conflict do nothing`).run(...values, hash, canonical(request));
+    db.prepare(`insert into sync_outbox(tenant,subject,session,operation,fingerprint,request,created_ms)
+      values(?,?,?,?,?,?,?) on conflict do nothing`).run(...values, hash, canonical(request), Date.now());
+    observation.created(scope);
   }
   function cursor(scope: SyncScope) {
     const row = db
@@ -174,6 +182,7 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
     return row ? Number(row.cursor) : 0;
   }
   return {
+    observation,
     checkLegacyOwner,
     rejection(scope, session) {
       return (
@@ -490,8 +499,8 @@ export function createConversationSyncOutbox(path: string): ConversationSyncOutb
       )
         throw new ConversationSyncError("conflict");
       db.prepare(
-        "update sync_outbox set receipt=? where tenant=? and subject=? and session=? and operation=?",
-      ).run(canonical(receipt), ...values);
+        "update sync_outbox set receipt=?,acknowledged_ms=?,failure=null where tenant=? and subject=? and session=? and operation=? and receipt is null",
+      ).run(canonical(receipt), Date.now(), ...values);
     },
     savedVersion(scope, session) {
       const row = db

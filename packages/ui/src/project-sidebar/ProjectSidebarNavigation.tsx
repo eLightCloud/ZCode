@@ -20,6 +20,9 @@ export function ProjectSidebarNavigation({
     | "automationsActive"
     | "onOpenPluginStore"
     | "pluginStoreActive"
+    | "applicationSidebarPages"
+    | "activeApplicationPageId"
+    | "onOpenApplicationPage"
     | "webRemoteControlWorkspaceSwitcher"
   >;
   onCreate(): void;
@@ -61,6 +64,21 @@ export function ProjectSidebarNavigation({
         <Blocks className="size-4" />
         {intl.formatMessage({ id: "workspace.openPluginsSettings" })}
       </Button>
+      {/* 受信装配注册的主区页面紧跟场景入口；不依赖项目连接，无装配时不渲染。 */}
+      {(props.applicationSidebarPages ?? []).map((entry) => (
+        <Button
+          key={entry.id}
+          variant="ghost"
+          size="lg"
+          className={`w-full justify-start gap-2 ${props.activeApplicationPageId === entry.id ? "bg-selected text-foreground" : ""}`}
+          aria-pressed={props.activeApplicationPageId === entry.id}
+          data-testid={`application-page-${entry.id}-open`}
+          onClick={() => props.onOpenApplicationPage?.(entry.id)}
+        >
+          {entry.Icon ? <entry.Icon className="size-4" aria-hidden={true} /> : null}
+          {entry.label}
+        </Button>
+      ))}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createHostConversationSyncSource } from "../src/conversation-sync/host-source.js";
 import { createConversationSyncOutbox } from "../src/conversation-sync/outbox.js";
-import { checkpoint } from "../checks/sync-fixture.mjs";
+import { checkpoint, logger } from "../checks/sync-fixture.mjs";
 
 it("distinguishes absent bases from corrupt branch modes without rewriting either", async () => {
   const root = await mkdtemp(join(tmpdir(), "sync-mode-")),
@@ -145,5 +145,57 @@ it("binds automatic capture to the first real input after a model maintenance ma
   } finally {
     outbox.close();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("excludes known foreign owners before capture while unknown ownership still blocks", async () => {
+  const box = createConversationSyncOutbox(":memory:");
+  const original = { tenant: randomUUID(), subject: randomUUID() };
+  const current = { tenant: randomUUID(), subject: randomUUID() };
+  box.bindInput(original, "original-first", "foreign");
+  box.ownsSession(original, "foreign", "original-first");
+  box.bindInput(original, "original-pending", "foreign-pending");
+  box.bindInput(current, "current-first", null);
+  const captured: string[] = [],
+    blocked: string[] = [],
+    excluded: string[] = [];
+  const source = createHostConversationSyncSource({
+    scope: current,
+    location: box.location(),
+    trustedInstance: false,
+    outbox: box,
+    logger: {
+      ...logger,
+      debug: (_message, fields) => {
+        excluded.push(String(fields?.sessionId));
+      },
+    },
+    blocked: (_session, code) => blocked.push(code),
+    host: {
+      enumerate: async () => ["foreign", "foreign-pending", "unknown", "own"],
+      capture: async (session) => {
+        captured.push(session);
+        const value = checkpoint(session);
+        value.messages[0].info.anchor = {
+          sourceCommandId: session === "own" ? "current-first" : "unbound",
+        };
+        return {
+          dataBase64: Buffer.from(JSON.stringify(value)).toString("base64"),
+          management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+        };
+      },
+    },
+  });
+  try {
+    expect((await source.changes(0)).items.map((item) => item.session)).toEqual(["own"]);
+    expect(captured).toEqual(["unknown", "own"]);
+    expect(excluded).toEqual(["foreign", "foreign-pending"]);
+    expect(blocked).toEqual(["original_owner_unknown"]);
+    expect(box.ownsSession(original, "foreign")).toBe(true);
+    expect(() => box.checkLegacyOwner(current, "foreign-pending")).toThrowError(
+      expect.objectContaining({ code: "scope" }),
+    );
+  } finally {
+    box.close();
   }
 });

@@ -33,6 +33,7 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { useVulnerabilityReportUrl } from "@/hooks/useVulnerabilityReportUrl.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { createHelpMenuActionHandlers } from "@/lib/helpMenuActions.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 
 export function WorkspaceHelpMenuButton({
   className,
@@ -47,9 +48,11 @@ export function WorkspaceHelpMenuButton({
 }) {
   const { intl } = useZCodeIntl();
   const platform = usePlatform();
+  const peripherals = useApplicationPeripherals();
   const [open, setOpen] = useState(false);
+  const nativeHelpEnabled = peripherals?.nativeCloudEnabled !== false;
   const { url: vulnerabilityReportUrl, loading: vulnerabilityReportLoading } =
-    useVulnerabilityReportUrl(open);
+    useVulnerabilityReportUrl(open && nativeHelpEnabled);
   const updateMenu = useDesktopUpdateMenu(isDesktop);
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const openFeatureRequest = useFeedbackStore((state) => state.openFeatureRequest);
@@ -57,10 +60,11 @@ export function WorkspaceHelpMenuButton({
   const helpMenuActions = createHelpMenuActionHandlers({
     platform,
     intl,
-    openSubmit: openFeedbackSubmit,
+    openSubmit: peripherals ? () => peripherals.openFeedback() : openFeedbackSubmit,
   });
   const handleOpenCommunity = () => {
-    void platform.openCommunity();
+    if (peripherals) peripherals.openHelp();
+    else void platform.openCommunity();
   };
   const handleOpenResourceManager = () => {
     void platform.executeDesktopCommand(DesktopCommandIds.OpenResourceManager);
@@ -95,19 +99,21 @@ export function WorkspaceHelpMenuButton({
         align="end"
         className="min-w-0 w-max [&_[data-slot=dropdown-menu-item]]:pr-6"
       >
-        <DropdownMenuItem onSelect={helpMenuActions.openProductDocs}>
+        <DropdownMenuItem onSelect={peripherals?.openHelp ?? helpMenuActions.openProductDocs}>
           <BookOpenIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.docs" })}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={handleOpenCommunity}>
-          <UsersIcon className="size-4" />
-          {intl.formatMessage({ id: "workspaceHeader.help.community" })}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={helpMenuActions.openIssueReport}>
+        {nativeHelpEnabled && (
+          <DropdownMenuItem onSelect={handleOpenCommunity}>
+            <UsersIcon className="size-4" />
+            {intl.formatMessage({ id: "workspaceHeader.help.community" })}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onSelect={peripherals?.openFeedback ?? helpMenuActions.openIssueReport}>
           <MessageSquareIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.issueReport" })}
         </DropdownMenuItem>
-        {vulnerabilityReportLoading || vulnerabilityReportUrl ? (
+        {nativeHelpEnabled && (vulnerabilityReportLoading || vulnerabilityReportUrl) ? (
           <DropdownMenuItem
             disabled={vulnerabilityReportLoading}
             aria-busy={vulnerabilityReportLoading}
@@ -118,13 +124,17 @@ export function WorkspaceHelpMenuButton({
             }
           >
             <ShieldAlertIcon className="size-4" />
-            {intl.formatMessage({ id: "workspaceHeader.help.reportVulnerability" })}
+            {intl.formatMessage({
+              id: "workspaceHeader.help.reportVulnerability",
+            })}
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem onSelect={openFeatureRequest}>
-          <LightbulbIcon className="size-4" />
-          {intl.formatMessage({ id: "workspaceHeader.help.productRequest" })}
-        </DropdownMenuItem>
+        {nativeHelpEnabled && (
+          <DropdownMenuItem onSelect={peripherals?.openFeedback ?? openFeatureRequest}>
+            <LightbulbIcon className="size-4" />
+            {intl.formatMessage({ id: "workspaceHeader.help.productRequest" })}
+          </DropdownMenuItem>
+        )}
         {/* Windows/Linux 没有原生菜单栏，自绘标题栏箭头菜单也已下线，
             资源管理器只能从这里进；Web 端没有该窗口，不渲染。 */}
         {isDesktop ? (
@@ -151,7 +161,9 @@ export function WorkspaceHelpMenuButton({
                 {updateMenu.labelId === "desktopMenu.help.restartToUpdate" ? (
                   <>
                     <span className="whitespace-nowrap">
-                      {intl.formatMessage({ id: "desktopMenu.help.restartUpdateAction" })}
+                      {intl.formatMessage({
+                        id: "desktopMenu.help.restartUpdateAction",
+                      })}
                     </span>
                     <Badge
                       variant="secondary"

@@ -62,3 +62,18 @@
 - `packages/ui/src/lib/codeViewerSource.ts`：Code Viewer source 路径规范化
 - `packages/ui/src/lib/workspaceSidePane.ts`：Code Viewer tab key 生成与复用
 - `docs/ui/office-file-preview.md`：Office 文件预览的边界、状态组合和验证契约
+
+
+<a id="authorized-content"></a>
+
+## 已授权内容的公开只读入口
+
+`@zcode/ui` 公开 `FileContentPreview`，供工作台外部的已授权内容消费者复用同一 Markdown、Shiki 代码、图片、PDF、Office 和 PPTX renderer。工作区 PreviewPane 继续拥有文件读取、批注与本地编辑入口；公开内容组件不读取文件、不查询服务、不签发 URL、不拥有身份或权限。
+
+输入为 `name`、可选主题 / 代码偏好，以及互斥内容描述：`text` / `html` 带 `text`；`image` 带调用方授权 URL；`office` 带完整 `ArrayBuffer`、`officeKind`（docx / doc / excel）与低敏 `reference`；`pdf` 带原生 `PdfViewerSource`（支持受控分段读取）；`pptx` 带完整 `ArrayBuffer`。调用方负责字节长度 / 作用域校验、请求取消和失效清除，组件不另存副本。
+
+示例：`<FileContentPreview name="配置.yaml" source={{ kind: "text", text: authorizedText }} theme="zai-dark" />`；Office 示例为 `source={{ kind: "office", data: authorizedBytes, officeKind: "docx", reference: opaqueReference }}`。不得传真实秘密、路径或 URL 作为日志引用。
+
+HTML 通过原生 WebPreview 的同一 iframe 容器展示静态快照，使用 inert template 在挂载前移除脚本、导航、表单、外部资源和事件属性；iframe `sandbox=""`、`no-referrer` 与最前置 CSP（default-src none，style-src unsafe-inline）共同隔离。HTML 不执行脚本或外部取数；不降级为带身份的原网页，不承诺复现交互式站点。工作区已有的本地 HTML 浏览器动作保持其原有平台边界。
+
+验证覆盖 `packages/ui/test/fileContentPreview.test.ts` 的路由复用与 HTML 安全，以及现有 Office / PDF 等 renderer 回归。外部真实 HTTP / 存储接合由调用方验收，不用组件夹具推导生产可用。

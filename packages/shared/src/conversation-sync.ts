@@ -1,3 +1,6 @@
+import { conversationObservationReasonSchema } from "./conversation-diagnostics.js";
+import { conversationTerminalMonitoringSchema } from "./conversation-terminals.js";
+export { conversationObservationReasonSchema } from "./conversation-diagnostics.js";
 import { z } from "zod";
 import { conversationFileSchema } from "./conversation-files.js";
 import { zcodeTaskMetaSchema } from "./validation.js";
@@ -33,10 +36,9 @@ export const conversationScopeSchema = z
       .transform((value) => value.toLowerCase()),
   })
   .strict();
+export type ConversationScope = z.infer<typeof conversationScopeSchema>;
 export const conversationCenterPolicySchema = z
   .object({
-    enabled: z.boolean(),
-    subjects: z.array(conversationScopeSchema).max(10000),
     maxCheckpointBytes: z
       .number()
       .int()
@@ -260,3 +262,91 @@ export const conversationSyncStatusSchema = z
   })
   .strict();
 export type ConversationSyncStatus = z.infer<typeof conversationSyncStatusSchema>;
+
+/** Native administration: aggregate metadata only, never conversation identifiers or content. */
+export const conversationObservationSchema = z
+  .object({
+    action: z.enum(["checkpoint", "file_upload", "file_read", "continuation"]),
+    outcome: z.enum(["succeeded", "rejected", "failed", "waiting"]),
+    reason: conversationObservationReasonSchema,
+  })
+  .strict();
+export type ConversationObservation = z.infer<typeof conversationObservationSchema>;
+const monitoringCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const monitoringTime = z.string().datetime({ offset: true });
+export const conversationMonitoringSchema = z
+  .object({
+    observedAt: monitoringTime,
+    startedAt: monitoringTime,
+    windowStartedAt: monitoringTime,
+    configuration: conversationCenterConfigurationSchema,
+    collectionAvailable: z.boolean(),
+    processStartedAt: monitoringTime.nullable(),
+    unrecordedRequests: monitoringCount,
+    lastPersistFailureAt: monitoringTime.nullable(),
+    capacity: z
+      .object({
+        sessions: monitoringCount,
+        versions: monitoringCount,
+        subjects: monitoringCount,
+        checkpointBytes: monitoringCount,
+        fileBytes: monitoringCount,
+        files: monitoringCount,
+        largestSubjectBytes: monitoringCount,
+        subjectsAtCapacity: monitoringCount,
+        largestCheckpointBytes: monitoringCount,
+        largestSessionVersions: monitoringCount,
+        sessionsAtVersionLimit: monitoringCount,
+        unfinishedContinuations: monitoringCount,
+      })
+      .strict(),
+    terminals: conversationTerminalMonitoringSchema,
+    requests: z
+      .array(
+        conversationObservationSchema.extend({
+          count: monitoringCount,
+          lastObservedAt: monitoringTime,
+        }),
+      )
+      .max(256),
+  })
+  .strict();
+export type ConversationMonitoring = z.infer<typeof conversationMonitoringSchema>;
+
+export type {
+  ConversationTerminalReason,
+  ConversationTerminalMonitoring,
+} from "./conversation-terminals.js";
+
+/** Configuration-only metadata projection; selectors confer no data-plane authority. */
+export const conversationUsageQuerySchema = z
+  .object({
+    tenant: z.string().uuid().optional(),
+    subject: z.string().uuid().optional(),
+    excludeTenant: z.string().uuid().optional(),
+    offset: z.coerce.number().int().nonnegative().default(0),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict()
+  .refine((value) => !value.subject || !!value.tenant);
+export type ConversationUsageQuery = z.infer<typeof conversationUsageQuerySchema>;
+export const conversationUsagePageSchema = z
+  .object({
+    observedAt: monitoringTime,
+    total: monitoringCount,
+    totalBytes: monitoringCount,
+    items: z
+      .array(
+        z
+          .object({
+            key: z.string().uuid(),
+            bytes: monitoringCount,
+            checkpointBytes: monitoringCount,
+            fileBytes: monitoringCount,
+            subjects: monitoringCount,
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();

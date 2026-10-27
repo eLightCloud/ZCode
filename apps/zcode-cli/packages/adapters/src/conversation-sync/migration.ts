@@ -1,5 +1,9 @@
 import type { Pool } from "pg";
+import { migrateTerminalObservation } from "./terminal-migration.js";
+import { migrateMonitoring, migrateUsageProjection } from "./monitoring-migration.js";
 import { ConversationSyncError } from "@zcode/contracts";
+
+export const CONVERSATION_SYNC_SCHEMA_VERSION = 9;
 
 const tables = {
   sessions: `session text not null, state jsonb not null, primary key (tenant, subject, session)`,
@@ -26,7 +30,10 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
     await client.query(`create table if not exists zcode_sync.schema_version
       (singleton boolean primary key default true check(singleton), version integer not null)`);
     const previous = await client.query("select version from zcode_sync.schema_version");
-    if (previous.rows.length && ![1, 2, 3, 4, 5].includes(previous.rows[0].version))
+    if (
+      previous.rows.length &&
+      ![1, 2, 3, 4, 5, 6, 7, 8, CONVERSATION_SYNC_SCHEMA_VERSION].includes(previous.rows[0].version)
+    )
       throw new ConversationSyncError("schema");
     if (!previous.rows.length) {
       await client.query(`do $$ begin
@@ -79,6 +86,12 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
         create policy subject_scope on zcode_sync.file_objects using (${scopeCheck}) with check (${scopeCheck});
         update zcode_sync.schema_version set version=5;`);
     }
+    if (!previous.rows.length || previous.rows[0].version < 6) {
+      // 旧库曾默认关闭或限人开放；只移除准入字段，保留限额、正文及原操作回执。
+      await client.query(`update zcode_sync.configuration
+        set policy=policy-'enabled'-'subjects', revision=revision+1;
+        update zcode_sync.schema_version set version=6;`);
+    }
     await client.query(`do $$ begin
       if not exists(select 1 from pg_roles where rolname='zcode_sync_configurator') then
         create role zcode_sync_configurator nologin nosuperuser nobypassrls;
@@ -122,6 +135,18 @@ export async function migrateConversationSync(pool: Pool): Promise<void> {
     await client.query(
       "grant update(result_json) on zcode_sync.continuations to zcode_sync_runtime",
     );
+    if (!previous.rows.length || previous.rows[0].version < 7) {
+      await migrateMonitoring(client);
+      await client.query("update zcode_sync.schema_version set version=7");
+    }
+    if (!previous.rows.length || previous.rows[0].version < 8) {
+      await migrateTerminalObservation(client);
+      await client.query("update zcode_sync.schema_version set version=8");
+    }
+    if (!previous.rows.length || previous.rows[0].version < 9) {
+      await migrateUsageProjection(client);
+      await client.query("update zcode_sync.schema_version set version=9");
+    }
     await client.query("commit");
   } catch (cause) {
     await client.query("rollback");

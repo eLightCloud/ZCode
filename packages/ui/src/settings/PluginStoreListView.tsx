@@ -3,7 +3,7 @@ import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 /* eslint-disable max-lines -- 商店列表页把搜索/公开-社区-个人分段/Featured/分类折叠聚合成一个连贯浏览面，拆散反而难以维持 1:1 布局。 */
 import { useMemo, useState, type ReactNode } from "react";
 import type { PluginStoreOrder, ZCodePluginMarketplaceSummary } from "@zcode/shared";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID, builtinPluginStateIds } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
@@ -26,7 +26,9 @@ import { resolveMarketplaceDisplayName } from "@/settings/pluginSourceLabel.js";
 
 // 分类/市场分组手动收起后的展示数量；默认完整展示，避免较少的插件又被自动隐藏。
 const CATEGORY_VISIBLE_LIMIT = 6;
-const RETIRED_STORE_PLUGIN_ID = `restore-legacy-sessions@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID}`;
+const RETIRED_STORE_PLUGIN_IDS = new Set(
+  builtinPluginStateIds(`restore-legacy-sessions@${BUNDLED_PLUGIN_MARKETPLACE_ID}`),
+);
 
 import type { PluginStoreSegment as NativePluginStoreSegment } from "@/settings/pluginStoreListing.js";
 export type PluginStoreSegment = NativePluginStoreSegment | "application";
@@ -50,6 +52,8 @@ export function PluginStoreListView({
     marketplaceIds: readonly string[];
     content: ReactNode;
     publicContent?: ReactNode;
+    communityContent?: ReactNode;
+    counts?: Partial<Record<"public" | "community" | "personal", number>>;
     personalContent?: ReactNode;
     publicMarketplaceIds?: readonly string[];
     managedMarketplacePrefix?: string;
@@ -69,20 +73,23 @@ export function PluginStoreListView({
   const isOfficeMode = useIsOfficeMode();
   const modeOrder = isOfficeMode ? order?.work : order?.code;
   const keyword = query.trim().toLowerCase();
+  const applicationCount =
+    segment === "application" ? 0 : (applicationSection?.counts?.[segment] ?? 0);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // 旧版会话恢复入口退出市场；统一过滤所有浏览投影，旧缓存/精选也不能重新露出。
   // 完整 ID 只命中官方插件，插件管理页继续使用原始条目管理已有安装。
   const items = useMemo(
-    () => allItems.filter((item) => item.id !== RETIRED_STORE_PLUGIN_ID),
+    () => allItems.filter((item) => !RETIRED_STORE_PLUGIN_IDS.has(item.id)),
     [allItems],
   );
 
   const segmentItems = useMemo(
     () =>
       items.filter((item) => {
+        if (item.discoveryGroup) return segment === item.discoveryGroup;
         // Build-owned source grouping never grants catalog visibility or download access.
         if (applicationSection?.publicMarketplaceIds?.includes(item.marketplace))
-          return segment === "public";
+          return segment === (item.listing?.publisherType === "community" ? "community" : "public");
         if (
           applicationSection?.marketplaceIds.includes(item.marketplace) ||
           (applicationSection?.managedMarketplacePrefix &&
@@ -172,7 +179,10 @@ export function PluginStoreListView({
   }, [segmentItems, keyword, locale]);
 
   const toggleGroup = (key: string) => {
-    setExpandedGroups((current) => ({ ...current, [key]: !(current[key] ?? true) }));
+    setExpandedGroups((current) => ({
+      ...current,
+      [key]: !(current[key] ?? true),
+    }));
   };
 
   return (
@@ -191,7 +201,9 @@ export function PluginStoreListView({
           <SegmentPill
             active={segment === "community"}
             testId="plugin-store-segment-community"
-            label={intl.formatMessage({ id: "settings.plugins.store.segment.community" })}
+            label={intl.formatMessage({
+              id: "settings.plugins.store.segment.community",
+            })}
             onClick={() => onSegmentChange("community")}
           />
           <SegmentPill
@@ -219,7 +231,9 @@ export function PluginStoreListView({
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.nativeEvent.isComposing) onSearchSubmit?.();
           }}
-          placeholder={intl.formatMessage({ id: "settings.plugins.store.searchPlaceholder" })}
+          placeholder={intl.formatMessage({
+            id: "settings.plugins.store.searchPlaceholder",
+          })}
         />
       </div>
 
@@ -246,6 +260,7 @@ export function PluginStoreListView({
       ) : null}
 
       {segment === "public" && applicationSection?.publicContent}
+      {segment === "community" && applicationSection?.communityContent}
       {segment === "personal" && applicationSection?.personalContent}
       {segment === "application" && applicationSection && applicationSection.visible !== false ? (
         applicationSection.content
@@ -254,10 +269,10 @@ export function PluginStoreListView({
           key="search"
           title={intl.formatMessage(
             { id: "settings.plugins.store.searchResults" },
-            { count: String(searchResults.length) },
+            { count: String(searchResults.length + applicationCount) },
           )}
         >
-          {searchResults.length === 0 ? (
+          {searchResults.length === 0 && !applicationCount ? (
             <p className="rounded-xl border border-dashed border-border px-4 py-3 text-ui-base text-foreground-subtle">
               {intl.formatMessage({ id: "settings.plugins.store.searchEmpty" })}
             </p>
@@ -267,18 +282,20 @@ export function PluginStoreListView({
         </StoreSection>
       ) : segment !== "personal" ? (
         <>
-          {segment === "community" && segmentItems.length === 0 && !loading ? (
+          {segment === "community" && segmentItems.length === 0 && !applicationCount && !loading ? (
             <p
               data-testid="plugin-store-community-empty"
               className="py-8 text-center text-ui-base text-foreground-subtle"
             >
-              {intl.formatMessage({ id: "settings.plugins.store.communityEmpty" })}
+              {intl.formatMessage({
+                id: "settings.plugins.store.communityEmpty",
+              })}
             </p>
           ) : null}
           {loading ||
           categoryGroups.length > 0 ||
           featuredItems.length > 0 ||
-          (segment === "public" && uiItems.length === 0) ? (
+          (segment === "public" && uiItems.length === 0 && !applicationCount) ? (
             <PublicSegment
               actions={actions}
               categoryGroups={categoryGroups}
@@ -291,7 +308,7 @@ export function PluginStoreListView({
             />
           ) : null}
         </>
-      ) : (
+      ) : personalGroups.length === 0 && applicationCount ? null : (
         <PersonalSegment
           actions={actions}
           expandedGroups={expandedGroups}

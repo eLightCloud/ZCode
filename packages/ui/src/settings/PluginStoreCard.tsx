@@ -59,8 +59,12 @@ export function PluginStorePaidPlanBadge({
 }) {
   const { intl } = useZCodeIntl();
   if (!item.listing?.requiresPaidPlan) return null;
-  const label = intl.formatMessage({ id: "settings.plugins.store.requiresPaidPlan" });
-  const badgeLabel = intl.formatMessage({ id: "settings.plugins.store.paidPlanBadge" });
+  const label = intl.formatMessage({
+    id: "settings.plugins.store.requiresPaidPlan",
+  });
+  const badgeLabel = intl.formatMessage({
+    id: "settings.plugins.store.paidPlanBadge",
+  });
   return (
     <ControlHintTooltip title={label}>
       <span
@@ -139,7 +143,9 @@ export function PluginStoreItemMenu({
           variant={triggerVariant}
           size={triggerSize}
           className={triggerClassName}
-          aria-label={intl.formatMessage({ id: "settings.plugins.store.menu.label" })}
+          aria-label={intl.formatMessage({
+            id: "settings.plugins.store.menu.label",
+          })}
           onClick={(event) => event.stopPropagation()}
         >
           {busy ? (
@@ -159,8 +165,12 @@ export function PluginStoreItemMenu({
           >
             <Power className="size-4" aria-hidden="true" />
             {enabled
-              ? intl.formatMessage({ id: "settings.plugins.store.menu.disable" })
-              : intl.formatMessage({ id: "settings.plugins.store.menu.enable" })}
+              ? intl.formatMessage({
+                  id: "settings.plugins.store.menu.disable",
+                })
+              : intl.formatMessage({
+                  id: "settings.plugins.store.menu.enable",
+                })}
           </DropdownMenuItem>
         ) : null}
         {item.installed ? (
@@ -210,7 +220,11 @@ export function PluginStoreInstallButton({
       onClick={(event) => {
         event.stopPropagation();
         runUserAction({
-          input: { featureId: "extension.plugin", action: "install", trigger: "button" },
+          input: {
+            featureId: "extension.plugin",
+            action: "install",
+            trigger: "button",
+          },
           operation: () => actions.onInstall(item),
           completed: { resultSource: "optimistic_projection" },
           failureStage: "plugin_install",
@@ -233,7 +247,9 @@ export function PluginStoreUpdateBadge({
 }) {
   const { intl } = useZCodeIntl();
   if (!canUpdatePluginItem(item)) return null;
-  const label = intl.formatMessage({ id: "settings.plugins.list.updateAvailable" });
+  const label = intl.formatMessage({
+    id: "settings.plugins.list.updateAvailable",
+  });
   return (
     <span
       data-testid="plugin-store-update-badge"
@@ -330,6 +346,14 @@ export function PluginStoreCard({
           <PluginStorePaidPlanBadge item={item} />
           <PluginStoreUpdateBadge item={item} />
         </div>
+        {item.applicationNames && (
+          <p
+            lang={locale.startsWith("zh") ? "en" : "zh-CN"}
+            className="truncate text-ui-caption text-foreground-subtle"
+          >
+            {locale.startsWith("zh") ? item.applicationNames.en : item.applicationNames.zh}
+          </p>
+        )}
         {item.orphaned ? (
           <div
             data-testid="plugin-store-source-degraded"
@@ -338,7 +362,9 @@ export function PluginStoreCard({
           >
             <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
             <span className="truncate">
-              {intl.formatMessage({ id: "settings.plugins.store.sourceMissing" })}
+              {intl.formatMessage({
+                id: "settings.plugins.store.sourceMissing",
+              })}
             </span>
           </div>
         ) : null}

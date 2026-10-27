@@ -140,7 +140,8 @@ export function PreviewPaneOfficeDocxContent({
         // 追加作用域样式复用原 react-docx 的浅色纸张阴影，并一次覆盖当前文档的所有页面。
         const pageSurfaceStyle = document.createElement("style");
         pageSurfaceStyle.dataset.docxPageSurfaceStyle = "";
-        pageSurfaceStyle.textContent = `.${className}-wrapper>section.${className} { box-shadow: ${DOCX_PAGE_BOX_SHADOW}; }`;
+        // 白纸上的表格会使用浏览器 CanvasText；固定纸张色系，避免暗色壳把无显式颜色的表格文字变浅。
+        pageSurfaceStyle.textContent = `.${className}-wrapper>section.${className} { box-shadow: ${DOCX_PAGE_BOX_SHADOW}; color-scheme: light; }`;
         styleContainer.append(pageSurfaceStyle);
 
         disposeLinkSafety = installDocumentLinkSafety(renderRoot, onOpenBrowserUrl);

@@ -177,6 +177,8 @@ URL 原样交给主 renderer 的 DOM 导航或脚本执行路径。
 
 ## Implementation Contract
 
+- 外部已授权字节经 `@zcode/ui` 的 `FileContentPreview` 展示，通用合同见 [Preview Pane](preview-pane.md#authorized-content)。同一 Office 组件可接收 `data: ArrayBuffer | null` 或原有 `preview: FileBinaryPreview | null`，两种输入互斥，不新增读取 / 授权 / 解析 owner；第三方解析器继续按需加载。
+
 - `packages/shared` 声明通用二进制预览返回类型；`IFileService` 暴露受大小限制的读取方法。
 - `packages/services` 在 `stat` 后、`readFile` 前检查大小，默认和硬上限均为 25 MB。
 - `packages/ui/src/PreviewPane.tsx` 只负责识别、读取生命周期和错误归一化；Office 渲染放在独立模块。
@@ -189,6 +191,7 @@ URL 原样交给主 renderer 的 DOM 导航或脚本执行路径。
 - `.docx` 不得把 `ignoreLastRenderedPageBreak` 覆盖为 `false`；必须保留 `docx-preview` 官方默认的 section 分组行为，确保同尺寸 section 仍独立分页并应用各自页边距。
 - `docx-preview` 生成的页面必须覆盖其默认 `0 0 10px rgba(0, 0, 0, 0.5)` 阴影，统一使用原 `react-docx` 浅色纸张阴影；不得按应用暗色主题把白纸页面改回深阴影。
 - 旧二进制 `.doc` 单独保留 `useDocxEditor` + `DocxEditorViewer mode="read-only"` 兼容路径；不得把该兼容路径重新用于 `.docx`。
+- DOCX 白纸页面固定 `color-scheme: light`，使浏览器默认表格文字使用白纸上的 CanvasText，不能继承暗色工作台的浅色默认文字。作者显式字体颜色继续保留。
 - DOCX 必须保留文档原始排版比例，只在生成页面宽度超过容器可用宽度时缩小；缩放后的占位宽高必须同步更新，不能只使用 `transform` 留下未缩放的滚动区域。
 - Office 加载阶段不得显示可见 loading 文案；空白态继续通过 `aria-busy` 暴露给辅助技术。
 - 新增样式只使用 `DESIGN.md` 的语义 token，并同时验证 Zai Light、Zai Dark 和窄屏。

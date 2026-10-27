@@ -2,7 +2,8 @@
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { AddMarketplaceSourceDialog } from "@/settings/AddMarketplaceSourceDialog.js";
@@ -16,6 +17,22 @@ afterEach(() => {
 });
 
 describe("PluginStoreSourcesDialog", () => {
+  it("protects the build-owned marketplace while allowing removal of a personal source", () => {
+    render(createElement(ZCodeIntlProvider, { initialLocale: "en-US" },
+      createElement(PluginStoreSourcesDialog, {
+        open: true, onOpenChange: () => {},
+        marketplaces: [BUNDLED_PLUGIN_MARKETPLACE_ID, "personal-source"].map((id) => ({
+          id, name: id, source: {}, pluginCount: 0,
+        })),
+        onUpdateMarketplace: () => {}, onRemoveMarketplace: () => {}, activeOperations: [],
+      }),
+    ));
+    const rows = screen.getAllByTestId("plugin-store-source-row");
+    const native = rows.find((row) => row.dataset.marketplaceId === BUNDLED_PLUGIN_MARKETPLACE_ID)!;
+    const personal = rows.find((row) => row.dataset.marketplaceId === "personal-source")!;
+    expect(within(native).queryByTestId("plugin-store-source-remove")).toBeNull();
+    expect(within(personal).getByTestId("plugin-store-source-remove")).toBeTruthy();
+  });
   it("shows the persisted marketplace refresh failure beside its source", () => {
     const html = renderToStaticMarkup(
       createElement(

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { textCheckpointSchema, checkpointArtifactUris } from "./text-checkpoint.js";
 import {
   conversationIndexFactsSchema,
+  conversationObservationReasonSchema,
+  type ConversationObservation,
   conversationScopeSchema,
   type ConversationIndexFacts,
   type ConversationHistoryItem,
@@ -19,7 +21,7 @@ const uuid = z
   .uuid()
   .transform((value) => value.toLowerCase());
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export type SyncScope = import("@zcode/shared").ConversationCenterPolicy["subjects"][number];
+export type SyncScope = import("@zcode/shared").ConversationScope;
 // CLI and shared use different Zod majors. Keep the shared validator authoritative
 // without emitting its Zod v4 schema types into the CLI's Zod v3 declarations.
 export const syncScopeSchema = z
@@ -178,6 +180,7 @@ export const syncReceiptSchema = z
 export type SyncReceipt = z.infer<typeof syncReceiptSchema>;
 export const syncErrorSchema = z
   .object({
+    reason: z.custom<ConversationObservation["reason"]>(value => conversationObservationReasonSchema.safeParse(value).success).optional(),
     error: z.enum([
       "invalid",
       "stale",
@@ -193,12 +196,14 @@ export const syncErrorSchema = z
   })
   .strict();
 export class ConversationSyncError extends Error {
+  readonly diagnostic?: ConversationObservation["reason"];
   constructor(
     readonly code: z.infer<typeof syncErrorSchema>["error"],
-    options?: ErrorOptions,
+    options?: ErrorOptions & { diagnostic?: ConversationObservation["reason"] },
   ) {
     super(`Conversation sync: ${code}`, options);
     this.name = "ConversationSyncError";
+    this.diagnostic = options?.diagnostic;
   }
 }
 export interface ConversationSyncStore {

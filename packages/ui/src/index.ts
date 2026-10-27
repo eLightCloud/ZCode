@@ -1,4 +1,5 @@
 export { useFileDownload } from "./hooks/useFileDownload.js";
+export { FileContentPreview } from "./previewPaneContent.js";
 export { App } from "./App.js";
 export { AppErrorBoundary, ScopedErrorBoundary } from "./ErrorBoundary.js";
 export type { ScopedErrorBoundaryVariant } from "./ErrorBoundary.js";
@@ -50,6 +51,28 @@ export {
   Package as SettingsModelIcon,
   ShieldCheck as SettingsAccountIcon,
   Users as SettingsMembersIcon,
+} from "lucide-react";
+// 可信应用装配与原生 UI 使用同一图标依赖，不要求外部源码复制私有组件。
+export {
+  Archive,
+  ArrowLeft,
+  Paperclip,
+  Cloud,
+  RefreshCw,
+  Info,
+  SearchX,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
+  List,
+  LayoutGrid,
+  X,
+  Download,
+  Eye,
+  Ellipsis,
+  Link,
 } from "lucide-react";
 export type { ZCodeState } from "./store/index.js";
 export {
@@ -103,6 +126,7 @@ export type {
 export type { IntlInstance } from "./i18n/index.js";
 export {
   FileDisplayInline,
+  FileDisplayIcon,
   createFileDisplayDom,
   getFileDisplayPath,
   resolveFileDisplayDescriptor,

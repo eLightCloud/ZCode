@@ -1,4 +1,8 @@
-import { useHasApplicationPages } from "@/root/ApplicationPages.js";
+import {
+  ApplicationPageContent,
+  useHasApplicationPages,
+} from "@/root/ApplicationPages.js";
+import { useApplicationPageNavigationState } from "@/root/ApplicationPageNavigation.js";
 /* eslint-disable max-lines -- workspace shell 当前集中编排 sidebar、chat、terminal 和 browser pane 的布局联动，先保持单文件收口，避免为满足行数限制打散关键布局状态。*/
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -1197,12 +1201,55 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
       ...request,
     });
   }, []);
+  const applicationPageNavigation = useApplicationPageNavigationState();
+  const openRegisteredPage = applicationPageNavigation?.openPage;
+  const closeRegisteredPage = applicationPageNavigation?.closePage;
+  const activeApplicationPage = useMemo(() => {
+    const id = applicationPageNavigation?.selectedPageId;
+    return id
+      ? (applicationPageNavigation?.sidebarPages.find((page) => page.id === id) ?? null)
+      : null;
+  }, [applicationPageNavigation]);
+  const closeApplicationPage = useCallback(() => {
+    closeRegisteredPage?.();
+  }, [closeRegisteredPage]);
   const showChatMainView = useCallback(() => {
+    if (activeApplicationPage) closeApplicationPage();
     onWorkspaceMainViewChange("chat");
-  }, [onWorkspaceMainViewChange]);
-  const primaryNavigationBack =
-    workspaceMainView === "plugin-store" ? showChatMainView : handleTaskNavBack;
-  const canPrimaryNavigationBack = workspaceMainView === "plugin-store" || canTaskNavBack;
+  }, [activeApplicationPage, closeApplicationPage, onWorkspaceMainViewChange]);
+  const openApplicationPage = useCallback(
+    (id: string) => {
+      // 打开侧栏主区页面时把底层主视图归位聊天页；关闭后返回语义唯一。
+      onWorkspaceMainViewChange("chat");
+      openRegisteredPage?.(id);
+    },
+    [openRegisteredPage, onWorkspaceMainViewChange],
+  );
+  useEffect(() => {
+    // 深链 / 通知也沿同一主区返回语义，不依赖侧栏 click 才归位底层视图。
+    if (activeApplicationPage && workspaceMainView !== "chat") onWorkspaceMainViewChange("chat");
+  }, [activeApplicationPage, workspaceMainView, onWorkspaceMainViewChange]);
+  // 原生侧栏依赖稳定回调隔离布局更新；不要用 JSX 内联闭包穿透 memo。
+  const openAutomationsFromSidebar = useCallback(
+    (...args: Parameters<typeof handleOpenAutomations>) => {
+      if (activeApplicationPage) closeApplicationPage();
+      handleOpenAutomations(...args);
+    },
+    [activeApplicationPage, closeApplicationPage, handleOpenAutomations],
+  );
+  const openPluginStoreFromSidebar = useCallback(() => {
+    if (activeApplicationPage) closeApplicationPage();
+    handleOpenPluginStore();
+  }, [activeApplicationPage, closeApplicationPage, handleOpenPluginStore]);
+  const primaryNavigationBack = activeApplicationPage
+    ? closeApplicationPage
+    : workspaceMainView === "plugin-store"
+      ? showChatMainView
+      : handleTaskNavBack;
+  const canPrimaryNavigationBack =
+    Boolean(activeApplicationPage) ||
+    workspaceMainView === "plugin-store" ||
+    canTaskNavBack;
   useEffect(() => {
     if (
       isWebRemoteControlShell &&
@@ -1212,7 +1259,17 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
       // 远控不承载 Automations，必须立即回落到 continuous/replayable 边界之外的聊天页。
       onWorkspaceMainViewChange("chat");
     }
-  }, [isWebRemoteControlShell, onWorkspaceMainViewChange, workspaceMainView]);
+    if (isWebRemoteControlShell && activeApplicationPage) {
+      // 手机远控同样不承载侧栏主区页面；挂载远控 shell 时立即关闭回到聊天页。
+      closeApplicationPage();
+    }
+  }, [
+    isWebRemoteControlShell,
+    onWorkspaceMainViewChange,
+    workspaceMainView,
+    activeApplicationPage,
+    closeApplicationPage,
+  ]);
   const handleCreateTaskInChat = useCallback(
     (request?: Parameters<typeof onCreateTask>[0]) => {
       // workspaceReadOnlyReason 判定的是活动 workspace；当 request 显式带 targetWorkspace 时
@@ -1911,13 +1968,50 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   // 与 Task Header 分叉。桌面端统一复用 WorkspaceHeader，只由 variant 裁剪 task 专属内容；
   // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
   const shouldRenderMainViewHeader =
-    workspaceMainView !== "automations" && workspaceMainView !== "plugin-store";
+    workspaceMainView !== "automations" &&
+    workspaceMainView !== "plugin-store" &&
+    !activeApplicationPage;
   const hasApplicationPages = useHasApplicationPages();
   const shouldRenderWorkspaceHeader =
     shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop || hasApplicationPages);
   // 修复原因：ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
   // 即使 workspace/task 没变化也会在 React DevTools Components 轨道里持续表现为子树 props 变化。
   const workspaceOnlyResetKeys = useMemo(() => [workspaceKey], [workspaceKey]);
+  // 侧栏主区页面不依赖工作区 RPC；选中后优先于离线 / 未分配的工作区入口提示。
+  const renderApplicationPageMain = () =>
+    activeApplicationPage ? (
+      <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+        {!isDesktop && (
+          <div className="flex min-h-11 shrink-0 items-center border-b border-border px-2 md:hidden">
+            <Button variant="ghost" className="min-h-11" onClick={closeApplicationPage}>
+              {intl.formatMessage({ id: "applicationPages.close" })}
+            </Button>
+          </div>
+        )}
+        <AutomationsMainBreadcrumbFrame
+          isDesktop={Boolean(isDesktop)}
+          sectionLabel={activeApplicationPage.label}
+          ariaLabel={intl.formatMessage({
+            id: "settings.breadcrumbLabel",
+          })}
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+            <ScopedErrorBoundary
+              scope={`application-page:${activeApplicationPage.id}`}
+              resetKeys={workspaceOnlyResetKeys}
+              variant="panel"
+              className="min-h-full"
+            >
+              <ApplicationPageContent
+                render={activeApplicationPage.render}
+                standalone={true}
+                onNavigate={closeApplicationPage}
+              />
+            </ScopedErrorBoundary>
+          </div>
+        </AutomationsMainBreadcrumbFrame>
+      </main>
+    ) : null;
   const workspaceDraftResetKeys = useMemo(
     () => [workspaceKey, activeTaskId ?? "draft"],
     [workspaceKey, activeTaskId],
@@ -1981,10 +2075,13 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
       goBackShortcutLabel={goBackShortcutLabel}
       goForwardShortcutLabel={goForwardShortcutLabel}
       onOpenCommandCenter={handleOpenCommandCenter}
-      onOpenAutomations={handleOpenAutomations}
-      automationsActive={workspaceMainView === "automations"}
-      onOpenPluginStore={handleOpenPluginStore}
-      pluginStoreActive={workspaceMainView === "plugin-store"}
+      onOpenAutomations={openAutomationsFromSidebar}
+      automationsActive={workspaceMainView === "automations" && !activeApplicationPage}
+      onOpenPluginStore={openPluginStoreFromSidebar}
+      pluginStoreActive={workspaceMainView === "plugin-store" && !activeApplicationPage}
+      applicationSidebarPages={applicationPageNavigation?.sidebarPages}
+      activeApplicationPageId={applicationPageNavigation?.selectedPageId}
+      onOpenApplicationPage={openApplicationPage}
       // 桌面没有 mobile 导航动作；内联包装曾让右侧开关穿透侧栏 memo，重复渲染全部项目。
       onWebRemoteTaskOpen={
         mobile
@@ -2091,7 +2188,9 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
         }
         chatOverlay={workspaceMainView === "chat" ? renderChatFindDialog() : undefined}
         chatContent={
-          workspaceEntryContent ? (
+          activeApplicationPage && !isWebRemoteControlShell ? (
+            renderApplicationPageMain()
+          ) : workspaceEntryContent ? (
             <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
               {workspaceEntryContent}
             </main>
@@ -2273,6 +2372,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
           id="sidebar"
           className={cn(
             "w-[var(--workspace-sidebar-panel-width)] max-w-[50%] flex-none overflow-hidden duration-200 ease-out transition-[width,opacity] data-[workspace-sidebar-resizing=true]:transition-opacity",
+            activeApplicationPage && !isDesktop && "max-md:hidden",
             // 修复原因：拖动侧栏宽度时如果继续过渡 width，会让指针移动和实际宽度之间产生滞后。
             // 拖拽 active 通过 DOM 标记切 transition，避免 pointerdown/up 为了切 class 重渲染整棵 workspace。
             isWebRemoteControlShell &&
@@ -2338,6 +2438,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
               "hover:after:opacity-100 data-[separator=hover]:after:opacity-100 data-[separator=active]:after:opacity-100 focus-visible:after:opacity-100 [[data-workspace-sidebar-resizing=true]_&]:after:opacity-100",
               hasDesktopPanelInset && "after:inset-y-[var(--workspace-resize-handle-inset)]",
               isWebRemoteControlShell && "max-md:hidden",
+              activeApplicationPage && !isDesktop && "max-md:hidden",
             )}
           />
         ) : null}
@@ -2349,6 +2450,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
             className={cn(
               "pointer-events-none absolute h-px w-1 bg-border/50 [left:anchor(--sidebar-task-list-divider_right,-4px)] [top:anchor(--sidebar-task-list-divider_top,-1px)]",
               isWebRemoteControlShell && "max-md:hidden",
+              activeApplicationPage && !isDesktop && "max-md:hidden",
             )}
           />
         ) : null}
@@ -2358,6 +2460,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
           id="content"
           className={cn(
             "flex min-w-[320px] flex-1 flex-col",
+            activeApplicationPage && !isDesktop && "max-md:min-w-0 max-md:w-full",
             hasDesktopPanelInset ? (isWindowsDesktop ? "pr-1.5 pb-1.5" : "pr-1 pb-1") : "p-0",
             isWebRemoteControlShell &&
               "max-md:!w-full max-md:!min-w-0 max-md:!flex-1 max-md:!basis-0",
@@ -2532,7 +2635,9 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                         </Button>
                       ) : null}
                       <div className="min-h-0 flex-1 overflow-hidden">
-                        {workspaceEntryContent ? (
+                        {activeApplicationPage && !isWebRemoteControlShell ? (
+                          renderApplicationPageMain()
+                        ) : workspaceEntryContent ? (
                           <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
                             {workspaceEntryContent}
                           </main>
@@ -2705,6 +2810,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                     </section>
                   </ResizablePanel>
                   {isWebRemoteControlShell ||
+                  !activeApplicationPage &&
                   (workspaceMainView !== "automations" && workspaceMainView !== "plugin-store") ? (
                     <AnimatedTerminalPanel
                       frameClassName={cn(
@@ -2747,6 +2853,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
           variant="silent"
         >
           <DesktopTopOverlay
+            className={activeApplicationPage && !isDesktop ? "max-md:hidden" : undefined}
             newTaskDisabledReason={workspaceReadOnlyReason}
             workspaceAbsPath={workspaceAbsPath}
             isMacDesktop={isMacDesktop}

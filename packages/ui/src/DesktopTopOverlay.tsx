@@ -19,6 +19,7 @@ import {
 } from "@/windowCaptionControls.js";
 
 interface DesktopTopOverlayProps {
+  className?: string;
   workspaceAbsPath: string;
   isMacDesktop?: boolean;
   isMacFullscreen?: boolean;
@@ -49,6 +50,7 @@ interface DesktopTopOverlayProps {
 }
 
 export function DesktopTopOverlay({
+  className,
   workspaceAbsPath: _workspaceAbsPath,
   isMacDesktop,
   isMacFullscreen,
@@ -108,6 +110,7 @@ export function DesktopTopOverlay({
         style={topOverlayWidthStyle}
         className={cn(
           "@container/topoverlayer pointer-events-none absolute h-14 flex left-0 top-0 z-20 w-fit",
+          className,
           // 工具组计入各平台顶部留白和 1px 边框，与 Header 中心线对齐。
           usesCustomCaptionArea && "mt-px",
           isWindowsDesktop ? "top-1.5" : isLinuxDesktop && "top-1",

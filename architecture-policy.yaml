@@ -908,6 +908,8 @@ modules:
       - apps/zcode-cli/packages/adapters/checks/sync-fixture.mts
       - apps/zcode-cli/packages/adapters/checks/sync-http.mts
       - apps/zcode-cli/packages/adapters/checks/sync-managed.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-monitoring.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-terminals.mts
       - apps/zcode-cli/packages/adapters/checks/sync-outbox-concurrent.mts
       - apps/zcode-cli/packages/adapters/checks/sync-restore.mts
       - apps/zcode-cli/packages/adapters/checks/sync-transitions.mts
@@ -1416,6 +1418,8 @@ modules:
       - packages/shared/src/conversation-native-protocol
       - packages/shared/test/conversation-native-protocol
       - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-diagnostics.ts
+      - packages/shared/src/conversation-terminals.ts
       - packages/shared/src/conversation-runtime.ts
       - packages/shared/src/conversation-files.ts
       - packages/shared/src/conversation-continuation.ts
@@ -1426,6 +1430,8 @@ modules:
     publicEntrypoints:
       - packages/shared/src/conversation-native-protocol/contract.ts
       - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-diagnostics.ts
+      - packages/shared/src/conversation-terminals.ts
       - packages/shared/src/conversation-runtime.ts
       - packages/shared/src/conversation-files.ts
       - packages/shared/src/conversation-continuation.ts
@@ -1729,6 +1735,12 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: application-sidebar-page-navigation
+    rule: unmanaged-new-file
+    paths:
+      - packages/ui/src/root/ApplicationPageNavigation.tsx
+      - packages/ui/src/root/ApplicationPageIntent.tsx
+    reason: 通用应用侧栏主区导航合同的两个新文件（选中态 provider、一次性打开意图桥）落在 root 装配区，紧随既有 ApplicationPages.tsx 的职责；不引入企业语义，测试位于既有 test 收集目录，接管整个 ui 目录需要独立的边界重构。
   - id: side-pane-full-view-shortcut-command-edit
     rule: unmanaged-new-file
     paths: [ packages/shared/src/shortcutCommands.ts ]

@@ -5,8 +5,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   ApplicationPages,
   ApplicationPageHeaderAction,
+  ApplicationPageContent,
   type ApplicationPage,
 } from "@/root/ApplicationPages.js";
+import { useApplicationPageNavigationState } from "@/root/ApplicationPageNavigation.js";
+import { ApplicationPageIntentBridge } from "@/root/ApplicationPageIntent.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 const navigation = vi.hoisted(() => ({
@@ -171,4 +174,65 @@ it("closes history through its context and keeps the underlying draft and focus"
     expect(screen.queryByRole("button", { name: "Return to work" })).toBeNull(),
   );
   await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+});
+
+function SidebarHarness({ intent, onConsumed }: {
+  intent?: { pageId: string; token: number } | null;
+  onConsumed?(): void;
+}) {
+  const state = useApplicationPageNavigationState();
+  const selected = state?.sidebarPages.find((page) => page.id === state.selectedPageId);
+  return createElement("div", null,
+    createElement(ApplicationPageIntentBridge, { intent, onConsumed }),
+    ...state!.sidebarPages.map((page) => createElement("button", {
+      key: page.id,
+      "aria-pressed": state?.selectedPageId === page.id,
+      onClick: () => state?.openPage(page.id),
+    }, page.label)),
+    selected ? createElement(ApplicationPageContent, {
+      render: selected.render, standalone: true, onNavigate: state!.closePage,
+    }) : null,
+  );
+}
+
+it("keeps a sidebar page selected through the real Dialog surface and returns to its trigger", async () => {
+  const pages: ApplicationPage[] = [{
+    id: "assets", label: "Assets", sidebarOrder: 10,
+    render: (context) => createElement("button", { onClick: context.close }, "Back to draft"),
+  }];
+  render(createElement(ZCodeIntlProvider, { initialLocale: "zh-CN", children:
+    createElement(ApplicationPages, { pages, children: createElement(SidebarHarness) }),
+  }));
+  const trigger = screen.getByRole("button", { name: "Assets" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-pressed")).toBe("true"));
+  expect(screen.getByRole("button", { name: "Back to draft" })).toBeTruthy();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back to draft" }));
+  expect(trigger.getAttribute("aria-pressed")).toBe("false");
+  expect(document.activeElement).toBe(trigger);
+});
+
+it("consumes successive open intents without closing the selected sidebar page", async () => {
+  const consumed = vi.fn();
+  const pages: ApplicationPage[] = [{
+    id: "assets", label: "Assets", sidebarOrder: 10,
+    render: (context) => createElement("button", { onClick: context.close }, "Back to draft"),
+  }];
+  const tree = (token: number | null) => createElement(ZCodeIntlProvider, {
+    initialLocale: "zh-CN", children: createElement(ApplicationPages, { pages,
+      children: createElement(SidebarHarness, {
+        intent: token === null ? null : { pageId: "assets", token }, onConsumed: consumed,
+      }),
+    }),
+  });
+  const result = render(tree(1));
+  await vi.waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole("button", { name: "Assets" }).getAttribute("aria-pressed")).toBe("true");
+  result.rerender(tree(null));
+  fireEvent.click(screen.getByRole("button", { name: "Back to draft" }));
+  result.rerender(tree(2));
+  await vi.waitFor(() => expect(consumed).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("button", { name: "Back to draft" })).toBeTruthy();
 });

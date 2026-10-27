@@ -1,4 +1,5 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import type { NativeDeliverable } from "@zcode/shared";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 
@@ -27,7 +28,28 @@ export interface ApplicationPeripherals {
 }
 
 const Context = createContext<ApplicationPeripherals | undefined>(undefined);
-export const ApplicationPeripheralsProvider = Context;
+export function ApplicationPeripheralsProvider({
+  value,
+  children,
+}: {
+  value?: ApplicationPeripherals;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!value) return;
+    // 错误面等旧原生入口仍发出 store 命令；只转交动作，不带自动日志或会话草稿。
+    const redirect = () => {
+      const state = useFeedbackStore.getState();
+      if (!state.open && !state.featureRequestOpen) return;
+      state.close();
+      value.openFeedback();
+    };
+    const unsubscribe = useFeedbackStore.subscribe(redirect);
+    redirect();
+    return unsubscribe;
+  }, [value]);
+  return <Context value={value}>{children}</Context>;
+}
 export function useApplicationPeripherals() {
   return useContext(Context);
 }

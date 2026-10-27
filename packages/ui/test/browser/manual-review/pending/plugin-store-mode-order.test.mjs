@@ -430,3 +430,66 @@ for (const width of [1200, 390]) {
     }
   }
 }
+
+for (const [width, theme] of [
+  [1200, "light"],
+  [390, "dark"],
+]) {
+  test(`application publication hide, republish and outage ${width}/${theme}`, async () => {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    let entries = [
+      { pluginId: "native-public@application-native", group: "public" },
+      { pluginId: "native-community@application-native", group: "community" },
+    ];
+    let unavailable = false;
+    await page.route("**/order", (route) => route.fulfill({ json: null }));
+    await page.route("**/publication", (route) =>
+      route.fulfill(unavailable ? { status: 503, body: "unavailable" } : { json: entries }),
+    );
+    const card = (name) =>
+      page.locator(
+        `[data-testid="plugin-store-card"][data-plugin-id="${name}@application-native"]`,
+      );
+    try {
+      await page.goto(`${origin}fixture?governance=1&locale=zh-CN&theme=${theme}`);
+      await card("native-public").waitFor();
+      assert.equal(await card("internal-host").count(), 0);
+      assert.equal(await card("native-community").count(), 0);
+      await page.getByTestId("plugin-store-segment-community").click();
+      await card("native-community").waitFor();
+      entries = entries.filter((entry) => entry.group !== "community");
+      await page.getByTestId("publication-refresh").click();
+      await page.getByTestId("plugin-store-community-empty").waitFor();
+      assert.equal(await card("native-community").count(), 0);
+      entries.push({ pluginId: "native-community@application-native", group: "community" });
+      await page.getByTestId("publication-refresh").click();
+      await card("native-community").waitFor();
+      await page.getByTestId("plugin-store-search").fill("native-community");
+      assert.equal(await card("native-community").count(), 1);
+      unavailable = true;
+      await page.getByTestId("publication-refresh").click();
+      await page.getByRole("alert").waitFor();
+      assert.equal(await card("native-community").count(), 0);
+      await page.getByTestId("plugin-store-search").fill("");
+      await page.getByTestId("plugin-store-segment-personal").click();
+      await page
+        .locator('[data-testid="plugin-store-card"][data-plugin-id="private-source@personal"]')
+        .waitFor();
+      assert.equal(await page.getByTestId("installed-count").textContent(), "1");
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      assert.deepEqual(errors, []);
+      await mkdir(artifacts, { recursive: true });
+      await page.screenshot({
+        path: join(artifacts, `publication-${width}-${theme}.png`),
+        fullPage: true,
+      });
+    } finally {
+      await page.close();
+    }
+  });
+}

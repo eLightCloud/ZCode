@@ -66,6 +66,12 @@ export interface RootProps {
   applicationPluginStoreSection?: import("./ApplicationPluginStoreSection.js").ApplicationPluginStoreSection;
   /** Trusted build-owned business pages; native UI owns their navigation lifecycle. */
   applicationPages?: readonly import("./ApplicationPages.js").ApplicationPage[];
+  /**
+   * Trusted assembly intent to open a registered main-area page (deep links, file cards,
+   * notices). Consumed once per token; navigation state stays owned by the native shell.
+   */
+  applicationPageIntent?: { pageId: string; token: number } | null;
+  onApplicationPageIntentConsumed?: () => void;
   /** Optional application-owned account display; credentials stay with the provider. */
   applicationAccount?: { profile: UserInfo; onLogout: () => void };
   services: IServiceAccessor;

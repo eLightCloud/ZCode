@@ -26,6 +26,67 @@ import { PreviewPaneOfficeContent } from "@/previewPaneOfficeContent.js";
 import type { PptxElementReferenceSource } from "@/lib/pptxElementReference.js";
 import type { MediaCodeViewerSource, PptxReferencePreviewNavigation } from "@/lib/codeViewer.js";
 import { resolveCodeReviewContentProjection } from "@/previewPaneCodeReview.js";
+import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
+import { usePdfViewerLabels, usePptxViewerLabels } from "@/hooks/usePreviewViewerLabels.js";
+import { StaticHtmlPreview } from "@/components/ai-elements/web-preview.js";
+
+/** 已授权内容的只读展示入口；不读取文件、签发 URL 或拥有业务权限。 */
+export function FileContentPreview({
+  name,
+  source,
+  theme = "light",
+  codePreviewSettings = DEFAULT_CODE_PREVIEW_SETTINGS,
+}: {
+  name: string;
+  source:
+    | { kind: "text" | "html"; text: string }
+    | { kind: "office"; data: ArrayBuffer; officeKind: OfficeFilePreviewKind; reference: string }
+    | { kind: "pdf"; data: PdfViewerSource }
+    | { kind: "pptx"; data: ArrayBuffer }
+    | { kind: "image"; url: string };
+  theme?: Theme;
+  codePreviewSettings?: CodePreviewSettings;
+}) {
+  const pdfLabels = usePdfViewerLabels();
+  const pptxLabels = usePptxViewerLabels();
+  const dark = theme === "dark" || theme === "zai-dark";
+  if (source.kind === "office")
+    return (
+      <PreviewPaneOfficeContent
+        data={source.data}
+        kind={source.officeKind}
+        error={null}
+        loading={false}
+        resolvedTheme={dark ? "dark" : "light"}
+        sourcePath={source.reference}
+      />
+    );
+  if (source.kind === "pdf") return <PdfPreviewContent source={source.data} labels={pdfLabels} />;
+  if (source.kind === "pptx") return <PptxPreviewContent data={source.data} labels={pptxLabels} />;
+  if (source.kind === "image")
+    return <ImagePreviewContent title={name} imageSource={source.url} fitToContainer />;
+  if (source.kind === "html") return <StaticHtmlPreview content={source.text} title={name} />;
+  const language = inferCodeLanguage(name, source.text);
+  if (language === "markdown")
+    return (
+      <MarkdownPreviewContent
+        content={source.text}
+        sourceKey={name}
+        theme={theme}
+        codePreviewSettings={codePreviewSettings}
+      />
+    );
+  return (
+    <CodeContent
+      code={source.text}
+      language={language}
+      codePreviewSettings={codePreviewSettings}
+      codeTheme={dark ? codePreviewSettings.darkTheme : codePreviewSettings.lightTheme}
+      theme={theme}
+      wrapLongLines={codePreviewSettings.wrapLongLines}
+    />
+  );
+}
 
 interface PreviewPaneContentProps {
   source: CodeViewerSource;

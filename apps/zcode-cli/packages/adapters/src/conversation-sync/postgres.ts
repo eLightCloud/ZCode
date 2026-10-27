@@ -18,7 +18,9 @@ import {
 import type { Pool, PoolClient } from "pg";
 import { conversationHistorySchema } from "@zcode/shared";
 import type { ConversationCenterPolicy } from "@zcode/shared";
+import { SyncDiagnosticError } from "./monitoring.js";
 import { readCenterPolicy } from "./policy.js";
+import { requireRuntimeScope } from "./runtime-scope.js";
 import { continuationJournal, requireDeletionSettled } from "./continuation-journal.js";
 import { createConversationFileStore } from "./files.js";
 import { canonical, digest } from "./canonical.js";
@@ -31,22 +33,13 @@ import {
   type VersionFacts,
 } from "./transitions.js";
 
-interface InjectedPolicy {
-  policy?: never;
-  allowedScopes: readonly SyncScope[];
-  maxCheckpointBytes: number;
-  maxSubjectBytes: number;
-  maxVersionsPerSession: number;
-}
+type InjectedPolicy = ConversationCenterPolicy & { policy?: never };
 export type SyncStoreOptions = {
   pool: Pool;
   logger: Logger;
   objects?: ConversationObjectBytesPort;
 } & (InjectedPolicy | { policy: "managed" });
-type Limits = Pick<
-  ConversationCenterPolicy,
-  "maxCheckpointBytes" | "maxSubjectBytes" | "maxVersionsPerSession"
->;
+type Limits = ConversationCenterPolicy;
 function safePositive(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
@@ -74,48 +67,21 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     ])
       if (!safePositive(value)) throw new ConversationSyncError("invalid");
   }
-  const allowed = new Set(
-    injected?.allowedScopes.map((scope) => canonical(syncScopeSchema.parse(scope))),
-  );
   async function transaction<T>(
     scope: SyncScope,
     work: (client: PoolClient, limits: Limits) => Promise<T>,
   ): Promise<T> {
     const checked = syncScopeSchema.safeParse(scope);
-    if (!checked.success || (injected && !allowed.has(canonical(checked.data))))
-      throw new ConversationSyncError("scope");
+    if (!checked.success) throw new ConversationSyncError("scope");
     const client = await options.pool.connect();
     try {
       await client.query("begin");
-      // 同一连接、事务局部作用域；连接池复用不得继承上一人的 RLS 上下文。
-      await client.query(
-        "select set_config('zcode_sync.tenant', $1, true), set_config('zcode_sync.subject', $2, true)",
-        [checked.data.tenant, checked.data.subject],
-      );
-      const role = await client.query(`select r.rolsuper, r.rolbypassrls,
-        pg_has_role(current_user, c.relowner, 'USAGE') as owns
-        from pg_roles r cross join pg_class c join pg_namespace n on n.oid = c.relnamespace
-        where r.rolname = current_user and n.nspname = 'zcode_sync' and c.relname = 'sessions'`);
-      if (
-        role.rows.length !== 1 ||
-        role.rows[0].rolsuper ||
-        role.rows[0].rolbypassrls ||
-        role.rows[0].owns
-      ) {
-        throw new ConversationSyncError("scope");
-      }
-      const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 5)
-        throw new ConversationSyncError("schema");
+      await requireRuntimeScope(client, checked.data);
       let limits: Limits;
       if (injected) limits = injected;
       else {
         const policy = (await readCenterPolicy(client)).policy;
-        if (
-          !policy.enabled ||
-          !policy.subjects.some((item) => canonical(item) === canonical(checked.data))
-        )
-          throw new ConversationSyncError("scope");
+        // 有效账号无需另行开通；当前主体仍由可信入口及本事务的强制 RLS 隔离。
         limits = policy;
       }
       const result = await work(client, limits);
@@ -150,7 +116,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     versions: Map<string, VersionFacts>,
     limits: Limits,
   ) {
-    if (versions.size >= limits.maxVersionsPerSession) throw new ConversationSyncError("limit");
+    if (versions.size >= limits.maxVersionsPerSession) throw new SyncDiagnosticError("limit", "version_limit");
     for (const file of value.files ?? []) {
       const saved = await client.query(
         "select bytes from zcode_sync.file_objects where sha256=$1",
@@ -164,7 +130,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     if (payload) {
       if (payload.session.id !== session) throw new ConversationSyncError("invalid");
       const bytes = Buffer.byteLength(canonical(payload));
-      if (bytes > limits.maxCheckpointBytes) throw new ConversationSyncError("limit");
+      if (bytes > limits.maxCheckpointBytes) throw new SyncDiagnosticError("limit", "checkpoint_limit");
       // 主体锁覆盖不同 session 的并发配额，不因去重而跨主体探测内容。
       const usage = await client.query(
         `select ((select coalesce(sum(bytes),0) from zcode_sync.payloads)+
@@ -174,7 +140,7 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         hash,
       ]);
       if (!exists.rows.length && Number(usage.rows[0].bytes) + bytes > limits.maxSubjectBytes)
-        throw new ConversationSyncError("limit");
+        throw new SyncDiagnosticError("limit", "subject_capacity");
       await client.query(
         `insert into zcode_sync.payloads(tenant,subject,digest,payload,bytes)
         values($1,$2,$3,$4,$5) on conflict do nothing`,

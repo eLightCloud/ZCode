@@ -211,7 +211,7 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
     [
       // 版本按插件各自升：pdf 0.2.1 起面板带中日韩字体回退，换新缓存目录，不复用 0.2.0 的旧缓存。
       ["documents", "docx", "Documents", "Word文档", "0.2.0"],
-      ["pdf", "pdf", "PDF", "PDF", "0.2.1"],
+      ["pdf", "pdf", "PDF", "PDF文档", "0.2.1"],
       ["presentations", "pptx", "Presentations", "演示文档", "0.2.0"],
       ["spreadsheets", "xlsx", "Spreadsheets", "电子表格", "0.2.0"],
     ] as const

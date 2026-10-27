@@ -10,6 +10,17 @@ export type ApplicationPluginStoreRender = (
   },
 ) => ReactNode;
 
+export interface ApplicationPluginDiscoveryCatalog {
+  marketplaceIds: readonly string[];
+  entries: readonly {
+    pluginId: string;
+    group: "public" | "community";
+    nameZh?: string;
+    nameEn?: string;
+  }[];
+  loading: boolean;
+}
+
 export interface ApplicationPluginStoreSection {
   /** Presentation only; the application server still authorizes every request. */
   visible?: boolean;
@@ -19,7 +30,12 @@ export interface ApplicationPluginStoreSection {
   onRefresh: () => void;
   render: ApplicationPluginStoreRender;
   renderPublic?: ApplicationPluginStoreRender;
+  renderCommunity?: ApplicationPluginStoreRender;
   renderPersonal?: ApplicationPluginStoreRender;
+  /** Published discovery only; installed state and runtime remain native. */
+  catalog?: ApplicationPluginDiscoveryCatalog;
+  beforeAcquire?: (pluginId: string) => Promise<void>;
+  count?: (segment: "public" | "community" | "personal", query: string) => number;
   /** Trusted, optional effect at the resolved active location; owns no native state. */
   renderLocationEffect?: (context: ApplicationPageContext) => ReactNode;
   /** Build-owned discovery grouping only; authorization remains with the catalog server. */

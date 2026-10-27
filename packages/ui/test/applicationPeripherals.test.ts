@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { conversationRowSchema } from "@zcode/shared/zcode-protocol-v4";
 import { applicationShareCandidate } from "../src/root/ApplicationPeripherals.js";
@@ -61,4 +62,72 @@ it("provides a disabled cloud context without loading account inventory or openi
     }),
   );
   expect(html).toContain("no cloud products");
+});
+
+it("redirects legacy feedback commands without forwarding automatic material", async () => {
+  const { createElement } = await import("react");
+  const { render, cleanup, act } = await import("@testing-library/react");
+  const { ApplicationPeripheralsProvider } = await import("../src/root/ApplicationPeripherals.js");
+  const { useFeedbackStore } = await import("../src/feedback/feedbackStore.js");
+  const { vi } = await import("vitest");
+  useFeedbackStore.getState().close();
+  const openFeedback = vi.fn();
+  const value = {
+    nativeCloudEnabled: false,
+    openHelp: vi.fn(),
+    openFeedback,
+    openShare: vi.fn(),
+    renderModelPlans: () => null,
+  };
+  const view = render(
+    createElement(ApplicationPeripheralsProvider, { value, children: createElement("div") }),
+  );
+  act(() => useFeedbackStore.getState().openSubmit({ title: "private-draft", includeLogs: true }));
+  expect(openFeedback.mock.calls).toEqual([[]]);
+  expect(useFeedbackStore.getState().submitDraft).toBeNull();
+  act(() => useFeedbackStore.getState().openFeatureRequest());
+  act(() => useFeedbackStore.getState().openTickets());
+  expect(openFeedback).toHaveBeenCalledTimes(3);
+  view.unmount();
+  act(() => useFeedbackStore.getState().openSubmit());
+  expect(useFeedbackStore.getState().open).toBe(true);
+  useFeedbackStore.getState().close();
+  cleanup();
+});
+
+it("returns focus to the application trigger after a controlled dialog closes", async () => {
+  const { createElement, useState } = await import("react");
+  const { render, cleanup, fireEvent, waitFor } = await import("@testing-library/react");
+  const { ApplicationDialog } = await import("../src/root/ApplicationDialog.js");
+  const { ZCodeIntlProvider } = await import("../src/i18n/IntlProvider.js");
+  function Probe() {
+    const [open, setOpen] = useState(false);
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "button",
+        {
+          onClick: (event) => {
+            event.currentTarget.focus();
+            setOpen(true);
+          },
+        },
+        "feedback trigger",
+      ),
+      createElement(ApplicationDialog, {
+        title: "feedback",
+        open,
+        onClose: () => setOpen(false),
+        children: createElement("button", { onClick: () => setOpen(false) }, "close feedback"),
+      }),
+    );
+  }
+  const view = render(createElement(ZCodeIntlProvider, { children: createElement(Probe) }));
+  const trigger = view.getByRole("button", { name: "feedback trigger" });
+  fireEvent.click(trigger);
+  await waitFor(() => expect(view.getByRole("dialog")).toBeTruthy());
+  fireEvent.click(view.getByRole("button", { name: "close feedback" }));
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  cleanup();
 });

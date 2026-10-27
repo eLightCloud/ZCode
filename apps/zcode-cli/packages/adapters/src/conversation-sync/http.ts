@@ -15,8 +15,12 @@ import {
   conversationContinuationCancelSchema,
   conversationFileSchema,
   type ConversationFile,
+  type ConversationObservation,
+  conversationObservationReasonSchema,
 } from "@zcode/shared";
 import { z } from "zod";
+import { SyncDiagnosticError, type createConversationSyncMonitor } from "./monitoring.js";
+import type { createConversationTerminalStore } from "./terminals.js";
 import type { createConversationContinuation } from "./continuation.js";
 
 /** Trusted assembly supplies identity/qualification; browsers cannot supply barrier proofs. */
@@ -30,6 +34,8 @@ export function createConversationSyncHttpHandler(options: {
     transport: NodeHttpIncomingRequest,
   ): Promise<boolean>;
   logger: Logger;
+  monitor?: ReturnType<typeof createConversationSyncMonitor>;
+  terminals?: ReturnType<typeof createConversationTerminalStore>;
   continuation?: ReturnType<typeof createConversationContinuation>;
 }) {
   if (!Number.isSafeInteger(options.maxRequestBytes) || options.maxRequestBytes < 1)
@@ -45,7 +51,21 @@ export function createConversationSyncHttpHandler(options: {
         ? { correlationId: correlation }
         : {}),
     });
+    let observation: ConversationObservation | undefined;
+    let action: ConversationObservation["action"] | undefined;
+    let failureReason: ConversationObservation["reason"] = "unavailable";
     function reply(status: number, body: unknown) {
+      if (action) {
+        const state = typeof body === "object" && body !== null && "status" in body ? body.status : null;
+        const reason = typeof body === "object" && body !== null && "reason" in body ? body.reason : null;
+        observation = status >= 400
+          ? { action, outcome: status >= 500 ? "failed" : "rejected", reason: failureReason }
+          : state === "waiting" || state === "forward_only" || state === "cancelling"
+            ? { action, outcome: "waiting", reason: conversationObservationReasonSchema.safeParse(reason).success
+                ? conversationObservationReasonSchema.parse(reason) : state === "forward_only" ? "forward_only" : state === "cancelling" ? "cancelling" : "blocked" }
+            : state === "stale" ? { action, outcome: "rejected", reason: "stale" }
+            : { action, outcome: "succeeded", reason: "none" };
+      }
       response.writeHead(status, {
         "content-type": "application/json",
         "cache-control": "no-store",
@@ -60,6 +80,12 @@ export function createConversationSyncHttpHandler(options: {
         return;
       }
       const url = new URL(request.url ?? "/", "http://native.invalid");
+      if (request.method === "POST") {
+        action = url.pathname === "/versions" ? "checkpoint"
+          : url.pathname === "/file" ? "file_upload"
+          : url.pathname === "/file-read" ? "file_read"
+          : ["/continue", "/continue-cancel"].includes(url.pathname) ? "continuation" : undefined;
+      } else if (request.method === "GET" && url.pathname === "/attachment") action = "file_read";
       if (request.method === "GET" && url.pathname === "/admission") {
         await options.store.state(scope, "sync-admission-probe");
         reply(200, { admitted: true });
@@ -74,6 +100,7 @@ export function createConversationSyncHttpHandler(options: {
           "/continue-cancel",
           "/file",
           "/file-read",
+          "/terminal-report",
         ].includes(url.pathname)
       ) {
         if (request.headers["content-type"]?.split(";")[0].trim() !== "application/json")
@@ -83,7 +110,7 @@ export function createConversationSyncHttpHandler(options: {
         for await (const raw of request) {
           const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
           bytes += chunk.byteLength;
-          if (bytes > options.maxRequestBytes) throw new ConversationSyncError("limit");
+          if (bytes > (url.pathname === "/terminal-report" ? Math.min(32768, options.maxRequestBytes) : options.maxRequestBytes)) throw new SyncDiagnosticError("limit", "transport_limit");
           chunks.push(chunk);
         }
         let body: unknown;
@@ -91,6 +118,12 @@ export function createConversationSyncHttpHandler(options: {
           body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         } catch {
           throw new ConversationSyncError("invalid");
+        }
+        if (url.pathname === "/terminal-report") {
+          if (!options.terminals) throw new ConversationSyncError("blocked");
+          const source = request.headers["x-zcode-sync-location"], kind = request.headers["x-zcode-sync-source-kind"];
+          if (typeof source !== "string" || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(source) || (kind !== "desktop" && kind !== "server")) throw new ConversationSyncError("scope");
+          reply(200, await options.terminals.report(scope, source, kind, body, typeof correlation === "string" ? correlation : undefined)); return;
         }
         if (url.pathname === "/file" || url.pathname === "/file-read") {
           if (!options.store.files) throw new ConversationSyncError("blocked");
@@ -339,6 +372,9 @@ export function createConversationSyncHttpHandler(options: {
       } else reply(404, { error: "not_found" });
     } catch (cause) {
       const code = cause instanceof ConversationSyncError ? cause.code : "storage";
+      const parsedReason = conversationObservationReasonSchema.safeParse(code);
+      failureReason = cause instanceof SyncDiagnosticError ? cause.reason
+        : parsedReason.success ? parsedReason.data : "blocked";
       const status =
         code === "scope"
           ? 403
@@ -355,8 +391,10 @@ export function createConversationSyncHttpHandler(options: {
         outcome: "rejected",
         code,
       });
-      if (!response.headersSent) reply(status, { error: code });
+      if (!response.headersSent) reply(status, { error: code, ...(request.headers["x-zcode-sync-diagnostics"] === "1" ? { reason: failureReason } : {}) });
       else response.destroy();
+    } finally {
+      if (observation && options.monitor) await options.monitor.record(observation, typeof correlation === "string" ? correlation : undefined);
     }
   };
 }

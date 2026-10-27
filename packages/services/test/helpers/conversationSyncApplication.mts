@@ -78,8 +78,6 @@ const configuration = createConversationSyncPolicyStore({
 });
 const previous = await configuration.read();
 await configuration.update(previous.revision, {
-  enabled: true,
-  subjects: config.scopes,
   maxCheckpointBytes: 128000,
   maxSubjectBytes: 4000000,
   maxVersionsPerSession: 100,
@@ -291,13 +289,6 @@ const server = createServer(async (request, response) => {
     if (input.action === "seed") {
       await seed(input.session, input.command);
       result = { seeded: true };
-    } else if (input.action === "policy") {
-      const current = await configuration.read();
-      await configuration.update(current.revision, {
-        ...current.policy,
-        enabled: input.enabled,
-      });
-      result = { updated: true };
     } else if (input.action === "captures") result = { captures };
     else if (input.action === "index")
       result = {

@@ -83,9 +83,27 @@ The separate SQLite file validates its application ID before any schema/WAL chan
   text version names it as parent. Resuming requires explicit whole-copy choice.
 - Historical handoff IDs remain unique through immutable operation receipts;
   later handoffs cannot make an old cancelled/granted H reusable.
-- Permanent purge, physical TTL and unrestricted opening have no initial facade.
-  Controlled-subject allowlists and measured limits are injected by a trusted
-  configuration owner, never by env fallback or browser switches.
+- Permanent purge and physical TTL have no initial facade. Every authenticated
+  account can synchronize its qualified conversations without an account enable
+  switch or subject allowlist. Trusted scope, current identity and native workspace
+  qualification remain mandatory; RLS still isolates tenant and subject.
+  The configuration owner manages measured capacity limits only, never by env fallback.
+
+## Capacity configuration and upgrade
+
+The strict policy schema contains only checkpoint bytes, subject bytes and version
+limits. Injected fixture limits have the same scope semantics as managed limits;
+neither path maintains account eligibility. Continuation scope types come directly
+from the authoritative scope schema, independently of configuration.
+
+Schema 6 removes `enabled` and `subjects` from existing configuration JSON and
+advances its CAS revision exactly once under the migration transaction/advisory
+lock. Limits and all conversation tables remain intact. Fresh and v1–v5 databases
+take the same migration; repeat migration is a no-op. Runtimes/configurators require
+schema 6; old binaries fail closed and cannot be mixed during upgrade. Deployment
+stops center writers and backs up before explicit migration. Test the v5 disabled
+and restricted-account cases, data/receipt preservation, concurrent reruns, new
+accounts without configuration changes, role/channel separation and cross-scope RLS.
 
 ## Required evidence
 

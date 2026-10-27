@@ -73,6 +73,7 @@ import {
   ApplicationPluginStoreProvider,
 } from "@/root/ApplicationPluginStoreSection.js";
 import { ApplicationPages } from "@/root/ApplicationPages.js";
+import { ApplicationPageIntentBridge } from "@/root/ApplicationPageIntent.js";
 import { ApplicationSettingsProvider } from "@/root/ApplicationSettings.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveConversationWorkspaceTarget } from "@/conversation-workspace-target/index.js";
@@ -225,6 +226,10 @@ function NativeRoot(props: RootProps) {
                                 pages={props.applicationPages ?? []}
                                 headerPageId={props.applicationHeaderPageId}
                               >
+                                <ApplicationPageIntentBridge
+                                  intent={props.applicationPageIntent}
+                                  onConsumed={props.onApplicationPageIntentConsumed}
+                                />
                                 <ApplicationPluginLocationEffect />
                                 {props.workspaceEntry ? (
                                   <WorkspaceEntryContent props={props} />

@@ -71,7 +71,6 @@ try {
   });
   const options = {
     pool: runtime,
-    allowedScopes: [scope, other, cross],
     maxCheckpointBytes: 128_000,
     maxSubjectBytes: 1_000_000,
     maxVersionsPerSession: 100,
@@ -107,7 +106,7 @@ try {
   await migrateConversationSync(owner);
   assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
   assert.equal((await store.history(scope, null, 10))[0].management, null);
-  checks.push("native_v1_to_v5_preserves_existing_versions_receipts_and_unknown_index");
+  checks.push("native_v1_to_v6_preserves_existing_versions_receipts_and_unknown_index");
   assert.deepEqual(
     await store.execute(
       { tenant: scope.tenant.toUpperCase(), subject: scope.subject.toUpperCase() },
@@ -157,13 +156,13 @@ try {
     { code: "scope" },
   );
   await assert.rejects(
-    createConversationSyncStore({ ...options, pool: runtime, allowedScopes: [] }).state(
-      scope,
+    createConversationSyncStore({ ...options, pool: runtime }).state(
+      { ...scope, subject: "invalid" },
       "session-sync",
     ),
     { code: "scope" },
   );
-  checks.push("restricted_role_rls_account_tenant_and_default_disabled");
+  checks.push("restricted_role_rls_account_tenant_and_invalid_scope");
   // Remaining checks use the reopened facade; the original pool is intentionally closed.
   await verifyTransitions(reopened, scope, checks);
   await verifyManaged(owner, runtime, scope, connection, checks);
@@ -201,7 +200,7 @@ try {
     (await owner.query("select version from zcode_sync.schema_version")).rows[0].version,
     99,
   );
-  await owner.query("update zcode_sync.schema_version set version=5");
+  await owner.query("update zcode_sync.schema_version set version=6");
   await owner.query("alter role zcode_sync_runtime bypassrls");
   await assert.rejects(migrateConversationSync(owner), { code: "scope" });
   await owner.query("alter role zcode_sync_runtime nobypassrls");
@@ -212,7 +211,6 @@ try {
     repairedStore: createConversationSyncStore({
       ...options,
       pool: runtime,
-      allowedScopes: [capacityScope],
       maxCheckpointBytes: 131_072,
       maxSubjectBytes: 8_388_608,
       maxVersionsPerSession: 64,
@@ -223,7 +221,6 @@ try {
     store: createConversationSyncStore({
       ...options,
       pool: runtime,
-      allowedScopes: [capacityScope],
       maxCheckpointBytes: 65_536,
       maxSubjectBytes: 8_388_608,
       maxVersionsPerSession: 64,
@@ -247,7 +244,6 @@ try {
   const quotaStore = createConversationSyncStore({
     ...options,
     pool: runtime,
-    allowedScopes: [quotaScope],
     maxCheckpointBytes: quotaBytes,
     maxSubjectBytes: quotaBytes,
   });
@@ -340,7 +336,6 @@ try {
   const fileStore = createConversationSyncStore({
     ...options,
     pool: faultPool,
-    allowedScopes: [fileScope],
     maxSubjectBytes: 8,
     objects,
   });
@@ -390,7 +385,6 @@ try {
   const raceStore = createConversationSyncStore({
     ...options,
     pool: runtime,
-    allowedScopes: [raceScope],
     maxSubjectBytes: 8,
     objects: {
       ...objects,

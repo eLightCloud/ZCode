@@ -19,7 +19,7 @@ const uuid = z
   .uuid()
   .transform((value) => value.toLowerCase());
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export type SyncScope = import("@zcode/shared").ConversationCenterPolicy["subjects"][number];
+export type SyncScope = import("@zcode/shared").ConversationScope;
 // CLI and shared use different Zod majors. Keep the shared validator authoritative
 // without emitting its Zod v4 schema types into the CLI's Zod v3 declarations.
 export const syncScopeSchema = z

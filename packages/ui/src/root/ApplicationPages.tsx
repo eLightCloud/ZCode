@@ -22,6 +22,10 @@ import {
   useWorkspaceServicesResolution,
 } from "@/hooks/useWorkspaceServices.js";
 import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
+import {
+  ApplicationPageNavigationProvider,
+  useApplicationPageNavigationState,
+} from "@/root/ApplicationPageNavigation.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import type { ZCodeAgentWorkspaceTarget } from "@zcode/services";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
@@ -32,6 +36,8 @@ export interface ApplicationPage {
   label: string;
   Icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   standalone?: boolean;
+  /** Trusted-build registration for a sidebar-mounted main-area target; ties keep registration order. */
+  sidebarOrder?: number;
   render: (context: ApplicationPageContext) => ReactNode;
 }
 
@@ -153,34 +159,46 @@ export function ApplicationPages({
   headerPageId?: string;
   children?: ReactNode;
 }) {
+  return (
+    <ApplicationPageNavigationProvider pages={pages}>
+      <ApplicationPagesSurface pages={pages} headerPageId={headerPageId}>
+        {children}
+      </ApplicationPagesSurface>
+    </ApplicationPageNavigationProvider>
+  );
+}
+
+/** Dialog surface for build-owned pages; sidebar-registered pages are hosted by the shell. */
+function ApplicationPagesSurface({
+  pages,
+  headerPageId,
+  children,
+}: {
+  pages: readonly ApplicationPage[];
+  headerPageId?: string;
+  children?: ReactNode;
+}) {
+  const navigation = useApplicationPageNavigationState();
   const { intl } = useZCodeIntl();
-  const [selected, setSelected] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const page = pages.find((candidate) => candidate.id === selected);
+  const selected = navigation?.selectedPageId ?? null;
+  const dialogPages = navigation?.dialogPages ?? pages;
+  const page = dialogPages.find((candidate) => candidate.id === selected);
 
-  useEffect(() => {
-    if (selected && !page) setSelected(null);
-  }, [selected, page]);
+  // 注册失效由导航 Provider 唯一裁决；侧栏页不在 Dialog 清单不代表失效。
   useEffect(() => {
     if (selected) heading.current?.focus();
   }, [selected, generation]);
 
   const close = () => {
-    logger.info("application.page.closed", { pageId: selected });
-    setSelected(null);
-    (returnFocus.current?.isConnected ? returnFocus.current : trigger.current)?.focus();
+    navigation?.closePage();
   };
   // 工具栏目标由装配明确指定，避免业务页面注册顺序改变入口。
-  const first = headerPageId ? pages.find((item) => item.id === headerPageId) : pages[0];
+  const first = headerPageId ? pages.find((item) => item.id === headerPageId) : dialogPages[0];
   const openPage = (id: string) => {
-    if (!pages.some((item) => item.id === id)) return;
-    returnFocus.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setSelected(id);
-    logger.info("application.page.opened", { pageId: id });
+    navigation?.openPage(id);
   };
   const action = first ? (
     <ControlHintTooltip title={first.label} side="bottom">
@@ -190,11 +208,7 @@ export function ApplicationPages({
         size={first.Icon ? "icon-md" : "default"}
         className="text-foreground hover:bg-hover hover:text-foreground max-sm:min-h-11 max-sm:min-w-11 [app-region:no-drag]"
         aria-label={first.label}
-        onClick={() => {
-          returnFocus.current = trigger.current;
-          setSelected(first.id);
-          logger.info("application.page.opened", { pageId: first.id });
-        }}
+        onClick={() => navigation?.openPage(first.id)}
       >
         {first.Icon ? <first.Icon className="size-4" aria-hidden={true} /> : first.label}
       </Button>
@@ -218,7 +232,9 @@ export function ApplicationPages({
               className="inset-0 top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-background p-0"
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
-                (returnFocus.current?.isConnected ? returnFocus.current : trigger.current)?.focus();
+                const settled = document.activeElement;
+                if (!settled || settled === document.body || !settled.isConnected)
+                  trigger.current?.focus();
               }}
             >
               {/* 全页覆盖层要避开 macOS 原生窗控，并为 Windows/Linux 保留可操作窗控。 */}
@@ -236,7 +252,7 @@ export function ApplicationPages({
                       id: "applicationPages.navigation",
                     })}
                   >
-                    {pages
+                    {dialogPages
                       .filter((item) => !item.standalone)
                       .map((item) => (
                         <Button
@@ -244,12 +260,7 @@ export function ApplicationPages({
                           variant="ghost"
                           aria-pressed={selected === item.id}
                           className="aria-pressed:bg-selected"
-                          onClick={() => {
-                            setSelected(item.id);
-                            logger.info("application.page.selected", {
-                              pageId: item.id,
-                            });
-                          }}
+                          onClick={() => navigation?.openPage(item.id)}
                         >
                           {item.label}
                         </Button>

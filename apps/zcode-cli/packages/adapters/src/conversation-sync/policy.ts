@@ -5,6 +5,7 @@ import {
 } from "@zcode/shared";
 import { ConversationSyncError, type Logger } from "@zcode/contracts";
 import type { ConversationCenterPolicy } from "@zcode/shared";
+import { CONVERSATION_SYNC_SCHEMA_VERSION } from "./migration.js";
 
 export async function readCenterPolicy(client: PoolClient) {
   const result = await client.query(
@@ -40,7 +41,7 @@ export function createConversationSyncPolicyStore(options: { pool: Pool; logger:
       )
         throw new ConversationSyncError("scope");
       const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 5)
+      if (schema.rows.length !== 1 || schema.rows[0].version !== CONVERSATION_SYNC_SCHEMA_VERSION)
         throw new ConversationSyncError("schema");
       const result = await work(client);
       await client.query("commit");

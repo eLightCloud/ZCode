@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import type { Locale, RemoteTarget, UserInfo } from "@zcode/shared";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -145,6 +146,14 @@ export interface ProjectSidebarProps {
   onOpenPluginStore?: () => void;
   automationsActive?: boolean;
   pluginStoreActive?: boolean;
+  /** Trusted-build sidebar entries into shell-owned main-area navigation (deterministic order). */
+  applicationSidebarPages?: readonly {
+    id: string;
+    label: string;
+    Icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  }[];
+  activeApplicationPageId?: string | null;
+  onOpenApplicationPage?: (id: string) => void;
   onFileTreeOpenChange?: (open: boolean) => void;
   onWebRemoteTaskOpen?: (options: { crossWorkspace: boolean }) => void;
   onWebRemoteTaskSwitchingChange?: (switching: boolean) => void;

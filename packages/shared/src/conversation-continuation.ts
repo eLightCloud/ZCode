@@ -51,33 +51,33 @@ export type ConversationContinuationRecord = z.infer<typeof conversationContinua
 export interface ConversationContinuationJournal {
   /** Ready offline runtimes remain owners even before they produce a new checkpoint. */
   offlineLocations(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     session: string,
   ): Promise<string[]>;
   /** Serializes cancellation with the actual grant/selection commit. */
   requestCancel(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     session: string,
     operation: string,
   ): Promise<ConversationContinuationRecord>;
   commitOffline(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     session: string,
     operation: string,
   ): Promise<ConversationContinuationRecord>;
   begin(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     input: ConversationContinuationIntent,
     /** First online enrollment must atomically refuse existing or offline owners. */
     enrollment?: boolean,
   ): Promise<ConversationContinuationRecord>;
   read(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     session: string,
     operation?: string,
   ): Promise<ConversationContinuationRecord | null>;
   finish(
-    scope: import("./conversation-sync.js").ConversationCenterPolicy["subjects"][number],
+    scope: import("./conversation-sync.js").ConversationScope,
     input: ConversationContinuationResult,
   ): Promise<ConversationContinuationRecord>;
 }

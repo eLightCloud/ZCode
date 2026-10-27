@@ -19,6 +19,7 @@ import type { Pool, PoolClient } from "pg";
 import { conversationHistorySchema } from "@zcode/shared";
 import type { ConversationCenterPolicy } from "@zcode/shared";
 import { readCenterPolicy } from "./policy.js";
+import { CONVERSATION_SYNC_SCHEMA_VERSION } from "./migration.js";
 import { continuationJournal, requireDeletionSettled } from "./continuation-journal.js";
 import { createConversationFileStore } from "./files.js";
 import { canonical, digest } from "./canonical.js";
@@ -31,22 +32,13 @@ import {
   type VersionFacts,
 } from "./transitions.js";
 
-interface InjectedPolicy {
-  policy?: never;
-  allowedScopes: readonly SyncScope[];
-  maxCheckpointBytes: number;
-  maxSubjectBytes: number;
-  maxVersionsPerSession: number;
-}
+type InjectedPolicy = ConversationCenterPolicy & { policy?: never };
 export type SyncStoreOptions = {
   pool: Pool;
   logger: Logger;
   objects?: ConversationObjectBytesPort;
 } & (InjectedPolicy | { policy: "managed" });
-type Limits = Pick<
-  ConversationCenterPolicy,
-  "maxCheckpointBytes" | "maxSubjectBytes" | "maxVersionsPerSession"
->;
+type Limits = ConversationCenterPolicy;
 function safePositive(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
@@ -74,16 +66,12 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
     ])
       if (!safePositive(value)) throw new ConversationSyncError("invalid");
   }
-  const allowed = new Set(
-    injected?.allowedScopes.map((scope) => canonical(syncScopeSchema.parse(scope))),
-  );
   async function transaction<T>(
     scope: SyncScope,
     work: (client: PoolClient, limits: Limits) => Promise<T>,
   ): Promise<T> {
     const checked = syncScopeSchema.safeParse(scope);
-    if (!checked.success || (injected && !allowed.has(canonical(checked.data))))
-      throw new ConversationSyncError("scope");
+    if (!checked.success) throw new ConversationSyncError("scope");
     const client = await options.pool.connect();
     try {
       await client.query("begin");
@@ -105,17 +93,13 @@ export function createConversationSyncStore(options: SyncStoreOptions): Conversa
         throw new ConversationSyncError("scope");
       }
       const schema = await client.query("select version from zcode_sync.schema_version");
-      if (schema.rows.length !== 1 || schema.rows[0].version !== 5)
+      if (schema.rows.length !== 1 || schema.rows[0].version !== CONVERSATION_SYNC_SCHEMA_VERSION)
         throw new ConversationSyncError("schema");
       let limits: Limits;
       if (injected) limits = injected;
       else {
         const policy = (await readCenterPolicy(client)).policy;
-        if (
-          !policy.enabled ||
-          !policy.subjects.some((item) => canonical(item) === canonical(checked.data))
-        )
-          throw new ConversationSyncError("scope");
+        // 有效账号无需另行开通；当前主体仍由可信入口及本事务的强制 RLS 隔离。
         limits = policy;
       }
       const result = await work(client, limits);

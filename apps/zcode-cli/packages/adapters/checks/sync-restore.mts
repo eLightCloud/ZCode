@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import pg from "pg";
 import { createConversationSyncStore } from "@zcode/adapters/conversation-sync";
+import { conversationCenterPolicySchema } from "@zcode/shared";
 import { logger } from "./sync-fixture.mjs";
 const chunks: Buffer[] = [];
 for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
@@ -21,9 +22,15 @@ const runtime = new pg.Pool({
   database: "sync_restored",
 });
 try {
+  const schema = Number(
+    (await runtime.query("select version from zcode_sync.schema_version")).rows[0].version,
+  );
+  assert.equal(schema, 6);
+  const restoredPolicy = (await runtime.query("select policy from zcode_sync.configuration"))
+    .rows[0].policy;
+  assert.deepEqual(conversationCenterPolicySchema.parse(restoredPolicy), restoredPolicy);
   const store = createConversationSyncStore({
     pool: runtime,
-    allowedScopes: [connection.scope, connection.capacityScope],
     logger,
     maxCheckpointBytes: 128_000,
     maxSubjectBytes: 1_000_000,
@@ -88,7 +95,7 @@ try {
   process.stdout.write(
     JSON.stringify({
       restored: true,
-      schema: 5,
+      schema,
       versionsAndReceipts: true,
       rls: true,
       noExecutionStarted: true,

@@ -33,10 +33,9 @@ export const conversationScopeSchema = z
       .transform((value) => value.toLowerCase()),
   })
   .strict();
+export type ConversationScope = z.infer<typeof conversationScopeSchema>;
 export const conversationCenterPolicySchema = z
   .object({
-    enabled: z.boolean(),
-    subjects: z.array(conversationScopeSchema).max(10000),
     maxCheckpointBytes: z
       .number()
       .int()

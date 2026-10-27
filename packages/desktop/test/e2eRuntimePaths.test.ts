@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -76,14 +77,20 @@ describe("Desktop E2E runtime paths", () => {
     expect(resolveE2EStorageRoot(homeDir)).toBe(join(homeDir, ".zcode"));
   });
 
-  it("does not allow raw system /tmp paths in Desktop E2E runtime sources", () => {
-    const offenders = collectSourceFiles(E2E_DIR)
-      .filter((path) => SYSTEM_TMP_PATH_PATTERN.test(readFileSync(path, "utf-8")))
-      .map((path) => relative(E2E_DIR, path).replaceAll("\\", "/"))
+  // Bugfix: 守卫要读 e2e 目录全部 1600+ 源文件，此前同步逐文件 readFileSync，全量
+  // 高负载下顺序 IO 会顶穿全局 testTimeout 30s（实测复现）。改为并行异步读，并按
+  // settingsPage 冷启动先例放宽本用例到 90s（per-test 参数是覆盖全局而非取大，必须 ≥ 30s）。
+  it("does not allow raw system /tmp paths in Desktop E2E runtime sources", async () => {
+    const files = collectSourceFiles(E2E_DIR);
+    const contents = await Promise.all(files.map((path) => readFile(path, "utf-8")));
+    const offenders = files
+      .map((path, index) => ({ path, content: contents[index] }))
+      .filter(({ content }) => SYSTEM_TMP_PATH_PATTERN.test(content))
+      .map(({ path }) => relative(E2E_DIR, path).replaceAll("\\", "/"))
       .filter((path) => !REMOTE_TMP_ASSERTION_SOURCES.has(path));
 
     expect(offenders).toEqual([]);
-  });
+  }, 90_000);
 });
 
 function collectSourceFiles(root: string): string[] {

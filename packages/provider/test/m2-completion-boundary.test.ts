@@ -42,25 +42,29 @@ const testRoots = [
   "packages/ui/test",
 ] as const;
 
+// Bugfix: 边界守卫要读 12 个生产/测试根目录的全部 .ts 源文件（数千个），此前每个用例
+// 各自顺序 await readFile 全量重扫，全量高负载下会顶穿全局 testTimeout 30s（实测复现）。
+// 改为并行异步读并按文件缓存内容，四个用例只读盘一次；同时按 settingsPage 冷启动
+// 先例放宽本组用例到 90s（per-test 参数是覆盖全局而非取大，必须 ≥ 30s）。
 describe("M2 completion boundary", () => {
   it("旧 Provider DTO 只属于一次性物理迁移边界", async () => {
     const matches = await findProductionFilesMatching(/\bModelProviderConfig\b/u);
     expect(matches).toEqual([...legacyDtoOwners].sort());
-  });
+  }, 90_000);
 
   it("非迁移测试不再以旧 Provider DTO 组织夹具", async () => {
     const matches = await findFilesMatching(testRoots, /\bModelProviderConfig\b/u);
     expect(matches).toEqual([...legacyDtoTestOwners].sort());
-  });
+  }, 90_000);
 
   it("生产实现不再读取旧 Provider Store 路径", async () => {
     expect(await findProductionFilesContaining("model-providers.json")).toEqual([]);
-  });
+  }, 90_000);
 
   it("正式 Provider 消费链路不再使用旧 API format 类型", async () => {
     const matches = await findProductionFilesMatching(/\bModelProviderApiFormat\b/u);
     expect(matches).toEqual([...legacyApiFormatOwners].sort());
-  });
+  }, 90_000);
 });
 
 async function findProductionFilesContaining(needle: string): Promise<string[]> {
@@ -71,17 +75,25 @@ async function findProductionFilesMatching(pattern: RegExp): Promise<string[]> {
   return findFilesMatching(productionRoots, pattern);
 }
 
+const fileContentCache = new Map<string, string>();
+
+async function readFileContent(file: string): Promise<string> {
+  const cached = fileContentCache.get(file);
+  if (cached !== undefined) return cached;
+  const content = await readFile(file, "utf-8");
+  fileContentCache.set(file, content);
+  return content;
+}
+
 async function findFilesMatching(roots: readonly string[], pattern: RegExp): Promise<string[]> {
   const files = (
     await Promise.all(roots.map((root) => collectSourceFiles(resolve(repositoryRoot, root))))
   ).flat();
-  const matches: string[] = [];
-  for (const file of files) {
-    if (pattern.test(await readFile(file, "utf-8"))) {
-      // 路径作为跨平台模块标识，统一 POSIX 分隔符比较（Windows readdir 产出 \）。
-      matches.push(relative(repositoryRoot, file).replaceAll("\\", "/"));
-    }
-  }
+  const contents = await Promise.all(files.map(readFileContent));
+  const matches = files
+    .filter((_, index) => pattern.test(contents[index]))
+    // 路径作为跨平台模块标识，统一 POSIX 分隔符比较（Windows readdir 产出 \）。
+    .map((file) => relative(repositoryRoot, file).replaceAll("\\", "/"));
   return matches.sort();
 }
 

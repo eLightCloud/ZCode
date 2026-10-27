@@ -18,6 +18,40 @@ export interface WebPreviewContextValue {
 
 const WebPreviewContext = createContext<WebPreviewContextValue | null>(null);
 
+/** 不可信 HTML 的静态快照：无脚本、外部资源、导航、表单或登录身份。 */
+export function createStaticHtmlDocument(content: string): string {
+  // template 的 inert 文档不会在净化前请求图片等资源。
+  const template = document.createElement("template");
+  template.innerHTML = content;
+  template.content
+    .querySelectorAll("script, meta, base, link, iframe, frame, object, embed, form")
+    .forEach((node) => node.remove());
+  template.content.querySelectorAll("*").forEach((node) => {
+    for (const attribute of Array.from(node.attributes)) {
+      const name = attribute.name.toLowerCase();
+      if (
+        name.startsWith("on") ||
+        ["href", "xlink:href", "src", "srcset", "action", "formaction", "srcdoc", "ping"].includes(
+          name,
+        )
+      ) {
+        node.removeAttribute(attribute.name);
+      }
+    }
+  });
+  // CSP 必须先于原文档所有节点生效；即使样式含 url() 也不得发出外部请求。
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'"><meta name="referrer" content="no-referrer"></head><body>${template.innerHTML}</body></html>`;
+}
+
+export function StaticHtmlPreview({ content, title }: { content: string; title: string }) {
+  const source = useMemo(() => createStaticHtmlDocument(content), [content]);
+  return (
+    <WebPreview className="h-full rounded-none border-0">
+      <WebPreviewBody title={title} sandbox="" referrerPolicy="no-referrer" srcDoc={source} />
+    </WebPreview>
+  );
+}
+
 const useWebPreview = () => {
   const context = useContext(WebPreviewContext);
   if (!context) {

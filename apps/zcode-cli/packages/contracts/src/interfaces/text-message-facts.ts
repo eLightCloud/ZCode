@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { errorAttributionSchema, type ErrorAttribution } from "@zcode/shared/zcode-protocol-v4";
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-selection";
 import { conversationArtifactUriSchema } from "@zcode/shared";
 import {
@@ -157,6 +158,12 @@ export const portableMessageInfoSchema = z.discriminatedUnion("role", [
               code: z.union([z.string(), z.number()]).optional(),
               statusCode: z.number().optional(),
               isRetryable: z.boolean().optional(),
+              // 原生失败消息已持久归因；缺少白名单会误拒绝完整检查点，不能靠丢字段修复。
+              attribution: z
+                .custom<ErrorAttribution>(
+                  (value) => errorAttributionSchema.safeParse(value).success,
+                )
+                .optional(),
             })
             .strict()
             .optional(),

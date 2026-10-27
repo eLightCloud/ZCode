@@ -10,6 +10,7 @@ import {
   type Logger,
 } from "@zcode/contracts";
 import { conversationFileSchema, type ConversationFile } from "@zcode/shared";
+import { SyncDiagnosticError } from "./monitoring.js";
 import { canonical } from "./canonical.js";
 
 type Limits = { maxSubjectBytes: number };
@@ -22,7 +23,7 @@ function verify(file: ConversationFile, bytes: Uint8Array) {
     bytes.length !== file.bytes ||
     createHash("sha256").update(bytes).digest("hex") !== file.sha256
   )
-    throw new ConversationSyncError("storage");
+    throw new SyncDiagnosticError("storage", "integrity");
 }
 export function createConversationFileStore(
   transaction: Transaction,
@@ -36,10 +37,10 @@ export function createConversationFileStore(
         [file.sha256],
       );
       if (!result.rowCount) {
-        if (file.bytes > limits.maxSubjectBytes) throw new ConversationSyncError("limit");
+        if (file.bytes > limits.maxSubjectBytes) throw new SyncDiagnosticError("limit", "subject_capacity");
         return null;
       }
-      if (Number(result.rows[0].bytes) !== file.bytes) throw new ConversationSyncError("storage");
+      if (Number(result.rows[0].bytes) !== file.bytes) throw new SyncDiagnosticError("storage", "integrity");
       return result.rows[0].receipt as ConversationObjectReceipt;
     });
   }
@@ -63,7 +64,7 @@ export function createConversationFileStore(
             );
             if (previous.rowCount) {
               if (Number(previous.rows[0].bytes) !== file.bytes)
-                throw new ConversationSyncError("storage");
+                throw new SyncDiagnosticError("storage", "integrity");
               verify(file, await objects.read(scope, file, previous.rows[0].receipt));
               return;
             }
@@ -71,7 +72,7 @@ export function createConversationFileStore(
               await client.query(`select ((select coalesce(sum(bytes),0) from zcode_sync.payloads)+
           (select coalesce(sum(bytes),0) from zcode_sync.file_objects))::text as bytes`);
             if (Number(used.rows[0].bytes) + file.bytes > limits.maxSubjectBytes)
-              throw new ConversationSyncError("limit");
+              throw new SyncDiagnosticError("limit", "subject_capacity");
             // 未确认上传由资源 owner 按派生内容键核对准确版本；事务失败后重试不重复造版本。
             const receipt = await objects.put(scope, file, bytes);
             verify(file, await objects.read(scope, file, receipt));

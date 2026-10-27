@@ -33,7 +33,7 @@ import {
   PluginDetailRow,
   PluginHookDetails,
   PluginWarningList,
-} from "@/settings/InstalledPluginManagement.js";
+} from "@/settings/PluginStoreDetailView.js";
 import { AddMarketplaceSourceDialog } from "@/settings/AddMarketplaceSourceDialog.js";
 import { PluginStoreListView, type PluginStoreSegment } from "@/settings/PluginStoreListView.js";
 import {
@@ -44,6 +44,7 @@ import { PluginStoreSourcesDialog } from "@/settings/PluginStoreSourcesDialog.js
 import type { PluginStoreActions } from "@/settings/PluginStoreCard.js";
 import {
   buildStoreItems,
+  projectPluginDiscovery,
   canUpdatePluginItem,
   isPluginUpdatePending,
   resolveItemDisplayName,
@@ -216,7 +217,14 @@ export function PluginStorePage({
       restorableBuiltins,
     ],
   );
-  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const discoveryItems = useMemo(
+    () => projectPluginDiscovery(items, applicationSection?.catalog),
+    [items, applicationSection?.catalog],
+  );
+  const itemById = useMemo(
+    () => new Map(discoveryItems.map((item) => [item.id, item])),
+    [discoveryItems],
+  );
   const detailItem = detailPluginId ? (itemById.get(detailPluginId) ?? null) : null;
   const marketingRequest = useStore(marketingNavigation, (state) => state.request);
   const isMarketingDestinationVisible = useOptionalTabStore((state) => {
@@ -417,6 +425,15 @@ export function PluginStorePage({
 
   const handleInstall = useCallback(
     async (item: StorePluginItem) => {
+      const version = usePluginManagementStore.getState().operationVersion;
+      try {
+        if (applicationSection?.beforeAcquire) await applicationSection.beforeAcquire(item.id);
+      } catch (failure) {
+        toast(failure instanceof Error ? failure.message : String(failure));
+        return;
+      }
+      // 等待政策期间切换位置时，不能把 A 的点击交给 B 的当前 store 执行。
+      if (usePluginManagementStore.getState().operationVersion !== version) return;
       const succeeded = item.restorable
         ? await restoreBuiltin(item.id, operationService)
         : await installPlugin(item.name, item.marketplace, operationService, "user");
@@ -424,11 +441,19 @@ export function PluginStorePage({
       if (!succeeded) return;
       await refreshAfterPluginChange();
     },
-    [installPlugin, operationService, refreshAfterPluginChange, restoreBuiltin],
+    [applicationSection, installPlugin, operationService, refreshAfterPluginChange, restoreBuiltin],
   );
 
   const handleUpdatePlugin = useCallback(
     async (pluginId: string) => {
+      const version = usePluginManagementStore.getState().operationVersion;
+      try {
+        if (applicationSection?.beforeAcquire) await applicationSection.beforeAcquire(pluginId);
+      } catch (failure) {
+        toast(failure instanceof Error ? failure.message : String(failure));
+        return;
+      }
+      if (usePluginManagementStore.getState().operationVersion !== version) return;
       await updatePlugin(pluginId, operationService);
       if (usePluginManagementStore.getState().error) {
         return;
@@ -437,7 +462,7 @@ export function PluginStorePage({
       // 已预热的草稿 session 继续携带旧版本甚至空能力，导致“升级成功”后新会话仍不可用。
       await refreshAfterPluginChange();
     },
-    [operationService, refreshAfterPluginChange, updatePlugin],
+    [applicationSection, operationService, refreshAfterPluginChange, updatePlugin],
   );
 
   const handleCheckForUpdates = useCallback(async () => {
@@ -645,14 +670,18 @@ export function PluginStorePage({
               </Button>
             </ControlHintTooltip>
             <ControlHintTooltip
-              title={intl.formatMessage({ id: "settings.plugins.store.sources.title" })}
+              title={intl.formatMessage({
+                id: "settings.plugins.store.sources.title",
+              })}
             >
               <Button
                 type="button"
                 data-testid="plugin-store-sources-open"
                 variant="secondary"
                 size="icon-lg"
-                aria-label={intl.formatMessage({ id: "settings.plugins.store.sources.title" })}
+                aria-label={intl.formatMessage({
+                  id: "settings.plugins.store.sources.title",
+                })}
                 onClick={() => setSourcesOpen(true)}
               >
                 <Store className="size-3.5" aria-hidden="true" />
@@ -682,7 +711,9 @@ export function PluginStorePage({
               data-testid="plugin-store-manage-open"
               onClick={() => setView("manage")}
             >
-              {intl.formatMessage({ id: "settings.plugins.store.manageInstalled" })}
+              {intl.formatMessage({
+                id: "settings.plugins.store.manageInstalled",
+              })}
             </Button>
           </div>
         </div>
@@ -701,7 +732,9 @@ export function PluginStorePage({
         <div data-testid="plugin-store-manage" className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-ui-xl font-semibold">
-              {intl.formatMessage({ id: "settings.plugins.store.manageInstalled" })}
+              {intl.formatMessage({
+                id: "settings.plugins.store.manageInstalled",
+              })}
             </h1>
             <Button variant="outline" data-testid="plugin-store-browse-all" onClick={backToStore}>
               {intl.formatMessage({ id: "settings.plugins.store.browseAll" })}
@@ -729,7 +762,11 @@ export function PluginStorePage({
                       (target?.workspaceIdentity?.trim() || target?.workspacePath) !==
                       (workspaceIdentity?.trim() || workspacePath)
                     ) {
-                      toast(intl.formatMessage({ id: "settings.plugins.store.ui.needsSession" }));
+                      toast(
+                        intl.formatMessage({
+                          id: "settings.plugins.store.ui.needsSession",
+                        }),
+                      );
                       return;
                     }
                     void pluginUi.open(item.id, enable);
@@ -763,9 +800,13 @@ export function PluginStorePage({
                         {detailItem.installedMeta?.updateStatus === "update-available"
                           ? intl.formatMessage(
                               { id: "settings.plugins.detail.updateAvailable" },
-                              { version: detailItem.installedMeta?.latestVersion ?? "" },
+                              {
+                                version: detailItem.installedMeta?.latestVersion ?? "",
+                              },
                             )
-                          : intl.formatMessage({ id: "settings.plugins.detail.versionChanged" })}
+                          : intl.formatMessage({
+                              id: "settings.plugins.detail.versionChanged",
+                            })}
                       </p>
                       <p className="text-ui-xs text-foreground-subtle">
                         {intl.formatMessage({
@@ -783,7 +824,9 @@ export function PluginStorePage({
                       )}
                       onClick={() => void handleUpdatePlugin(detailItem.id)}
                     >
-                      {intl.formatMessage({ id: "settings.plugins.detail.update" })}
+                      {intl.formatMessage({
+                        id: "settings.plugins.detail.update",
+                      })}
                     </Button>
                   </div>
                 ) : null}
@@ -791,13 +834,17 @@ export function PluginStorePage({
                   {detailPluginWarnings.length > 0 ? (
                     <div>
                       <div className="mb-2 text-ui-xs font-medium text-foreground">
-                        {intl.formatMessage({ id: "settings.plugins.detail.warnings" })}
+                        {intl.formatMessage({
+                          id: "settings.plugins.detail.warnings",
+                        })}
                       </div>
                       <PluginWarningList warnings={detailPluginWarnings} />
                     </div>
                   ) : null}
                   <PluginDetailRow
-                    label={intl.formatMessage({ id: "settings.plugins.detail.rootPath" })}
+                    label={intl.formatMessage({
+                      id: "settings.plugins.detail.rootPath",
+                    })}
                     value={detailItem.info.rootPath}
                   />
                   {(detailItem.info.hookDetails ?? []).length > 0 ? (
@@ -812,11 +859,12 @@ export function PluginStorePage({
       <div hidden={view !== "store"}>
         <PluginStoreListView
           order={storeOrder}
-          items={items}
+          items={discoveryItems}
           marketplaces={marketplaces}
           actions={actions}
           loading={
             loading ||
+            applicationSection?.catalog?.loading ||
             activeOperations.some((operation) => operation.id.startsWith("marketplace:update:"))
           }
           query={query}
@@ -848,7 +896,14 @@ export function PluginStorePage({
                   marketplaceIds: applicationSection.marketplaceIds,
                   publicMarketplaceIds: applicationSection.publicMarketplaceIds,
                   managedMarketplacePrefix: applicationSection.managedMarketplacePrefix,
+                  counts: Object.fromEntries(
+                    (["public", "community", "personal"] as const).map((key) => [
+                      key,
+                      applicationSection.count?.(key, query) ?? 0,
+                    ]),
+                  ),
                   publicContent: renderCatalog(applicationSection.renderPublic),
+                  communityContent: renderCatalog(applicationSection.renderCommunity),
                   personalContent: renderCatalog(applicationSection.renderPersonal),
                   content: renderCatalog(applicationSection.render),
                 }
@@ -866,7 +921,9 @@ export function PluginStorePage({
       >
         <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogTitle>
-            {intl.formatMessage({ id: "settings.plugins.store.ui.chooseSurface" })}
+            {intl.formatMessage({
+              id: "settings.plugins.store.ui.chooseSurface",
+            })}
           </DialogTitle>
           {pluginUi.surfaces.map((surface) => (
             <Button

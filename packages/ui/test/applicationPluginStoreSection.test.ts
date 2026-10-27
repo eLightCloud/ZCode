@@ -136,3 +136,18 @@ it("never renders a hidden application segment while its old selection is being 
   render(element("application", "", createElement("p", null, "tenant-only"), { visible: false }));
   expect(screen.queryByText("tenant-only")).toBeNull();
 });
+
+it("renders authorized community cards without placing them in public", () => {
+  const options = {
+    communityContent: createElement("p", null, "approved-community"),
+    counts: { community: 1, public: 1 },
+    publicContent: createElement("p", null, "approved-public"),
+  };
+  const result = render(element("community", "", createElement("p", null, "tenant-only"), options));
+  expect(screen.getByText("approved-community")).toBeTruthy();
+  expect(screen.queryByTestId("plugin-store-community-empty")).toBeNull();
+  expect(screen.queryByText("approved-public")).toBeNull();
+  result.rerender(element("public", "", createElement("p", null, "tenant-only"), options));
+  expect(screen.getByText("approved-public")).toBeTruthy();
+  expect(screen.queryByText("approved-community")).toBeNull();
+});

@@ -21,6 +21,8 @@ import { verifyHttp } from "./sync-http.mjs";
 import { verifyDeletionChoice } from "./sync-deletion-choice.mjs";
 import { verifyCapacity } from "./sync-capacity.mjs";
 import { verifyTransitions } from "./sync-transitions.mjs";
+import { verifyTerminalObservation } from "./sync-terminals.mjs";
+import { verifyMonitoring, removeMonitoringFixture } from "./sync-monitoring.mjs";
 import { verifyManaged } from "./sync-managed.mjs";
 import { verifyContinuation } from "./sync-continuation.mjs";
 
@@ -96,6 +98,7 @@ try {
   assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
   checks.push("concurrent_exact_operation_and_lost_ack_no_extra_version");
   // Reproduce the previously shipped native v1 shape with real persisted data.
+  await removeMonitoringFixture(owner);
   await owner.query("alter table zcode_sync.versions drop column management");
   await owner.query("drop table zcode_sync.configuration");
   await owner.query("alter table zcode_sync.versions drop column files");
@@ -106,7 +109,7 @@ try {
   await migrateConversationSync(owner);
   assert.deepEqual(await store.receipt(scope, first.session, first.operation), duplicates[0]);
   assert.equal((await store.history(scope, null, 10))[0].management, null);
-  checks.push("native_v1_to_v6_preserves_existing_versions_receipts_and_unknown_index");
+  checks.push("native_v1_to_v8_preserves_existing_versions_receipts_and_unknown_index");
   assert.deepEqual(
     await store.execute(
       { tenant: scope.tenant.toUpperCase(), subject: scope.subject.toUpperCase() },
@@ -200,7 +203,7 @@ try {
     (await owner.query("select version from zcode_sync.schema_version")).rows[0].version,
     99,
   );
-  await owner.query("update zcode_sync.schema_version set version=6");
+  await owner.query("update zcode_sync.schema_version set version=9");
   await owner.query("alter role zcode_sync_runtime bypassrls");
   await assert.rejects(migrateConversationSync(owner), { code: "scope" });
   await owner.query("alter role zcode_sync_runtime nobypassrls");
@@ -403,6 +406,8 @@ try {
   assert.equal(uploads - beforeRace, 1);
   checks.push("concurrent_file_quota_has_one_PG_winner_and_only_one_external_upload");
 
+  await verifyMonitoring(owner, runtime, connection, checks);
+  await verifyTerminalObservation(owner, runtime, connection, checks);
   report.fixtureScope = scope;
   report.fixtureSessions = await reopened.list(scope, null, 100);
   report.eventCount = events.length;

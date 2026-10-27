@@ -1,3 +1,4 @@
+import { removeMonitoringFixture } from "./sync-monitoring.mjs";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
@@ -62,6 +63,7 @@ export async function verifyManaged(
       const current = await config.read();
       const legacy = { ...current.policy, maxCheckpointBytes: 128000, enabled, subjects: [scope] };
       await owner.query("update zcode_sync.configuration set policy=$1", [legacy]);
+      await removeMonitoringFixture(owner);
       await owner.query("update zcode_sync.schema_version set version=5");
       await assert.rejects(store.history(scope, null, 10), { code: "schema" });
       const migrators = new pg.Pool({

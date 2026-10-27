@@ -390,3 +390,5 @@ export * from "./conversation-files.js";
 export * from "./zcode-task-search-text.js";
 
 export * from "./application-http/contract.js";
+
+export * from "./conversation-terminals.js";

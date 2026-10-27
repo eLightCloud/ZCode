@@ -2,6 +2,8 @@ import { z } from "zod";
 import { textCheckpointSchema, checkpointArtifactUris } from "./text-checkpoint.js";
 import {
   conversationIndexFactsSchema,
+  conversationObservationReasonSchema,
+  type ConversationObservation,
   conversationScopeSchema,
   type ConversationIndexFacts,
   type ConversationHistoryItem,
@@ -178,6 +180,7 @@ export const syncReceiptSchema = z
 export type SyncReceipt = z.infer<typeof syncReceiptSchema>;
 export const syncErrorSchema = z
   .object({
+    reason: z.custom<ConversationObservation["reason"]>(value => conversationObservationReasonSchema.safeParse(value).success).optional(),
     error: z.enum([
       "invalid",
       "stale",
@@ -193,12 +196,14 @@ export const syncErrorSchema = z
   })
   .strict();
 export class ConversationSyncError extends Error {
+  readonly diagnostic?: ConversationObservation["reason"];
   constructor(
     readonly code: z.infer<typeof syncErrorSchema>["error"],
-    options?: ErrorOptions,
+    options?: ErrorOptions & { diagnostic?: ConversationObservation["reason"] },
   ) {
     super(`Conversation sync: ${code}`, options);
     this.name = "ConversationSyncError";
+    this.diagnostic = options?.diagnostic;
   }
 }
 export interface ConversationSyncStore {

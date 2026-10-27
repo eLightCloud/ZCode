@@ -1,6 +1,8 @@
 import { syncScopeSchema, type ConversationSyncStore, type Logger } from "@zcode/contracts";
 import type { NodeHttpIncomingRequest } from "../http/index.js";
 import { createConversationSyncHttpHandler } from "./http.js";
+import type { createConversationSyncMonitor } from "./monitoring.js";
+import type { createConversationTerminalStore } from "./terminals.js";
 import { privateProofMatcher } from "./private-proof.js";
 import { createConfigurationHandler } from "./configuration-http.js";
 import type { createConversationSyncPolicyStore } from "./policy.js";
@@ -13,6 +15,8 @@ export function createConversationSyncGateway(options: {
   proof: string;
   maxRequestBytes: number;
   logger: Logger;
+  monitor?: ReturnType<typeof createConversationSyncMonitor>;
+  terminals?: ReturnType<typeof createConversationTerminalStore>;
   runtimes?: ConversationRuntimeDirectory;
   configuration?: { proof: string; store: ReturnType<typeof createConversationSyncPolicyStore> };
 }) {
@@ -20,7 +24,7 @@ export function createConversationSyncGateway(options: {
   if (options.configuration?.proof === options.proof)
     throw new Error("Distinct channel proofs required");
   const configuration = options.configuration
-    ? createConfigurationHandler({ ...options.configuration, logger: options.logger })
+    ? createConfigurationHandler({ ...options.configuration, logger: options.logger, monitor: options.monitor })
     : null;
   const data = createConversationSyncHttpHandler({
     ...options,
@@ -52,7 +56,7 @@ export function createConversationSyncGateway(options: {
     request: NodeHttpIncomingRequest,
     response: import("../http/index.js").NodeHttpOutgoingResponse,
   ) => {
-    if ((request.url ?? "/").split("?")[0] === "/configuration") {
+    if (["/configuration", "/monitoring", "/usage"].includes((request.url ?? "/").split("?")[0])) {
       if (configuration) await configuration(request, response);
       else {
         response.writeHead(503);

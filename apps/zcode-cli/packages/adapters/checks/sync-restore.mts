@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import pg from "pg";
-import { createConversationSyncStore } from "@zcode/adapters/conversation-sync";
+import { createConversationSyncStore, createConversationSyncPolicyStore } from "@zcode/adapters/conversation-sync";
 import { conversationCenterPolicySchema } from "@zcode/shared";
 import { logger } from "./sync-fixture.mjs";
 const chunks: Buffer[] = [];
@@ -21,11 +21,23 @@ const runtime = new pg.Pool({
   password: connection.runtimePassword,
   database: "sync_restored",
 });
+const configuration = new pg.Pool({
+  host: connection.host, port: connection.port, user: "sync_configuration_fixture",
+  password: connection.runtimePassword, database: "sync_restored",
+});
 try {
+  const monitoring = await createConversationSyncPolicyStore({ pool: configuration, logger }).monitoring();
+  assert(monitoring.capacity.versions > 0 && monitoring.capacity.fileBytes > 0);
+  assert(monitoring.requests.length > 0);
+  assert(monitoring.terminals.knownSources > 0);
+  assert.equal(monitoring.collectionAvailable, false);
+  const restoredUsage = await createConversationSyncPolicyStore({ pool: configuration, logger }).usage({ offset: 0, limit: 20 });
+  assert.equal(restoredUsage.totalBytes, monitoring.capacity.checkpointBytes + monitoring.capacity.fileBytes);
+  await assert.rejects(configuration.query("select payload from zcode_sync.payloads"), { code: "42501" });
   const schema = Number(
     (await runtime.query("select version from zcode_sync.schema_version")).rows[0].version,
   );
-  assert.equal(schema, 6);
+  assert.equal(schema, 9);
   const restoredPolicy = (await runtime.query("select policy from zcode_sync.configuration"))
     .rows[0].policy;
   assert.deepEqual(conversationCenterPolicySchema.parse(restoredPolicy), restoredPolicy);
@@ -99,9 +111,11 @@ try {
       versionsAndReceipts: true,
       rls: true,
       noExecutionStarted: true,
+      monitoringProjectionAndPermissions: true,
     }) + "\n",
   );
 } finally {
+  await configuration.end();
   await runtime.end();
   await owner.end();
 }

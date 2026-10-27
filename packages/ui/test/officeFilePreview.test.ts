@@ -518,3 +518,19 @@ describe("Office file preview", () => {
     expect(view.container.textContent).not.toContain("Stale DOCX");
   });
 });
+
+it("keeps Word paper in a light color scheme inside a dark shell", async () => {
+  const { PreviewPaneOfficeDocxContent } = await import("@/previewPaneOfficeDocxContent.js");
+  const view = render(
+    createElement(PreviewPaneOfficeDocxContent, {
+      buffer: new ArrayBuffer(1),
+      errorMessage: "preview error",
+      sourcePath: "opaque-version",
+    }),
+  );
+  await waitFor(() =>
+    expect(view.container.querySelector("[data-docx-page-surface-style]")?.textContent).toContain(
+      "color-scheme: light",
+    ),
+  );
+});

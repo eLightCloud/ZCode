@@ -372,10 +372,9 @@ describe("WorkspaceHeaderActionSection", () => {
       html.indexOf('aria-label="workspaceHeader.help.menu"'),
     );
     await capturedHeaderHelp.menuItems[0]?.onSelect?.();
-    await capturedHeaderHelp.menuItems[2]?.onSelect?.();
-    await capturedHeaderHelp.menuItems[3]?.onSelect?.();
+    await capturedHeaderHelp.menuItems[1]?.onSelect?.();
     expect(openHelp).toHaveBeenCalledTimes(1);
-    expect(openFeedback).toHaveBeenCalledTimes(2);
+    expect(openFeedback).toHaveBeenCalledTimes(1);
     expect(capturedHeaderHelp.openSubmit).not.toHaveBeenCalled();
     expect(capturedHeaderHelp.openFeatureRequest).not.toHaveBeenCalled();
   });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { IBroadcastService, IServiceAccessor } from "@zcode/services";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
@@ -8,7 +8,11 @@ import { usePluginStoreOrder } from "@/hooks/usePluginStoreOrder.js";
 import { StoreContext } from "@/store/StoreProvider.js";
 import { createZCodeStore } from "@/store/index.js";
 import { PluginStoreListView, type PluginStoreSegment } from "@/settings/PluginStoreListView.js";
-import { buildStoreItems, type StorePluginItem } from "@/settings/pluginStoreListing.js";
+import {
+  buildStoreItems,
+  projectPluginDiscovery,
+  type StorePluginItem,
+} from "@/settings/pluginStoreListing.js";
 import "@/styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -136,6 +140,33 @@ function Fixture() {
   const { order, refresh } = usePluginStoreOrder();
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<PluginStoreSegment>("public");
+  const governed = params.get("governance") === "1";
+  const [policy, setPolicy] = useState<{
+    entries: { pluginId: string; group: "public" | "community" }[];
+    loading: boolean;
+  }>({ entries: [], loading: true });
+  const [policyError, setPolicyError] = useState(false);
+  async function refreshPolicy() {
+    setPolicy({ entries: [], loading: true });
+    try {
+      const response = await fetch("/publication");
+      if (!response.ok) throw new Error("unavailable");
+      setPolicy({ entries: await response.json(), loading: false });
+      setPolicyError(false);
+    } catch {
+      setPolicy({ entries: [], loading: false });
+      setPolicyError(true);
+    }
+  }
+  useEffect(() => {
+    if (governed) void refreshPolicy();
+  }, [governed]);
+  const governedItems = [
+    { ...item("native-public", "utilities", "application-native"), installed: true },
+    item("native-community", "utilities", "application-native"),
+    item("internal-host", "utilities", "application-native"),
+    item("private-source", "utilities", "personal"),
+  ];
   return (
     <main className="@container/plugin-store min-h-screen bg-background p-4 text-foreground">
       <button data-testid="code" onClick={() => store.getState().setInterfaceMode("coding")}>
@@ -148,8 +179,31 @@ function Fixture() {
         Refresh
       </button>
       <output data-testid="requests">{requests}</output>
+      {governed && (
+        <>
+          <button data-testid="publication-refresh" onClick={() => void refreshPolicy()}>
+            Publication refresh
+          </button>
+          <output data-testid="installed-count">
+            {governedItems.filter((entry) => entry.installed).length}
+          </output>
+          {policyError && <p role="alert">Publication unavailable</p>}
+        </>
+      )}
       <PluginStoreListView
-        items={items}
+        items={
+          governed
+            ? projectPluginDiscovery(governedItems, {
+                ...policy,
+                marketplaceIds: ["application-native"],
+              })
+            : items
+        }
+        applicationSection={
+          governed
+            ? { visible: false, label: "Application", marketplaceIds: [], content: null }
+            : undefined
+        }
         order={order}
         marketplaces={[
           {

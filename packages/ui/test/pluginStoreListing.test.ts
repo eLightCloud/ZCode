@@ -1,3 +1,4 @@
+import type { StorePluginItem } from "../src/settings/pluginStoreListing.js";
 import { describe, expect, it } from "vitest";
 import type {
   ZCodeAvailablePluginSummary,
@@ -624,4 +625,49 @@ describe("document plugin default order", () => {
     }));
     expect(sortInstalledStripItems(personal, "en-US")[0]?.name).toBe("aaa");
   });
+});
+
+it("applies publication only to managed discovery, preserving raw installed data and private sources", async () => {
+  const { projectPluginDiscovery, resolvePluginStoreSegment } =
+    await import("../src/settings/pluginStoreListing.js");
+  const make = (id: string, marketplace: string) =>
+    ({ id, marketplace, installed: true }) as StorePluginItem;
+  const raw = [
+    make("live@managed", "managed"),
+    make("withdrawn@managed", "managed"),
+    make("internal@managed", "managed"),
+    make("own@personal", "personal"),
+  ];
+  const policy = {
+    marketplaceIds: ["managed"],
+    entries: [{ pluginId: "live@managed", group: "community" as const }],
+    loading: false,
+  };
+  const projected = projectPluginDiscovery(raw, policy);
+  expect(projected.map((item) => item.id)).toEqual(["live@managed", "own@personal"]);
+  expect(resolvePluginStoreSegment(projected[0]!)).toBe("community");
+  expect(raw).toHaveLength(4);
+  expect(projectPluginDiscovery(raw, undefined)).toBe(raw);
+  expect(projectPluginDiscovery(raw, { ...policy, loading: true }).map((item) => item.id)).toEqual([
+    "own@personal",
+  ]);
+  expect(
+    projectPluginDiscovery(raw, {
+      ...policy,
+      entries: [...policy.entries, { pluginId: "withdrawn@managed", group: "public" }],
+    }),
+  ).toHaveLength(3);
+});
+
+it("overlays formal bilingual names for discovery search without changing identity or installed metadata", async () => {
+  const { projectPluginDiscovery, resolveItemDisplayName, storeItemMatches } = await import("../src/settings/pluginStoreListing.js");
+  const raw = [{ id: "documents@managed", name: "documents", marketplace: "managed", installed: true, restorable: false, orphaned: false, listing: { displayName: "Original" } }] as StorePluginItem[];
+  const [projected] = projectPluginDiscovery(raw, { marketplaceIds: ["managed"], entries: [{ pluginId: raw[0]!.id, group: "public", nameZh: "正式文档处理", nameEn: "Document Processing" }], loading: false });
+  expect(projected!.id).toBe(raw[0]!.id);
+  expect(projected!.name).toBe("documents");
+  expect(resolveItemDisplayName(projected!, "zh-CN")).toBe("正式文档处理");
+  expect(resolveItemDisplayName(projected!, "en-US")).toBe("Document Processing");
+  expect(storeItemMatches(projected!, "Document Processing", "zh-CN")).toBe(true);
+  expect(storeItemMatches(projected!, "正式文档处理", "en-US")).toBe(true);
+  expect(raw[0]!.listing!.displayName).toBe("Original");
 });

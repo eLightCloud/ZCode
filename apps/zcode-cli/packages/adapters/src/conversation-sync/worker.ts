@@ -5,11 +5,15 @@ import {
   type Logger,
   type SyncScope,
   type SyncVersion,
+  type SyncRequest,
 } from "@zcode/contracts";
+import { conversationTerminalReasonSchema } from "@zcode/shared";
 import { canonical } from "./canonical.js";
 import { receiveOperation, type ConversationSyncOutbox } from "./outbox.js";
 
 export interface SyncCheckpointSource {
+  /** Exact staged descriptors are uploaded before their original version is submitted. */
+  prepare?(request: SyncRequest): Promise<void>;
   /** Trusted native owner supplies persisted changes, never an in-memory notification watermark. */
   changes(after: number): Promise<{
     cursor: number;
@@ -41,7 +45,7 @@ export function createConversationSyncWorker(options: {
   function checkScope() {
     if (scopeKey(options.currentScope()) !== bound) throw new ConversationSyncError("scope");
   }
-  async function run() {
+  async function capture() {
     checkScope();
     const after = options.outbox.cursor(options.scope);
     const changes = await options.source.changes(after);
@@ -50,6 +54,9 @@ export function createConversationSyncWorker(options: {
       .filter((item) => item.workspacePurpose === "conversation" && !item.hasLocalDirectory)
       .map((item) => receiveOperation(item.session, item.version));
     options.outbox.capture(options.scope, changes.cursor, after, requests);
+  }
+  async function run() {
+    await capture();
     const blockedSessions = new Set<string>();
     let firstRejection: ConversationSyncError | undefined;
     for (const request of options.outbox.pending(options.scope)) {
@@ -62,11 +69,18 @@ export function createConversationSyncWorker(options: {
         firstRejection ??= new ConversationSyncError(rejected.code);
         continue;
       }
+      if (!options.outbox.observation.attempt(options.scope, request.session, request.operation)) continue;
       let receipt;
       try {
+        await options.source.prepare?.(request);
+        checkScope();
         receipt = await options.center.execute(options.scope, request);
       } catch (cause: unknown) {
         const code = cause instanceof ConversationSyncError ? cause.code : "transport";
+        const diagnostic = conversationTerminalReasonSchema.safeParse(
+          cause instanceof ConversationSyncError ? cause.diagnostic ?? code : "transport");
+        options.outbox.observation.failed(options.scope, request.session, request.operation,
+          diagnostic.success ? diagnostic.data : "unavailable");
         options.unconfirmed?.(request.session, code);
         options.logger.warn("Conversation checkpoint not acknowledged", {
           event: "conversation.sync.ack",
@@ -110,6 +124,7 @@ export function createConversationSyncWorker(options: {
     if (firstRejection) throw firstRejection;
   }
   return {
+    capture,
     reconcile(): Promise<void> {
       if (!running)
         running = run().finally(() => {

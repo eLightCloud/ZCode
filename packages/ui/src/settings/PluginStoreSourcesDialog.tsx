@@ -1,6 +1,9 @@
 import { AlertTriangle, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import type { ZCodePluginMarketplaceSummary } from "@zcode/shared";
-import { CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+import {
+  BUNDLED_PLUGIN_MARKETPLACE_ID,
+  CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+} from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -13,6 +16,7 @@ import { DEFAULT_MARKETPLACE_ID } from "@/settings/recommendedPlugins.js";
 
 // 官方市场不可移除：移除后启动时会被重新补种，只会造成「删了又回来」的困惑。
 function isRemovableMarketplace(marketplace: ZCodePluginMarketplaceSummary): boolean {
+  if (marketplace.id === BUNDLED_PLUGIN_MARKETPLACE_ID) return false;
   if (isPublicStoreMarketplaceId(marketplace.id)) return false;
   if (marketplace.id === DEFAULT_MARKETPLACE_ID) return false;
   return true;
@@ -74,7 +78,9 @@ export function PluginStoreSourcesDialog({
         <div className="max-h-[min(420px,60vh)] space-y-1 overflow-y-auto">
           {sortedMarketplaces.length === 0 ? (
             <p className="px-1 py-2 text-ui-base text-foreground-subtle">
-              {intl.formatMessage({ id: "settings.plugins.store.sources.empty" })}
+              {intl.formatMessage({
+                id: "settings.plugins.store.sources.empty",
+              })}
             </p>
           ) : (
             sortedMarketplaces.map((marketplace) => {
@@ -108,7 +114,9 @@ export function PluginStoreSourcesDialog({
                       )}
                       {marketplace.lastUpdated
                         ? ` · ${intl.formatMessage(
-                            { id: "settings.plugins.store.sources.lastUpdated" },
+                            {
+                              id: "settings.plugins.store.sources.lastUpdated",
+                            },
                             { time: formatSourceTime(marketplace.lastUpdated) },
                           )}`
                         : ""}

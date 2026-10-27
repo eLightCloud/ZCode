@@ -1,6 +1,7 @@
-import { conversationCenterConfigurationSchema } from "@zcode/shared";
+import { conversationCenterConfigurationSchema, conversationUsageQuerySchema } from "@zcode/shared";
 import { ConversationSyncError, type Logger } from "@zcode/contracts";
 import type { NodeHttpIncomingRequest, NodeHttpOutgoingResponse } from "../http/index.js";
+import type { createConversationSyncMonitor } from "./monitoring.js";
 import type { createConversationSyncPolicyStore } from "./policy.js";
 import { privateProofMatcher } from "./private-proof.js";
 
@@ -8,6 +9,7 @@ export function createConfigurationHandler(options: {
   proof: string;
   store: ReturnType<typeof createConversationSyncPolicyStore>;
   logger: Logger;
+  monitor?: ReturnType<typeof createConversationSyncMonitor>;
 }) {
   const authentic = privateProofMatcher(options.proof);
   return async (request: NodeHttpIncomingRequest, response: NodeHttpOutgoingResponse) => {
@@ -30,7 +32,18 @@ export function createConfigurationHandler(options: {
       return;
     }
     try {
-      if (request.method === "GET") reply(200, await options.store.read());
+      const url = new URL(request.url ?? "/", "http://native.invalid");
+      if (url.pathname === "/usage") {
+        if (request.method !== "GET") { reply(404, { error: "not_found" }); return; }
+        const parsed = conversationUsageQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+        if (!parsed.success) throw new ConversationSyncError("invalid");
+        const value = await options.store.usage(parsed.data);
+        logger.info("Conversation usage read", { event: "conversation.sync.usage", outcome: "succeeded", count: value.items.length });
+        reply(200, value);
+      } else if (url.pathname === "/monitoring") {
+        if (request.method !== "GET") { reply(404, { error: "not_found" }); return; }
+        reply(200, { ...await options.store.monitoring(), ...options.monitor?.collection() });
+      } else if (request.method === "GET") reply(200, await options.store.read());
       else if (request.method === "PUT") {
         if (request.headers["content-type"]?.split(";")[0].trim() !== "application/json")
           throw new ConversationSyncError("invalid");

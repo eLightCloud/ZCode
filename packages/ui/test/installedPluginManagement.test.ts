@@ -7,7 +7,7 @@ import type {
   ZCodePluginUserConfigOption,
 } from "@zcode/shared";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
-import { InstalledPluginDetailPanel } from "../src/settings/InstalledPluginManagement.js";
+import { InstalledPluginDetailPanel } from "../src/settings/PluginStoreDetailView.js";
 
 describe("InstalledPluginDetailPanel", () => {
   it("renders authoritative skill component names for both enabled and disabled plugins", () => {

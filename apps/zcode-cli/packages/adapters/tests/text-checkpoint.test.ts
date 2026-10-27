@@ -81,6 +81,68 @@ async function setup() {
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
+  it("preserves native provider failure attribution through reopen and rejects undeclared error facts", async () => {
+    const { store, target, dbPath } = await setup();
+    const base = example();
+    const attribution = {
+      source: "provider",
+      reason: "server_error",
+      errorPhase: "stream",
+      exceptionKind: "api_call",
+      providerId: "synthetic-provider",
+      modelId: "synthetic-model",
+      providerKind: "openai-compatible",
+      transport: "sse",
+      statusCode: 503,
+      retryable: true,
+      highspeedCardId: null,
+    };
+    const failed = textCheckpointSchema.parse({
+      ...base,
+      version: 4,
+      messages: base.messages.map((message) =>
+        message.info.role === "assistant"
+          ? {
+              ...message,
+              info: {
+                ...message.info,
+                finish: "error",
+                error: {
+                  name: "AiSdkModelAdapterError",
+                  data: { message: "Synthetic provider failure", attribution },
+                },
+              },
+            }
+          : message,
+      ),
+    });
+    await store.importTextCheckpoint({ checkpoint: failed, target });
+    expect(await store.exportTextCheckpoint({ sessionID: failed.session.id })).toEqual(failed);
+    await store.close();
+    const reopened = await createSqliteSessionStore({ dbPath });
+    try {
+      expect(await reopened.exportTextCheckpoint({ sessionID: failed.session.id })).toEqual(failed);
+      for (const data of [
+        { attribution: { ...attribution, credential: "forbidden" } },
+        { attribution: { ...attribution, transport: "unknown" } },
+        { request: { body: "forbidden" } },
+      ]) {
+        expect(
+          textCheckpointSchema.safeParse({
+            ...failed,
+            messages: failed.messages.map((message) =>
+              message.info.role === "assistant"
+                ? { ...message, info: { ...message.info, error: { name: "SyntheticError", data } } }
+                : message,
+            ),
+          }).success,
+        ).toBe(false);
+      }
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it("round-trips native model-change labels without allowing unknown model fields", async () => {
     const { store, target } = await setup();
     const base = example();

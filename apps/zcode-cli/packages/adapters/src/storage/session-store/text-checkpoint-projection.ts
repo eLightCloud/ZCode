@@ -232,6 +232,12 @@ export function projectTextCheckpoint(
       branchEffects ||
       execution ||
       todos?.length ||
+      // 失败消息即使没有 execution entry 也必须沿 v4，不能降成拒绝错误事实的旧格式。
+      messages.some(
+        (m) =>
+          m.info.role === "assistant" &&
+          (m.info.error || m.info.finish !== "stop" || m.info.time.completed === undefined),
+      ) ||
       portableMessages.some(
         (m) =>
           m.parts.some((p) => ["tool", "compaction"].includes(p.type)) ||

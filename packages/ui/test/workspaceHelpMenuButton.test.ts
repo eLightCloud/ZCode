@@ -15,6 +15,13 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
 }));
 
 const captured = vi.hoisted(() => ({
+  peripherals: undefined as
+    | {
+        nativeCloudEnabled: boolean;
+        openHelp: () => void;
+        openFeedback: () => void;
+      }
+    | undefined,
   zsrcUrl: null as string | null,
   loading: false,
   openExternal: vi.fn(),
@@ -101,8 +108,15 @@ vi.mock("@/hooks/usePlatform.js", () => ({
   }),
 }));
 
+vi.mock("@/root/ApplicationPeripherals.js", () => ({
+  useApplicationPeripherals: () => captured.peripherals,
+}));
+
 vi.mock("@/hooks/useVulnerabilityReportUrl.js", () => ({
-  useVulnerabilityReportUrl: () => ({ url: captured.zsrcUrl, loading: captured.loading }),
+  useVulnerabilityReportUrl: () => ({
+    url: captured.zsrcUrl,
+    loading: captured.loading,
+  }),
 }));
 
 describe("WorkspaceHelpMenuButton", () => {
@@ -115,6 +129,41 @@ describe("WorkspaceHelpMenuButton", () => {
     const { WorkspaceHelpMenuButton } = await import("@/WorkspaceHelpMenuButton.js");
     return renderToStaticMarkup(createElement(WorkspaceHelpMenuButton, { isDesktop }));
   }
+
+  it("自有装配只保留文档与问题反馈，分别调用注入入口，不打开原生外链", async () => {
+    const openHelp = vi.fn();
+    const openFeedback = vi.fn();
+    captured.peripherals = {
+      nativeCloudEnabled: false,
+      openHelp,
+      openFeedback,
+    };
+    captured.zsrcUrl = "https://security.example.test/report";
+    captured.loading = true;
+    captured.openExternal.mockClear();
+    try {
+      for (const desktop of [true, false]) {
+        await render(desktop);
+        expect(captured.menuItems.slice(0, 2).map((item) => item.label)).toEqual([
+          "workspaceHeader.help.docs",
+          "workspaceHeader.help.issueReport",
+        ]);
+        for (const label of ["community", "reportVulnerability", "productRequest"])
+          expect(
+            captured.menuItems.some((item) => item.label === `workspaceHeader.help.${label}`),
+          ).toBe(false);
+        await captured.menuItems[0]?.onSelect?.();
+        await captured.menuItems[1]?.onSelect?.();
+      }
+      expect(openHelp).toHaveBeenCalledTimes(2);
+      expect(openFeedback.mock.calls).toEqual([[], []]);
+      expect(captured.openExternal).not.toHaveBeenCalled();
+    } finally {
+      captured.peripherals = undefined;
+      captured.zsrcUrl = null;
+      captured.loading = false;
+    }
+  });
 
   it("桌面和 Web 的漏洞入口紧跟问题上报，打开配置地址；缺失时隐藏", async () => {
     for (const desktop of [true, false]) {

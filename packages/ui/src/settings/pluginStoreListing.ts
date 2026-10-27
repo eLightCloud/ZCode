@@ -19,6 +19,7 @@ import {
 } from "@zcode/shared";
 import { DEFAULT_MARKETPLACE_ID } from "@/settings/recommendedPlugins.js";
 import { pluginSearchMatches } from "@/settings/pluginSearch.js";
+import type { ApplicationPluginDiscoveryCatalog } from "@/root/ApplicationPluginStoreSection.js";
 
 export {
   formatCanonicalPluginName,
@@ -57,6 +58,8 @@ export interface StorePluginItem {
   id: string;
   name: string;
   marketplace: string;
+  discoveryGroup?: "public" | "community";
+  applicationNames?: { zh: string; en: string };
   installed: boolean;
   /** 已卸载的内置插件（可恢复）：安装按钮走 restoreBuiltin。 */
   restorable: boolean;
@@ -72,7 +75,10 @@ export interface StorePluginItem {
 // 市场和右侧推荐共用按插件的忙碌判定，避免安装一个插件时禁用整个推荐列表。
 export function isItemBusy(
   item: StorePluginItem,
-  actions: { activeOperations: ReadonlyArray<{ id: string }>; togglingPluginId: string | null },
+  actions: {
+    activeOperations: ReadonlyArray<{ id: string }>;
+    togglingPluginId: string | null;
+  },
 ): boolean {
   return (
     actions.activeOperations.some(
@@ -177,8 +183,40 @@ export interface StoreCategoryGroup {
 export type PluginStoreSegment = "public" | "community" | "personal";
 
 export function resolvePluginStoreSegment(item: StorePluginItem): PluginStoreSegment {
+  if (item.discoveryGroup) return item.discoveryGroup;
   if (!isPublicStoreMarketplaceId(item.marketplace)) return "personal";
   return item.listing?.publisherType === "community" ? "community" : "public";
+}
+
+/** 只投影发现候选；已安装管理继续使用原生数据，不复制安装状态。 */
+export function projectPluginDiscovery(
+  items: StorePluginItem[],
+  catalog: ApplicationPluginDiscoveryCatalog | undefined,
+): StorePluginItem[] {
+  if (!catalog) return items;
+  const entries = new Map(catalog.entries.map((entry) => [entry.pluginId, entry]));
+  return items.flatMap((item) => {
+    if (!catalog.marketplaceIds.includes(item.marketplace)) return [item];
+    const entry = catalog.loading ? undefined : entries.get(item.id);
+    if (!entry) return [];
+    if (!entry.nameZh || !entry.nameEn) return [{ ...item, discoveryGroup: entry.group }];
+    return [
+      {
+        ...item,
+        discoveryGroup: entry.group,
+        applicationNames: { zh: entry.nameZh, en: entry.nameEn },
+        listing: {
+          ...item.listing,
+          displayName: entry.nameEn,
+          displayNameI18n: {
+            ...item.listing?.displayNameI18n,
+            "zh-CN": entry.nameZh,
+            en: entry.nameEn,
+          },
+        },
+      },
+    ];
+  });
 }
 
 export function isUiPluginItem(item: StorePluginItem): boolean {
@@ -386,7 +424,10 @@ export function groupItemsByCategory(
     group.push(item);
     groups.set(category, group);
   }
-  return [...groups.entries()].map(([category, items]) => ({ category, items }));
+  return [...groups.entries()].map(([category, items]) => ({
+    category,
+    items,
+  }));
 }
 
 export function storeItemMatches(item: StorePluginItem, keyword: string, locale: string): boolean {

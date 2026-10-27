@@ -75,6 +75,7 @@ export function PreviewPaneOfficeContent({
   loading,
   onOpenBrowserUrl,
   preview,
+  data,
   resolvedTheme,
   sourcePath,
 }: {
@@ -82,17 +83,19 @@ export function PreviewPaneOfficeContent({
   kind: OfficeFilePreviewKind;
   loading: boolean;
   onOpenBrowserUrl?: (url: string) => void;
-  preview: FileBinaryPreview | null;
   resolvedTheme: "light" | "dark";
   sourcePath: string;
-}) {
+} & (
+  | { preview: FileBinaryPreview | null; data?: never }
+  | { data: ArrayBuffer | null; preview?: never }
+)) {
   const { intl } = useZCodeIntl();
   const errorMessage = intl.formatMessage({
     id: "codeViewer.officeUnavailable",
   });
   const buffer = useMemo(
-    () => (preview ? decodeBase64ToArrayBuffer(preview.dataBase64) : null),
-    [preview],
+    () => (preview ? decodeBase64ToArrayBuffer(preview.dataBase64) : (data ?? null)),
+    [preview, data],
   );
 
   if (loading || (!error && !buffer)) {
@@ -107,7 +110,7 @@ export function PreviewPaneOfficeContent({
   return (
     <OfficePreviewErrorBoundary
       fallback={fallback}
-      resetKey={`${kind}:${sourcePath}:${preview?.totalBytes ?? 0}`}
+      resetKey={`${kind}:${sourcePath}:${buffer.byteLength}`}
     >
       <Suspense fallback={<OfficePreviewLoading />}>
         {kind === "excel" ? (

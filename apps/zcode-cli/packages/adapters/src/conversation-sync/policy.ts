@@ -2,9 +2,12 @@ import type { Pool, PoolClient } from "pg";
 import {
   conversationCenterConfigurationSchema,
   conversationCenterPolicySchema,
+  conversationUsageQuerySchema, conversationUsagePageSchema,
+  type ConversationUsageQuery,
 } from "@zcode/shared";
 import { ConversationSyncError, type Logger } from "@zcode/contracts";
 import type { ConversationCenterPolicy } from "@zcode/shared";
+import { readMonitoring } from "./monitoring.js";
 import { CONVERSATION_SYNC_SCHEMA_VERSION } from "./migration.js";
 
 export async function readCenterPolicy(client: PoolClient) {
@@ -21,13 +24,14 @@ export async function readCenterPolicy(client: PoolClient) {
 }
 /** Separate minimal role: configuration authority grants no conversation content access. */
 export function createConversationSyncPolicyStore(options: { pool: Pool; logger: Logger }) {
-  async function transaction<T>(work: (client: PoolClient) => Promise<T>) {
+  async function transaction<T>(work: (client: PoolClient) => Promise<T>, snapshot = false) {
     const client = await options.pool.connect();
     try {
-      await client.query("begin");
+      await client.query(snapshot ? "begin isolation level repeatable read read only" : "begin");
       const role = await client.query(`select r.rolsuper,r.rolbypassrls,
         pg_has_role(current_user,'zcode_sync_configurator','MEMBER') as config,
         pg_has_role(current_user,'zcode_sync_runtime','MEMBER') as runtime,
+        pg_has_role(current_user,to_regrole('zcode_sync_observer'),'MEMBER') as observer,
         pg_has_role(current_user,c.relowner,'USAGE') as owns
         from pg_roles r cross join pg_class c join pg_namespace n on n.oid=c.relnamespace
         where r.rolname=current_user and n.nspname='zcode_sync' and c.relname='sessions'`);
@@ -37,6 +41,7 @@ export function createConversationSyncPolicyStore(options: { pool: Pool; logger:
         role.rows[0].rolbypassrls ||
         !role.rows[0].config ||
         role.rows[0].runtime ||
+        role.rows[0].observer ||
         role.rows[0].owns
       )
         throw new ConversationSyncError("scope");
@@ -55,6 +60,13 @@ export function createConversationSyncPolicyStore(options: { pool: Pool; logger:
   }
   return {
     read: () => transaction(readCenterPolicy),
+    usage: (query: ConversationUsageQuery) => transaction(async client => {
+      const scope = conversationUsageQuerySchema.parse(query);
+      const data = (await client.query("select zcode_sync.usage_summary($1,$2,$3,$4,$5) as value",
+        [scope.tenant ?? null, scope.subject ?? null, scope.excludeTenant ?? null, scope.offset, scope.limit])).rows[0].value;
+      return conversationUsagePageSchema.parse(data);
+    }, true),
+    monitoring: () => transaction(async client => readMonitoring(client, await readCenterPolicy(client)), true),
     update: (revision: number, input: ConversationCenterPolicy) =>
       transaction(async (client) => {
         const policy = conversationCenterPolicySchema.parse(input);

@@ -79,7 +79,7 @@ export function createConversationSyncHttpClient(options: {
     const result = await options.httpClient.request({
       url: url.toString(),
       method: body === undefined ? "GET" : "POST",
-      headers: { authorization: credential, "content-type": "application/json" },
+      headers: { authorization: credential, "content-type": "application/json", "x-zcode-sync-diagnostics": "1" },
       ...(body === undefined ? {} : { body: Buffer.from(canonical(body)) }),
       timeoutMs: options.timeoutMs,
       maxResponseBytes: options.maxResponseBytes,
@@ -87,18 +87,21 @@ export function createConversationSyncHttpClient(options: {
       trace: options.trace,
     });
     checkScope(scope);
-    if (result.status === 413) throw new ConversationSyncError("limit");
     if (result.status === 401 || result.status === 403) throw new ConversationSyncError("scope");
     let decoded: unknown;
     try {
       decoded = JSON.parse(Buffer.from(result.body).toString("utf8"));
     } catch (cause) {
-      throw new ConversationSyncError("invalid", { cause });
+      throw new ConversationSyncError(result.status === 413 ? "limit" : result.status >= 500 ? "storage" : "invalid", { cause });
+    }
+    if (result.status === 413) {
+      const failure = syncErrorSchema.safeParse(decoded);
+      throw new ConversationSyncError("limit", { diagnostic: failure.success ? failure.data.reason : undefined });
     }
     if (result.status !== 200) {
       const failure = syncErrorSchema.safeParse(decoded);
-      if (!failure.success) throw new ConversationSyncError("invalid");
-      throw new ConversationSyncError(failure.data.error);
+      if (!failure.success) throw new ConversationSyncError(result.status >= 500 ? "storage" : "invalid");
+      throw new ConversationSyncError(failure.data.error, { diagnostic: failure.data.reason });
     }
     return decoded;
   }

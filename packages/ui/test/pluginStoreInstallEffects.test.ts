@@ -138,3 +138,79 @@ it.each([false, true])(
     expect(effects.skills).toHaveBeenCalledTimes(1);
   },
 );
+
+it.each(["install", "restore", "update"])(
+  "rejects %s before calling native when publication is withdrawn",
+  async (operation) => {
+    const { ApplicationPluginStoreProvider } =
+      await import("@/root/ApplicationPluginStoreSection.js");
+    const beforeAcquire = vi.fn().mockRejectedValue(new Error("withdrawn"));
+    service.updatePlugin = vi.fn();
+    renderToStaticMarkup(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(ApplicationPluginStoreProvider, {
+          section: {
+            label: "Application",
+            marketplaceIds: [],
+            onRefresh: () => {},
+            render: () => null,
+            beforeAcquire,
+          },
+          children: createElement(PluginStorePage, { workspacePath: "/project/a", embedded: true }),
+        }),
+      ),
+    );
+    if (operation === "update") actions.onUpdate?.("panel@example");
+    else
+      actions.onInstall({
+        id: "panel@example",
+        name: "panel",
+        marketplace: "example",
+        restorable: operation === "restore",
+      } as never);
+    await vi.waitFor(() => expect(beforeAcquire).toHaveBeenCalledWith("panel@example"));
+    await Promise.resolve();
+    expect(service.installPlugin).not.toHaveBeenCalled();
+    expect(service.restoreBuiltinPlugin).not.toHaveBeenCalled();
+    expect(service.updatePlugin).not.toHaveBeenCalled();
+  },
+);
+
+it("discards an approved acquisition if the native position changed while waiting", async () => {
+  const { ApplicationPluginStoreProvider } =
+    await import("@/root/ApplicationPluginStoreSection.js");
+  let finish!: () => void;
+  const check = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const beforeAcquire = vi.fn(() => check);
+  renderToStaticMarkup(
+    createElement(
+      TooltipProvider,
+      null,
+      createElement(ApplicationPluginStoreProvider, {
+        section: {
+          label: "Application",
+          marketplaceIds: [],
+          onRefresh: () => {},
+          render: () => null,
+          beforeAcquire,
+        },
+        children: createElement(PluginStorePage, { workspacePath: "/project/a", embedded: true }),
+      }),
+    ),
+  );
+  actions.onInstall({
+    id: "panel@example",
+    name: "panel",
+    marketplace: "example",
+    restorable: false,
+  } as never);
+  await store.getState().initialize({ workspacePath: "/project/b", pluginService: service });
+  finish();
+  await check;
+  await Promise.resolve();
+  expect(service.installPlugin).not.toHaveBeenCalled();
+});

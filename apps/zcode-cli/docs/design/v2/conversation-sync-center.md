@@ -100,7 +100,7 @@ Schema 6 removes `enabled` and `subjects` from existing configuration JSON and
 advances its CAS revision exactly once under the migration transaction/advisory
 lock. Limits and all conversation tables remain intact. Fresh and v1–v5 databases
 take the same migration; repeat migration is a no-op. Runtimes/configurators require
-schema 6; old binaries fail closed and cannot be mixed during upgrade. Deployment
+schema 7; old binaries fail closed and cannot be mixed during upgrade. Deployment
 stops center writers and backs up before explicit migration. Test the v5 disabled
 and restricted-account cases, data/receipt preservation, concurrent reruns, new
 accounts without configuration changes, role/channel separation and cross-scope RLS.
@@ -448,3 +448,46 @@ candidates until explicit refresh; background polling never rewrites a choice ba
 Portable execution configuration is limited to build/guarded modes plus plan intent;
 permission grants, auto/yolo/edit modes and an unresolved local approved-plan dependency
 are not imported as authority. Such necessary state remains explicitly blocked.
+
+
+## 管理观测与容量投影
+
+原生中心 schema 7 追加只含小时 / 动作 / 结果 / 原因的有界低敏请求聚合，不记录业务标识或正文。聚合由同一 HTTP owner 在真实处理结果后写入，与业务事务分开；观测失败保留业务回执，管理响应标明本进程观测缺失。统计从明确启用时间开始，包含重试，不覆盖终端离线 outbox。
+
+独立 configuration proof 的只读 /monitoring 沿现有配置 facade 返回严格 schema：中心已保存数据和去重字节、当前 policy 修订、每人峰值 / 达限主体数、达版本硬上限会话数、未完成交接、窗口内请求计数及时间。configurator 只能读低敏计数与执行固定聚合函数，不获得 sessions / payloads / versions 等表读取权限。SQL 函数固定 search_path、撤销 public 执行权、无动态 SQL 或主体参数；数据原角色和强制 RLS 保持。
+
+容量满 / 检查点过大 / 版本满使用独立低敏诊断原因，公开既有错误码不变。没有记录不等于健康，历史请求失败不等于当前仍故障，管理员不会因管理身份获得正文。版本回收不由此接口触发。Desktop continuous 与 Web replayable 输入 / 恢复顺序均不改变。
+
+## Terminal backlog and retry observation
+
+The native outbox remains the only pending-version owner. Schema 7 adds attempt,
+creation and acknowledgement metadata plus a CAS-protected monotonic observation cursor;
+old rows retain unknown creation time. Capture is local; identity/admission failure
+uses a previously verified original scope to stage local changes only. Artifact
+descriptors are fixed locally; the same worker prepares exact
+bytes through the existing file port before sending the original version operation.
+No bytes, credentials, execution input or permissions move into reporting metadata.
+
+The Host keeps its existing retry timer. A source-bound report is an aggregate
+observation, not a second queue, execution lease, billing fact or stop proof. Cached
+identity permits only local original-owner capture; sends revalidate identity.
+Schema 8 stores one bounded report per authenticated scope/source. Reports carry a
+monotonic cursor; stale publishers cannot overwrite newer reports. Administrators
+receive anonymous source references, aggregate backlog/reasons, retry plans,
+server reception time and confirmed recovery history. A 120-second protocol
+freshness window marks stale observations; stale or never-reported terminals cannot
+be represented as an exact current global queue. Reporting failures never change
+business receipts. SQLite and PG upgrades preserve original operations and data.
+
+A completed failed turn may carry the native error's existing optional structured
+`data.attribution`. The v4 message whitelist reuses the shared strict error-attribution
+validator and preserves this fact exactly across export/import/replacement. Unknown
+error data, stack/request bodies or undeclared attribution keys still reject; failure
+repair must never drop facts or rerun the failed input to make export succeed.
+
+Before reading a local body, the source reuses the outbox's original-owner check.
+A known different owner is excluded from the current account's scan, including an
+input already bound to its session before the first checkpoint exists. It is not
+an unclaimed legacy session and must not be attributed, uploaded or reported as a
+current-account capture failure. Unknown ownership still blocks; discovery of an
+original first command rechecks this boundary before any ownership writer runs.

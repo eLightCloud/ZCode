@@ -908,6 +908,8 @@ modules:
       - apps/zcode-cli/packages/adapters/checks/sync-fixture.mts
       - apps/zcode-cli/packages/adapters/checks/sync-http.mts
       - apps/zcode-cli/packages/adapters/checks/sync-managed.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-monitoring.mts
+      - apps/zcode-cli/packages/adapters/checks/sync-terminals.mts
       - apps/zcode-cli/packages/adapters/checks/sync-outbox-concurrent.mts
       - apps/zcode-cli/packages/adapters/checks/sync-restore.mts
       - apps/zcode-cli/packages/adapters/checks/sync-transitions.mts
@@ -1416,6 +1418,8 @@ modules:
       - packages/shared/src/conversation-native-protocol
       - packages/shared/test/conversation-native-protocol
       - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-diagnostics.ts
+      - packages/shared/src/conversation-terminals.ts
       - packages/shared/src/conversation-runtime.ts
       - packages/shared/src/conversation-files.ts
       - packages/shared/src/conversation-continuation.ts
@@ -1426,6 +1430,8 @@ modules:
     publicEntrypoints:
       - packages/shared/src/conversation-native-protocol/contract.ts
       - packages/shared/src/conversation-sync.ts
+      - packages/shared/src/conversation-diagnostics.ts
+      - packages/shared/src/conversation-terminals.ts
       - packages/shared/src/conversation-runtime.ts
       - packages/shared/src/conversation-files.ts
       - packages/shared/src/conversation-continuation.ts

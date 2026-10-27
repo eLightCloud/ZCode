@@ -72,8 +72,8 @@ export function WorkspaceHeaderActionSection({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="gap-1.5 max-sm:min-h-11 max-sm:min-w-11"
+          size="icon-md"
+          className="max-sm:min-h-11 max-sm:min-w-11"
           aria-label={feedbackLabel}
           title={feedbackLabel}
           onClick={(event) => {
@@ -82,7 +82,6 @@ export function WorkspaceHeaderActionSection({
           }}
         >
           <MessageSquareIcon className="size-4" aria-hidden="true" />
-          <span className="max-sm:hidden">{feedbackLabel}</span>
         </Button>
       )}
       {!simplifyForNarrowRemote ? (

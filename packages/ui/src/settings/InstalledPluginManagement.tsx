@@ -1,454 +1,921 @@
-/* eslint-disable max-lines -- 已安装插件列表与详情弹窗共享组件分组/Hook 明细渲染，集中维护更利于与参考图保持一致。 */
-import type { ReactNode } from "react";
-import { AlertTriangle, Cable, ChevronRight, Trash2 } from "lucide-react";
-import type {
-  ZCodePluginDiagnostic,
-  ZCodePluginInfo,
-  ZCodePluginScope,
-  ZCodePluginUserConfigOption,
-} from "@zcode/shared";
-import { Badge } from "@/components/ui/badge.js";
+/* eslint-disable max-lines -- 已安装插件列表维护同一位置的配置、卸载与更新生命周期。 */
+import {
+  useConfigWorkspaceServicesResolution as useWorkspaceServicesResolution,
+  type ConfigWorkspaceTarget,
+} from "@/workspace-config-catalog/index.js";
+import { PluginAddMenu } from "@/conversation-workspace-target/PluginAddMenu.js";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Monitor, Plus, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
+import { toast } from "@/components/ui/toast.js";
+import { Switch } from "@/components/ui/switch.js";
+import { ControlHintTooltip } from "@/ControlHintTooltip.js";
+import { TID_PLUGIN_STORE_BROWSE } from "@zcode/shared/test-ids";
+import {
+  type ZCodePluginInfo,
+  type ZCodePluginScope,
+  type ZCodePluginUserConfigOption,
+} from "@zcode/shared";
+import { type CreateTaskRequest } from "@/app-shell/types.js";
+import { type IServiceAccessor } from "@zcode/services";
+import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
+import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
+import { PluginUninstallConfirmDialog } from "@/settings/PluginUninstallConfirmDialog.js";
+import { PluginInstallEmptyState, PluginLoadingState } from "@/settings/PluginInstallEmptyState.js";
 import { PluginConfigControls } from "@/settings/PluginConfigControls.js";
-import { PluginComponentGroups } from "@/settings/PluginComponentGroups.js";
-import { buildInstalledPluginDisplayGroups } from "@/settings/pluginManagedResourceGroups.js";
-import { isPluginUpdatePending } from "@/settings/pluginStoreListing.js";
+import {
+  PluginStoreAdvancedSection,
+  PluginStoreDetailView,
+  PluginDetailRow,
+  PluginHookDetails,
+  PluginWarningList,
+} from "@/settings/PluginStoreDetailView.js";
+import {
+  PluginStoreItemMenu,
+  PluginStoreOpenUiButton,
+  PluginStoreUpdateBadge,
+  PluginStoreUpdateButton,
+  type PluginStoreActions,
+} from "@/settings/PluginStoreCard.js";
+import { SettingsBreadcrumbReporter } from "@/settings/SettingsHeaderBreadcrumb.js";
+import { SettingsScopeBadge } from "@/settings/SettingsScopeBadge.js";
+import {
+  buildPluginConfigPatch,
+  type PluginOptionDraftValue,
+} from "@/settings/pluginConfigPatch.js";
+import { formatRemoteSkillSyncTarget } from "@/settings/RemoteSkillSyncDialog.js";
+import {
+  buildPluginStoreTryMention,
+  buildPluginStoreTryPrompt,
+} from "@/settings/pluginStoreTryPrompt.js";
+import { usePluginUninstall } from "@/settings/usePluginUninstall.js";
+import {
+  buildStoreItems,
+  type StorePluginItem,
+  resolveManagedPluginDisplay,
+  resolvePluginDisplayName,
+} from "@/settings/pluginStoreListing.js";
+import { useScopedPluginManagementStore } from "@/store/pluginManagementStore.js";
+import {
+  filterPluginsByQuery,
+  partitionPluginsForSettings,
+  selectBuiltInPlugins,
+  selectPluginsForScope,
+} from "@/settings/pluginCapabilityProjection.js";
+import {
+  isComputerUseRemoteOrLinux,
+  matchesComputerUseSearch,
+  resolveComputerUseAvailability,
+} from "@/settings/computerUseAvailability.js";
+import { getPluginWorkspaceKey } from "@/settings/PluginScopeMenu.js";
+import {
+  RemoteSyncDialogs,
+  shouldShowRemoteSyncActions,
+  useRemoteSyncDialogIntent,
+} from "@/settings/RemoteSyncActions.js";
+import { useApplicationPluginStoreSection } from "@/root/ApplicationPluginStoreSection.js";
 
-export type PluginOptionValueGetter = (
-  plugin: ZCodePluginInfo,
-  key: string,
-  option: ZCodePluginUserConfigOption,
-) => string | number | boolean;
-
-export function InstalledPluginDetailDialog({
-  diagnostics,
-  getPluginOptionValue,
+export function InstalledPluginList({
+  inMarketplace = false,
+  onOpenUi,
+  target,
   configScope,
-  installedAt,
-  latestVersion,
-  onOpenChange,
-  onRequestUninstall,
-  onRequestUpdate,
-  onSavePluginOptions,
-  open,
-  activeOperations,
-  plugin,
-  renderPluginSource,
-  setPluginOptionDraft,
-  uninstallable,
-  updateStatus,
+  searchQuery,
+  isDesktop,
+  isMacDesktop,
+  isWindowsDesktop,
+  isWebRemoteControl,
+  onAdd,
+  onCreateTask,
+  onDetailOpenChange,
+  onOpenPluginStore,
+  showMarketplaceBreadcrumb = false,
+  onVisibleCountChange,
+  unscopedServices,
+  cacheAuthorityKey,
 }: {
-  /** 插件管理 store 聚合的 list/overview 诊断；透传给面板展示当前插件自身的 warning。 */
-  diagnostics?: ZCodePluginDiagnostic[];
-  getPluginOptionValue: PluginOptionValueGetter;
+  inMarketplace?: boolean;
+  onOpenUi?: (
+    item: StorePluginItem,
+    target: ConfigWorkspaceTarget | null,
+    enable?: () => Promise<boolean>,
+  ) => void;
+  target: ConfigWorkspaceTarget | null;
   configScope: ZCodePluginScope;
-  installedAt?: string;
-  latestVersion?: string;
-  onOpenChange: (open: boolean) => void;
-  onRequestUninstall?: (pluginId: string) => void;
-  onRequestUpdate?: (pluginId: string) => void;
-  onSavePluginOptions: (plugin: ZCodePluginInfo) => void;
-  open: boolean;
-  activeOperations: ReadonlyArray<{ id: string }>;
-  plugin: ZCodePluginInfo | null;
-  renderPluginSource: (plugin: ZCodePluginInfo) => string;
-  setPluginOptionDraft: (pluginId: string, key: string, value: string | number | boolean) => void;
-  uninstallable?: boolean;
-  updateStatus?: "none" | "update-available" | "version-changed";
+  searchQuery: string;
+  isDesktop: boolean;
+  isMacDesktop: boolean;
+  isWindowsDesktop: boolean;
+  isWebRemoteControl: boolean;
+  onAdd?: () => void;
+  onCreateTask?: (request?: CreateTaskRequest) => void;
+  onDetailOpenChange?: (open: boolean) => void;
+  onOpenPluginStore: (returnScopeKey?: string, intent?: "add-marketplace") => void;
+  showMarketplaceBreadcrumb?: boolean;
+  onVisibleCountChange?: (count: number) => void;
+  unscopedServices?: IServiceAccessor;
+  cacheAuthorityKey?: string;
 }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[calc(100vh-3rem)] w-[min(600px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden p-0"
-        data-testid="plugin-settings-detail-dialog"
-        data-plugin-id={plugin?.id}
-      >
-        <DialogTitle className="sr-only">{plugin?.name ?? ""}</DialogTitle>
-        <InstalledPluginDetailPanel
-          diagnostics={diagnostics}
-          getPluginOptionValue={getPluginOptionValue}
-          configScope={configScope}
-          installedAt={installedAt}
-          latestVersion={latestVersion}
-          activeOperations={activeOperations}
-          plugin={plugin}
-          renderPluginSource={renderPluginSource}
-          setPluginOptionDraft={setPluginOptionDraft}
-          uninstallable={uninstallable}
-          updateStatus={updateStatus}
-          onRequestUninstall={onRequestUninstall}
-          onRequestUpdate={onRequestUpdate}
-          onSavePluginOptions={onSavePluginOptions}
-        />
-      </DialogContent>
-    </Dialog>
+  const { intl, locale } = useZCodeIntl();
+  const applicationSection = useApplicationPluginStoreSection();
+  const targetServiceResolution = useWorkspaceServicesResolution(
+    target?.workspacePath,
+    target?.remoteSessionId,
+    target?.workspaceIdentity,
+    target?.remoteTarget,
+    { unscopedServices, forceUnscoped: Boolean(cacheAuthorityKey) },
   );
-}
-
-export function InstalledPluginDetailPanel({
-  diagnostics = [],
-  getPluginOptionValue,
-  configScope,
-  installedAt,
-  latestVersion,
-  onRequestUninstall,
-  onRequestUpdate,
-  onSavePluginOptions,
-  activeOperations,
-  plugin,
-  renderPluginSource,
-  setPluginOptionDraft,
-  uninstallable,
-  updateStatus,
-}: {
-  /** 插件管理 store 聚合的 list/overview 诊断；面板只展示当前插件自身的 warning。 */
-  diagnostics?: ZCodePluginDiagnostic[];
-  getPluginOptionValue: PluginOptionValueGetter;
-  configScope: ZCodePluginScope;
-  installedAt?: string;
-  latestVersion?: string;
-  onRequestUninstall?: (pluginId: string) => void;
-  onRequestUpdate?: (pluginId: string) => void;
-  onSavePluginOptions: (plugin: ZCodePluginInfo) => void;
-  activeOperations: ReadonlyArray<{ id: string }>;
-  plugin: ZCodePluginInfo | null;
-  renderPluginSource: (plugin: ZCodePluginInfo) => string;
-  setPluginOptionDraft: (pluginId: string, key: string, value: string | number | boolean) => void;
-  uninstallable?: boolean;
-  updateStatus?: "none" | "update-available" | "version-changed";
-}) {
-  const { intl } = useZCodeIntl();
-  if (!plugin) {
-    return (
-      <div className="px-5 py-4 text-ui-base text-foreground-subtle">
-        {intl.formatMessage({ id: "settings.plugins.detail.empty" })}
-      </div>
+  const baseServices = useBaseWorkspaceServices();
+  // Scope 可选择非激活 workspace，若继续从当前 ServiceProvider 取服务，
+  // 会把 B 的路径发往 A 的 host。插件读写必须和 Scope target 共用同一服务解析结果。
+  const { pluginManagementService } = targetServiceResolution.services;
+  const usePluginManagementStore = useScopedPluginManagementStore(pluginManagementService);
+  const plugins = usePluginManagementStore((state) => state.plugins);
+  const installedPlugins = usePluginManagementStore((state) => state.installedPlugins);
+  const marketplaces = usePluginManagementStore((state) => state.marketplaces);
+  const marketplaceAvailabilityKnown = usePluginManagementStore(
+    (state) => state.marketplaceAvailabilityKnown,
+  );
+  const availablePlugins = usePluginManagementStore((state) => state.availablePlugins);
+  const restorableBuiltins = usePluginManagementStore((state) => state.restorableBuiltins);
+  const loading = usePluginManagementStore((state) => state.loading);
+  const pluginDiagnostics = usePluginManagementStore((state) => state.diagnostics);
+  const currentWorkspacePath = usePluginManagementStore((state) => state.workspacePath);
+  const currentWorkspaceIdentity = usePluginManagementStore((state) => state.workspaceIdentity);
+  const initialize = usePluginManagementStore((state) => state.initialize);
+  const setEnabled = usePluginManagementStore((state) => state.setEnabled);
+  const updatePlugin = usePluginManagementStore((state) => state.updatePlugin);
+  const configurePlugin = usePluginManagementStore((state) => state.configurePlugin);
+  const currentAuthorityKey = usePluginManagementStore((state) => state.authorityKey);
+  const currentConfigScope = usePluginManagementStore((state) => state.configScope);
+  const resetPluginConfig = usePluginManagementStore((state) => state.resetPluginConfig);
+  const togglingPluginId = usePluginManagementStore((state) => state.togglingPluginId);
+  const activeOperations = usePluginManagementStore((state) => state.activeOperations);
+  const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
+  const [pluginOptionsDrafts, setPluginOptionsDrafts] = useState<
+    Record<string, Record<string, PluginOptionDraftValue>>
+  >({});
+  // 设置页重构后只保留了 Plugin 管理列表，漏掉了旧版插件页的远端同步入口。
+  // 同步目标必须沿用当前 Scope 的 target services，不能回退到激活 workspace 的 host。
+  const connectedRemoteSyncTarget =
+    targetServiceResolution.rpcReady &&
+    shouldShowRemoteSyncActions({
+      remoteSessionId: target?.remoteSessionId,
+      remoteTarget: target?.remoteTarget,
+      clientMode: isWebRemoteControl ? "web-remote-replayable" : "desktop-continuous",
+      hasLocalSourceService: Boolean(baseServices.pluginSyncService),
+    }) &&
+    target?.workspacePath
+      ? target.remoteTarget
+      : null;
+  // 设置页重构时只迁移了插件远程同步操作，遗漏了当前远端工作区提示，
+  // 用户无法确认插件列表实际对应的是哪个远程目标。
+  const remotePluginSyncTargetLabel = connectedRemoteSyncTarget
+    ? formatRemoteSkillSyncTarget(connectedRemoteSyncTarget, target?.workspacePath ?? "")
+    : "";
+  const targetKey = target ? getPluginWorkspaceKey(target) : "";
+  const pluginSyncTargetKey = target
+    ? `${targetKey}\u0000${target.remoteSessionId?.trim() ?? ""}`
+    : "";
+  const { open: remotePluginSyncOpen, setOpen: setRemotePluginSyncOpen } =
+    useRemoteSyncDialogIntent({
+      rpcReady: targetServiceResolution.rpcReady,
+      targetKey: pluginSyncTargetKey,
+    });
+  const storeKey = currentWorkspaceIdentity?.trim() || currentWorkspacePath || "";
+  const storeMatchesTarget =
+    storeKey === targetKey &&
+    currentAuthorityKey === (cacheAuthorityKey?.trim() || null) &&
+    currentConfigScope === configScope;
+  const storeItemById = useMemo(
+    () =>
+      new Map(
+        buildStoreItems({
+          marketplaces,
+          marketplaceAvailabilityKnown,
+          availablePlugins,
+          installedPlugins,
+          plugins,
+          restorableBuiltins,
+        }).map((item) => [item.id, item]),
+      ),
+    [
+      availablePlugins,
+      installedPlugins,
+      marketplaceAvailabilityKnown,
+      marketplaces,
+      plugins,
+      restorableBuiltins,
+    ],
+  );
+  const visiblePlugins = useMemo(() => {
+    if (!storeMatchesTarget) return [];
+    return filterPluginsByQuery(
+      selectPluginsForScope(plugins, installedPlugins, configScope),
+      searchQuery,
+      storeItemById,
+      locale,
     );
-  }
-
-  const componentGroups = buildInstalledPluginDisplayGroups(plugin);
-  const hookDetails = plugin.hookDetails ?? [];
-  // Bugfix（静默失败）：插件 warning 诊断（如声明的技能路径扫描为空）此前在 UI 无任何
-  // 渲染位置，用户看到「安装成功、启用生效、技能数 0」却无从排查。这里在详情面板
-  // 直接列出该插件自身的 warning；正文直出 CLI 下发的 message（含具体路径）。
-  const pluginWarnings = diagnostics.filter(
-    (diagnostic) => diagnostic.pluginId === plugin.id && diagnostic.severity === "warning",
+  }, [
+    configScope,
+    installedPlugins,
+    locale,
+    plugins,
+    searchQuery,
+    storeItemById,
+    storeMatchesTarget,
+  ]);
+  const scopedPlugins = useMemo(
+    () => (storeMatchesTarget ? selectPluginsForScope(plugins, installedPlugins, configScope) : []),
+    [configScope, installedPlugins, plugins, storeMatchesTarget],
   );
-  const hasAdvanced = hookDetails.length > 0 || Object.keys(plugin.userConfig ?? {}).length > 0;
-  const sourceLabel = renderPluginSource(plugin);
+  const builtInPluginIds = useMemo(
+    () => new Set(selectBuiltInPlugins(plugins, installedPlugins).map((plugin) => plugin.id)),
+    [installedPlugins, plugins],
+  );
+  const visiblePluginGroups = useMemo(
+    () => partitionPluginsForSettings(visiblePlugins, builtInPluginIds),
+    [builtInPluginIds, visiblePlugins],
+  );
+  const scopedPluginGroups = useMemo(
+    () => partitionPluginsForSettings(scopedPlugins, builtInPluginIds),
+    [builtInPluginIds, scopedPlugins],
+  );
+  const visibleBuiltInPlugins = visiblePluginGroups.builtIn;
+  const visibleInstalledPlugins = visiblePluginGroups.installed;
+  const installedPluginCount = scopedPluginGroups.installed.length;
+  const computerUseAvailability = resolveComputerUseAvailability({
+    isDesktop,
+    isMacDesktop,
+    isWindowsDesktop,
+    remoteSessionId: target?.remoteSessionId,
+    remoteTarget: target?.remoteTarget,
+    workspaceIdentity: target?.workspaceIdentity,
+  });
+  const showUnavailableComputerUse = Boolean(
+    configScope === "user" &&
+    target &&
+    !loading &&
+    isComputerUseRemoteOrLinux(computerUseAvailability) &&
+    matchesComputerUseSearch(searchQuery),
+  );
+  const hasEmptySearchResult = Boolean(
+    target &&
+    !loading &&
+    searchQuery.trim() &&
+    visibleInstalledPlugins.length === 0 &&
+    visibleBuiltInPlugins.length === 0 &&
+    !showUnavailableComputerUse,
+  );
+  const hideInstalledGroup = Boolean(searchQuery.trim() && visibleInstalledPlugins.length === 0);
+  useEffect(() => {
+    onVisibleCountChange?.(visibleInstalledPlugins.length + visibleBuiltInPlugins.length);
+  }, [onVisibleCountChange, visibleBuiltInPlugins.length, visibleInstalledPlugins.length]);
+  const refreshAfterPluginChange = useCallback(async () => {
+    if (!target || !targetServiceResolution.rpcReady) return;
+    await initialize({
+      workspacePath: target.workspacePath,
+      workspaceIdentity: target.workspaceIdentity,
+      authorityKey: cacheAuthorityKey,
+      configScope,
+      pluginService: pluginManagementService,
+    });
+  }, [
+    initialize,
+    cacheAuthorityKey,
+    configScope,
+    pluginManagementService,
+    target,
+    targetServiceResolution.rpcReady,
+  ]);
+  const handleSetEnabled = useCallback(
+    async (pluginId: string, enabled: boolean) => {
+      const plugin = plugins.find((candidate) => candidate.id === pluginId);
+      const pluginLabel = plugin
+        ? resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale).name
+        : pluginId;
+      const succeeded = await setEnabled(pluginId, enabled, pluginManagementService, configScope);
+      if (!succeeded) {
+        toast(
+          usePluginManagementStore.getState().error ??
+            intl.formatMessage({ id: "settings.plugins.toggle.failed" }, { plugin: pluginLabel }),
+          { variant: "warning" },
+        );
+        return;
+      }
+      const messageId =
+        configScope === "workspace"
+          ? enabled
+            ? "settings.plugins.toggle.workspaceEnabled"
+            : "settings.plugins.toggle.workspaceDisabled"
+          : enabled
+            ? "settings.plugins.toggle.enabled"
+            : "settings.plugins.toggle.disabled";
+      toast(intl.formatMessage({ id: messageId }, { plugin: pluginLabel }));
+    },
+    [configScope, intl, locale, pluginManagementService, plugins, setEnabled, storeItemById],
+  );
+  const handleResetPluginConfig = useCallback(
+    async (pluginId: string) => {
+      const version = usePluginManagementStore.getState().operationVersion;
+      const plugin = plugins.find((candidate) => candidate.id === pluginId);
+      const pluginLabel = plugin
+        ? resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale).name
+        : pluginId;
+      const restored = await resetPluginConfig(pluginId, pluginManagementService, "workspace");
+      if (!restored) {
+        toast(
+          usePluginManagementStore.getState().error ??
+            intl.formatMessage({ id: "settings.plugins.toggle.failed" }, { plugin: pluginLabel }),
+          { variant: "warning" },
+        );
+        return;
+      }
+      if (usePluginManagementStore.getState().operationVersion !== version) return;
+      toast(intl.formatMessage({ id: "settings.plugins.scope.restored" }, { plugin: pluginLabel }));
+    },
+    [intl, locale, pluginManagementService, plugins, resetPluginConfig, storeItemById],
+  );
+  const uninstall = usePluginUninstall({
+    store: usePluginManagementStore,
+    pluginService: pluginManagementService,
+    installedPlugins,
+    plugins,
+    activeOperations,
+    onAfterUninstall: refreshAfterPluginChange,
+  });
+  const handleUpdatePlugin = useCallback(
+    async (pluginId: string) => {
+      try {
+        if (applicationSection?.beforeAcquire) await applicationSection.beforeAcquire(pluginId);
+      } catch (failure) {
+        toast(failure instanceof Error ? failure.message : String(failure));
+        return;
+      }
+      await updatePlugin(pluginId, pluginManagementService);
+      if (usePluginManagementStore.getState().error) return;
+      await refreshAfterPluginChange();
+    },
+    [applicationSection, pluginManagementService, refreshAfterPluginChange, updatePlugin],
+  );
+  const selectedPlugin = plugins.find((plugin) => plugin.id === selectedPluginId) ?? null;
+  // 插件自身 warning 诊断（如声明的技能路径扫描为空）：详情高级区展示，避免静默失败。
+  const pluginWarningsForSelected = selectedPlugin
+    ? pluginDiagnostics.filter(
+        (diagnostic) =>
+          diagnostic.pluginId === selectedPlugin.id && diagnostic.severity === "warning",
+      )
+    : [];
+  const selectedStoreItem = selectedPluginId ? storeItemById.get(selectedPluginId) : undefined;
+  const closeDetail = useCallback(() => {
+    setSelectedPluginId(null);
+    onDetailOpenChange?.(false);
+  }, [onDetailOpenChange]);
+  useEffect(() => {
+    closeDetail();
+  }, [closeDetail, targetKey]);
+  useEffect(() => {
+    if (selectedPluginId && !selectedPlugin) closeDetail();
+  }, [closeDetail, selectedPlugin, selectedPluginId]);
+  const setPluginOptionDraft = (
+    pluginId: string,
+    key: string,
+    value: string | number | boolean,
+  ) => {
+    setPluginOptionsDrafts((current) => ({
+      ...current,
+      [pluginId]: { ...current[pluginId], [key]: value },
+    }));
+  };
+  const getPluginOptionValue = (
+    plugin: ZCodePluginInfo,
+    key: string,
+    option: ZCodePluginUserConfigOption,
+  ): string | number | boolean => {
+    const draft = pluginOptionsDrafts[plugin.id]?.[key];
+    if (draft === null) return "";
+    return (
+      draft ??
+      plugin.configuredOptions?.[key] ??
+      option.default ??
+      (option.type === "boolean" ? false : "")
+    );
+  };
+  const savePluginOptions = async (plugin: ZCodePluginInfo) => {
+    const { options, clearOptionKeys } = buildPluginConfigPatch(
+      plugin,
+      pluginOptionsDrafts[plugin.id] ?? {},
+    );
+    // 没有显式修改时不写入空的 Workspace 配置，避免无操作保存制造配置足迹。
+    if (Object.keys(options).length === 0 && clearOptionKeys.length === 0) return;
+    const configured = await configurePlugin(
+      plugin.id,
+      options,
+      pluginManagementService,
+      configScope,
+      clearOptionKeys,
+    );
+    // 保存失败时保留用户输入和敏感字段清除意图，避免 RPC 错误后 UI 看起来像已提交。
+    if (!configured) return;
+    setPluginOptionsDrafts((current) => {
+      const next = { ...current };
+      delete next[plugin.id];
+      return next;
+    });
+  };
+  const actions: PluginStoreActions = useMemo(
+    () => ({
+      onOpenDetail: (pluginId) => {
+        setSelectedPluginId(pluginId);
+        onDetailOpenChange?.(true);
+      },
+      onOpenUi: onOpenUi
+        ? (item) =>
+            onOpenUi(
+              item,
+              target,
+              item.info?.enabled
+                ? undefined
+                : () => setEnabled(item.id, true, pluginManagementService, configScope),
+            )
+        : undefined,
+      onInstall: () => onOpenPluginStore(),
+      onUninstall: uninstall.requestUninstall,
+      onSetEnabled: (pluginId, enabled) => void handleSetEnabled(pluginId, enabled),
+      onResetConfig:
+        configScope === "workspace"
+          ? (pluginId) => void handleResetPluginConfig(pluginId)
+          : undefined,
+      onUpdate: (pluginId) => void handleUpdatePlugin(pluginId),
+      activeOperations,
+      togglingPluginId,
+    }),
+    [
+      configScope,
+      handleResetPluginConfig,
+      handleSetEnabled,
+      handleUpdatePlugin,
+      onDetailOpenChange,
+      onOpenPluginStore,
+      activeOperations,
+      togglingPluginId,
+      uninstall.requestUninstall,
+      onOpenUi,
+      target,
+      setEnabled,
+      pluginManagementService,
+    ],
+  );
+  useEffect(() => {
+    if (!target || !targetServiceResolution.rpcReady) return;
+    void initialize({
+      workspacePath: target.workspacePath,
+      workspaceIdentity: target.workspaceIdentity,
+      authorityKey: cacheAuthorityKey,
+      configScope,
+      pluginService: pluginManagementService,
+    });
+  }, [
+    initialize,
+    cacheAuthorityKey,
+    configScope,
+    pluginManagementService,
+    target,
+    targetServiceResolution.rpcReady,
+  ]);
 
-  return (
-    <div className="max-h-[calc(100vh-3rem)] overflow-y-auto text-ui-base text-foreground">
-      <div className="border-b border-border px-5 pb-4 pt-5 pr-12">
-        <div className="flex min-w-0 items-start gap-3">
+  const renderPluginRows = (items: ZCodePluginInfo[]) => (
+    <div className="overflow-hidden rounded-xl bg-surface">
+      {items.map((plugin, index) => (
+        <Fragment key={plugin.id}>
+          {index > 0 ? <div className="h-px bg-border/50" aria-hidden="true" /> : null}
           <div
-            className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-foreground-subtle"
-            aria-hidden="true"
+            className="group/plugin-row flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-hover"
+            data-testid="plugin-settings-plugin-row"
+            data-plugin-id={plugin.id}
           >
-            <Cable className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="flex min-w-0 flex-wrap items-baseline gap-2 text-ui-base font-semibold text-foreground">
-              <span className="min-w-0 truncate">{plugin.name}</span>
-              {plugin.version ? (
-                <span className="text-ui-xs font-normal text-foreground-subtle">
-                  v{plugin.version}
-                </span>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
+              onClick={() => actions.onOpenDetail(plugin.id)}
+            >
+              <PluginStoreAvatar
+                item={storeItemById.get(plugin.id) ?? { name: plugin.name }}
+                className="size-9 bg-background"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-ui-base font-medium text-foreground">
+                    {resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale).name}
+                  </span>
+                  <PluginStoreUpdateBadge item={storeItemById.get(plugin.id)} />
+                </div>
+                {resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale)
+                  .description ? (
+                  <div className="mt-0.5 line-clamp-1 text-ui-sm text-foreground-subtle">
+                    {
+                      resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale)
+                        .description
+                    }
+                  </div>
+                ) : null}
+                <div className="mt-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <SettingsScopeBadge
+                      scope={plugin.enabledSource ?? "default"}
+                      label={
+                        configScope === "user" && plugin.enabledSource === "user"
+                          ? intl.formatMessage({
+                              id: "settings.plugins.scope.userDefault",
+                            })
+                          : plugin.enabledSource === "user"
+                            ? intl.formatMessage({
+                                id: "settings.plugins.scope.inheritedUser",
+                              })
+                            : plugin.enabledSource === "workspace"
+                              ? intl.formatMessage({
+                                  id: "settings.plugins.scope.workspaceOverride",
+                                })
+                              : undefined
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </button>
+            <PluginStoreUpdateButton item={storeItemById.get(plugin.id)} actions={actions} />
+            {storeItemById.get(plugin.id) && plugin.packageStatus !== "missing" ? (
+              <PluginStoreItemMenu item={storeItemById.get(plugin.id)!} actions={actions} />
+            ) : null}
+            {storeItemById.get(plugin.id) ? (
+              <PluginStoreOpenUiButton item={storeItemById.get(plugin.id)!} actions={actions} />
+            ) : null}
+            <div className="flex shrink-0 items-center gap-2">
+              {togglingPluginId === plugin.id ? (
+                <Loader2
+                  className="size-4 animate-spin text-foreground-subtle"
+                  data-testid="plugin-settings-enabled-pending"
+                  aria-label={intl.formatMessage(
+                    { id: "settings.plugins.toggle.pending" },
+                    {
+                      plugin: resolveManagedPluginDisplay(
+                        plugin,
+                        storeItemById.get(plugin.id),
+                        locale,
+                      ).name,
+                    },
+                  )}
+                />
               ) : null}
-            </h2>
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-              <Badge variant={plugin.enabled ? "secondary" : "outline"} className="rounded-md">
-                {plugin.enabled
-                  ? intl.formatMessage({
-                      id: "settings.plugins.detail.enabled",
-                    })
-                  : intl.formatMessage({
-                      id: "settings.plugins.detail.disabled",
-                    })}
-              </Badge>
-              <Badge variant="outline" className="min-w-0 rounded-md">
-                <span className="truncate">{sourceLabel}</span>
-              </Badge>
+              <Switch
+                data-testid="plugin-settings-enabled-switch"
+                data-plugin-id={plugin.id}
+                checked={plugin.enabled}
+                disabled={togglingPluginId === plugin.id}
+                aria-busy={togglingPluginId === plugin.id}
+                aria-label={intl.formatMessage(
+                  {
+                    id: plugin.enabled
+                      ? "settings.plugins.toggle.disable"
+                      : "settings.plugins.toggle.enable",
+                  },
+                  {
+                    plugin: resolveManagedPluginDisplay(
+                      plugin,
+                      storeItemById.get(plugin.id),
+                      locale,
+                    ).name,
+                  },
+                )}
+                onCheckedChange={(enabled) => {
+                  actions.onSetEnabled?.(plugin.id, enabled);
+                }}
+              />
             </div>
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  );
+
+  const renderUnavailableComputerUse = () => (
+    <div className="overflow-hidden rounded-xl bg-surface">
+      <div className="flex min-w-0 items-center gap-3 px-4 py-3 text-foreground-subtle">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-foreground-subtle">
+          <Monitor className="size-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-ui-base font-medium text-foreground">
+            {intl.formatMessage({ id: "settings.computerUse.title" })}
+          </div>
+          <div className="mt-0.5 text-ui-sm text-foreground-subtle">
+            {intl.formatMessage({
+              id:
+                computerUseAvailability.kind === "local-linux"
+                  ? "settings.computerUse.unsupported.linuxDescription"
+                  : "settings.computerUse.unsupported.remoteDescription",
+            })}
           </div>
         </div>
-        {plugin.description ? (
-          <p className="mt-3 leading-relaxed text-foreground-subtle">{plugin.description}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-5 px-5 py-4">
-        <DetailSection title={intl.formatMessage({ id: "settings.plugins.detail.details" })}>
-          {componentGroups.length > 0 ? (
-            <PluginComponentGroups groups={componentGroups} />
-          ) : (
-            // components 由 CLI 对插件根目录权威枚举得出（与启用态无关），停用插件也能展示真实组件。
-            // 走到这里说明该插件确实未声明任何组件，给出诚实空态即可。
-            <p className="text-ui-base text-foreground-subtle">
-              {intl.formatMessage({
-                id: "settings.plugins.detail.componentsEmpty",
-              })}
-            </p>
-          )}
-        </DetailSection>
-
-        {pluginWarnings.length > 0 ? (
-          <DetailSection title={intl.formatMessage({ id: "settings.plugins.detail.warnings" })}>
-            <PluginWarningList warnings={pluginWarnings} />
-          </DetailSection>
-        ) : null}
-
-        {installedAt ? (
-          <div className="border-t border-border pt-4">
-            <div className="text-ui-xs font-medium text-foreground-subtle">
-              {intl.formatMessage({
-                id: "settings.plugins.detail.installedAt",
-              })}
-            </div>
-            <div className="mt-1 break-all text-ui-base text-foreground">{installedAt}</div>
-          </div>
-        ) : null}
-
-        {hasAdvanced ? (
-          <details className="group/advanced border-t border-border pt-4">
-            <summary className="flex cursor-pointer list-none items-center gap-2 text-ui-xs font-medium text-foreground-subtle transition-colors hover:text-foreground">
-              <ChevronRight className="size-3.5 transition-transform group-open/advanced:rotate-90" />
-              {intl.formatMessage({
-                id: "settings.plugins.detail.moreDetails",
-              })}
-            </summary>
-            <div className="mt-3 space-y-3">
-              <PluginDetailRow
-                label={intl.formatMessage({
-                  id: "settings.plugins.detail.rootPath",
-                })}
-                value={plugin.rootPath}
-              />
-              <PluginHookDetails hooks={hookDetails} />
-              <PluginConfigControls
-                getValue={getPluginOptionValue}
-                onSave={onSavePluginOptions}
-                onSetDraft={setPluginOptionDraft}
-                activeOperations={activeOperations}
-                plugin={plugin}
-                scope={configScope}
-              />
-            </div>
-          </details>
-        ) : null}
-
-        {isPluginUpdatePending(updateStatus) ? (
-          <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
-            <div className="min-w-0">
-              <p className="text-ui-base font-medium text-foreground">
-                {updateStatus === "update-available"
-                  ? intl.formatMessage(
-                      { id: "settings.plugins.detail.updateAvailable" },
-                      { version: latestVersion ?? "" },
-                    )
-                  : intl.formatMessage({
-                      id: "settings.plugins.detail.versionChanged",
-                    })}
-              </p>
-              <p className="text-ui-xs text-foreground-subtle">
-                {intl.formatMessage({
-                  id: "settings.plugins.detail.updateNewSessionsNote",
-                })}
-              </p>
-            </div>
-            {onRequestUpdate ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={activeOperations.some(
-                  (operation) => operation.id === `plugin:update:${plugin.id}`,
-                )}
-                onClick={() => onRequestUpdate(plugin.id)}
-              >
-                {intl.formatMessage({ id: "settings.plugins.detail.update" })}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {uninstallable && onRequestUninstall ? (
-          <div className="flex justify-end border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={activeOperations.some(
-                (operation) => operation.id === `plugin:uninstall:${plugin.id}`,
-              )}
-              onClick={() => onRequestUninstall(plugin.id)}
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {intl.formatMessage({ id: "settings.plugins.detail.uninstall" })}
-            </Button>
-          </div>
-        ) : null}
+        <span className="shrink-0 rounded-md bg-background px-2 py-1 text-ui-xs font-medium text-foreground-subtle">
+          {intl.formatMessage({ id: "settings.computerUse.unsupported.badge" })}
+        </span>
       </div>
     </div>
   );
-}
 
-function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+  if (selectedPlugin && selectedStoreItem && targetServiceResolution.rpcReady) {
+    const pluginBreadcrumbLabel = resolvePluginDisplayName(selectedStoreItem, locale);
+    const pluginsBreadcrumbLabel = intl.formatMessage({
+      id: "settings.plugins.title",
+    });
+    // Plugin 不打开仅含管理字段的简化弹窗：那会与插件商店详情形成两套内容模型，
+    // 导致介绍、Hero、示例提示词与能力清单缺失。这里直接复用权威商店详情页，只注入已安装态高级配置。
+    return (
+      <section className="space-y-5">
+        <Button variant="ghost" data-testid="plugin-settings-detail-back" onClick={closeDetail}>
+          {intl.formatMessage({ id: "common.back" })}
+        </Button>
+        {!inMarketplace ? (
+          <SettingsBreadcrumbReporter
+            items={
+              showMarketplaceBreadcrumb
+                ? [
+                    { label: pluginsBreadcrumbLabel, onSelect: closeDetail },
+                    { label: pluginBreadcrumbLabel },
+                  ]
+                : [{ label: pluginBreadcrumbLabel }]
+            }
+            onSectionSelect={showMarketplaceBreadcrumb ? onOpenPluginStore : closeDetail}
+          />
+        ) : null}
+        <PluginStoreDetailView
+          item={selectedStoreItem}
+          actions={actions}
+          onRetryDescribe={() => {}}
+          onUsePrompt={(item, prompt) => {
+            if (!onCreateTask) return;
+            onCreateTask({
+              initialPrompt: buildPluginStoreTryPrompt({
+                item,
+                locale,
+                prompt,
+              }),
+              initialPromptMention: buildPluginStoreTryMention({
+                item,
+                locale,
+              }),
+            });
+          }}
+          advanced={
+            selectedPlugin.packageStatus === "missing" ? undefined : (
+              <PluginStoreAdvancedSection>
+                {pluginWarningsForSelected.length > 0 ? (
+                  <div>
+                    <div className="mb-2 text-ui-xs font-medium text-foreground">
+                      {intl.formatMessage({
+                        id: "settings.plugins.detail.warnings",
+                      })}
+                    </div>
+                    <PluginWarningList warnings={pluginWarningsForSelected} />
+                  </div>
+                ) : null}
+                <PluginDetailRow
+                  label={intl.formatMessage({
+                    id: "settings.plugins.detail.rootPath",
+                  })}
+                  value={selectedPlugin.rootPath}
+                />
+                {(selectedPlugin.hookDetails ?? []).length > 0 ? (
+                  <PluginHookDetails hooks={selectedPlugin.hookDetails ?? []} />
+                ) : null}
+                <PluginConfigControls
+                  getValue={getPluginOptionValue}
+                  isOptionClearPending={(pluginId, key) =>
+                    pluginOptionsDrafts[pluginId]?.[key] === null
+                  }
+                  onClearOption={(pluginId, key, clear) =>
+                    setPluginOptionsDrafts((current) => {
+                      const nextPluginDrafts = { ...current[pluginId] };
+                      if (clear) nextPluginDrafts[key] = null;
+                      else delete nextPluginDrafts[key];
+                      return {
+                        ...current,
+                        [pluginId]: nextPluginDrafts,
+                      };
+                    })
+                  }
+                  onSave={(plugin) => void savePluginOptions(plugin)}
+                  onSetDraft={setPluginOptionDraft}
+                  activeOperations={activeOperations}
+                  plugin={selectedPlugin}
+                  scope={configScope}
+                />
+              </PluginStoreAdvancedSection>
+            )
+          }
+        />
+        <PluginUninstallConfirmDialog
+          open={uninstall.pendingPlugin !== null}
+          pluginName={
+            uninstall.pendingPlugin
+              ? resolvePluginDisplayName(
+                  storeItemById.get(uninstall.pendingPlugin.id) ?? {
+                    name: uninstall.pendingPlugin.name,
+                  },
+                  locale,
+                )
+              : ""
+          }
+          pending={uninstall.uninstalling}
+          onCancel={uninstall.cancelUninstall}
+          onConfirm={() => void uninstall.confirmUninstall()}
+        />
+      </section>
+    );
+  }
+
   return (
-    <section>
-      <h3 className="mb-1.5 text-ui-base font-semibold text-foreground">{title}</h3>
-      {children}
+    <section className="space-y-6" aria-labelledby="plugin-installed-title">
+      {hasEmptySearchResult ? (
+        <InstalledPluginEmptyState
+          message={intl.formatMessage({
+            id: "settings.plugin.plugins.empty",
+          })}
+        />
+      ) : null}
+      <div className={hideInstalledGroup ? "hidden" : "space-y-4"}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3
+            id="plugin-installed-title"
+            className="flex h-7 items-center gap-1.5 text-ui-base font-medium text-foreground"
+          >
+            {intl.formatMessage({ id: "settings.plugin.plugins.installed" })}
+            <span className="text-ui-sm font-normal text-foreground-subtle">
+              {visibleInstalledPlugins.length}
+            </span>
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {connectedRemoteSyncTarget ? (
+              <ControlHintTooltip
+                title={intl.formatMessage({
+                  id: "settings.plugins.remoteSync.open",
+                })}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-md"
+                  aria-label={intl.formatMessage({
+                    id: "settings.plugins.remoteSync.open",
+                  })}
+                  onClick={() => setRemotePluginSyncOpen(true)}
+                >
+                  <UploadCloud className="size-3.5" aria-hidden="true" />
+                </Button>
+              </ControlHintTooltip>
+            ) : null}
+            <SettingsResourceHeaderActions onRefresh={() => void refreshAfterPluginChange()} />
+            {configScope === "user" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid={TID_PLUGIN_STORE_BROWSE}
+                  onClick={onAdd}
+                >
+                  {intl.formatMessage({ id: "settings.plugin.plugins.browse" })}
+                </Button>
+                <PluginAddMenu
+                  testId="plugin-settings-add"
+                  onCreateTask={onCreateTask}
+                  isWebRemoteControl={isWebRemoteControl}
+                  onAddMarketplace={() => onOpenPluginStore(undefined, "add-marketplace")}
+                />
+              </>
+            ) : null}
+          </div>
+        </div>
+        {configScope === "workspace" && target ? (
+          <div
+            className="rounded-lg border border-border bg-card px-3 py-2 text-ui-sm text-foreground-subtle"
+            data-testid="plugin-settings-workspace-scope-hint"
+          >
+            {intl.formatMessage({ id: "settings.plugins.scope.workspaceHint" })}
+          </div>
+        ) : null}
+        {connectedRemoteSyncTarget ? (
+          <div className="rounded-lg border border-border bg-card px-3 py-2 text-ui-base text-foreground-subtle">
+            {intl.formatMessage(
+              { id: "settings.plugins.remoteContext" },
+              { target: remotePluginSyncTargetLabel },
+            )}
+          </div>
+        ) : null}
+        {!target ? (
+          <InstalledPluginEmptyState
+            message={intl.formatMessage({
+              id: "settings.plugin.noWorkspace",
+            })}
+          />
+        ) : !targetServiceResolution.rpcReady ? (
+          <PluginLoadingState label={intl.formatMessage({ id: "common.connecting" })} />
+        ) : loading && visiblePlugins.length === 0 ? (
+          <PluginLoadingState label={intl.formatMessage({ id: "common.loading" })} />
+        ) : visibleInstalledPlugins.length > 0 ? (
+          renderPluginRows(visibleInstalledPlugins)
+        ) : installedPluginCount === 0 && !showUnavailableComputerUse ? (
+          <PluginInstallEmptyState
+            title={intl.formatMessage({
+              id: "settings.plugin.plugins.emptyInstalledTitle",
+            })}
+            description={intl.formatMessage({
+              id: "settings.plugin.plugins.emptyInstalledDescription",
+            })}
+            actions={
+              onAdd ? (
+                <Button type="button" variant="default" size="lg" onClick={onAdd}>
+                  <Plus aria-hidden="true" data-icon="inline-start" />
+                  {intl.formatMessage({
+                    id: "settings.plugin.plugins.browse",
+                  })}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null}
+      </div>
+      {!hasEmptySearchResult && visibleBuiltInPlugins.length > 0 ? (
+        <div className="space-y-4">
+          <h3 className="flex h-7 items-center gap-1.5 text-ui-base font-medium text-foreground">
+            {intl.formatMessage({ id: "settings.plugin.plugins.builtIn" })}
+            <span className="text-ui-sm font-normal text-foreground-subtle">
+              {visibleBuiltInPlugins.length}
+            </span>
+          </h3>
+          {renderPluginRows(visibleBuiltInPlugins)}
+        </div>
+      ) : null}
+      {showUnavailableComputerUse ? (
+        <div className="space-y-4">
+          <h3 className="flex h-7 items-center text-ui-base font-medium text-foreground">
+            {intl.formatMessage({
+              id: "settings.computerUse.unsupported.group",
+            })}
+          </h3>
+          {renderUnavailableComputerUse()}
+        </div>
+      ) : null}
+      <PluginUninstallConfirmDialog
+        open={uninstall.pendingPlugin !== null}
+        pluginName={
+          uninstall.pendingPlugin
+            ? resolvePluginDisplayName(
+                storeItemById.get(uninstall.pendingPlugin.id) ?? {
+                  name: uninstall.pendingPlugin.name,
+                },
+                locale,
+              )
+            : ""
+        }
+        pending={uninstall.uninstalling}
+        onCancel={uninstall.cancelUninstall}
+        onConfirm={() => void uninstall.confirmUninstall()}
+      />
+      <RemoteSyncDialogs
+        canSyncSkills={false}
+        canSyncMcp={false}
+        canSyncPlugins={Boolean(connectedRemoteSyncTarget && target?.workspacePath)}
+        skillOpen={false}
+        mcpOpen={false}
+        pluginOpen={remotePluginSyncOpen}
+        onSkillOpenChange={() => {}}
+        onMcpOpenChange={() => {}}
+        onPluginOpenChange={setRemotePluginSyncOpen}
+        localPluginSyncService={baseServices.pluginSyncService}
+        remotePluginSyncService={targetServiceResolution.services.pluginSyncService}
+        localZCodeAgentService={baseServices.zcodeAgentService}
+        remoteZCodeAgentService={targetServiceResolution.services.zcodeAgentService}
+        remoteTarget={connectedRemoteSyncTarget}
+        skillWorkspacePath=""
+        mcpWorkspacePath=""
+        pluginWorkspacePath={target?.workspacePath ?? ""}
+        pluginLocalWorkspacePath={target?.localWorkspacePath}
+        workspaceIdentity={target?.workspaceIdentity}
+        onSkillsSynced={() => {}}
+        onMcpSynced={() => {}}
+        onPluginsSynced={refreshAfterPluginChange}
+      />
     </section>
   );
 }
 
-/**
- * 插件 warning 诊断列表。CLI 对「声明的技能路径扫描为空」等异常
- * 只写 diagnostics 的话 UI 无渲染位置，用户无从排查。message 由 CLI 下发并包含
- * 具体路径（协议 wire 不携带 path 字段），因此正文直出 message 即可。
- */
-export function PluginWarningList({ warnings }: { warnings: ZCodePluginDiagnostic[] }) {
+export function InstalledPluginEmptyState({ message }: { message: string }) {
   return (
-    <ul className="space-y-2">
-      {warnings.map((diagnostic, index) => (
-        <li
-          key={`${diagnostic.code}-${index}`}
-          className="flex min-w-0 items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2"
-        >
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
-          <span className="min-w-0 break-all text-ui-sm text-foreground">{diagnostic.message}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function PluginHookDetails({
-  hooks,
-}: {
-  hooks: NonNullable<ZCodePluginInfo["hookDetails"]>;
-}) {
-  const { intl } = useZCodeIntl();
-  return (
-    <div>
-      <div className="mb-2 text-ui-xs font-medium text-foreground">
-        {intl.formatMessage({ id: "settings.plugins.detail.hooks" })}
-      </div>
-      {hooks.length === 0 ? (
-        <div className="rounded-lg border border-border bg-surface px-3 py-2 text-ui-base text-foreground-subtle">
-          {intl.formatMessage({ id: "settings.plugins.detail.none" })}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {hooks.map((hook, index) => (
-            <div
-              key={`${hook.event}-${hook.matcher ?? "default"}-${hook.command}-${index}`}
-              className="min-w-0 space-y-2 rounded-lg border border-border bg-surface px-3 py-2"
-            >
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className="rounded-md font-mono">
-                  {hook.event}
-                </Badge>
-                <Badge variant="outline" className="rounded-md">
-                  {hook.matcher ??
-                    intl.formatMessage({
-                      id: "settings.plugins.detail.hook.defaultMatcher",
-                    })}
-                </Badge>
-                <Badge variant={hook.runnable ? "secondary" : "outline"} className="rounded-md">
-                  {hook.runnable
-                    ? intl.formatMessage({
-                        id: "settings.plugins.detail.hook.runnable",
-                      })
-                    : intl.formatMessage({
-                        id: "settings.plugins.detail.hook.diagnosticOnly",
-                      })}
-                </Badge>
-              </div>
-              <PluginDetailInlineValue
-                label={intl.formatMessage({
-                  id: "settings.plugins.detail.hook.command",
-                })}
-                value={formatHookCommand(hook)}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                {hook.timeoutMs !== undefined ? (
-                  <PluginDetailInlineValue
-                    label={intl.formatMessage({
-                      id: "settings.plugins.detail.hook.timeoutMs",
-                    })}
-                    value={`${hook.timeoutMs}ms`}
-                  />
-                ) : null}
-                {hook.timeout !== undefined ? (
-                  <PluginDetailInlineValue
-                    label={intl.formatMessage({
-                      id: "settings.plugins.detail.hook.timeout",
-                    })}
-                    value={String(hook.timeout)}
-                  />
-                ) : null}
-                {hook.async !== undefined ? (
-                  <PluginDetailInlineValue
-                    label={intl.formatMessage({
-                      id: "settings.plugins.detail.hook.async",
-                    })}
-                    value={String(hook.async)}
-                  />
-                ) : null}
-                {hook.shell !== undefined ? (
-                  <PluginDetailInlineValue
-                    label={intl.formatMessage({
-                      id: "settings.plugins.detail.hook.shell",
-                    })}
-                    value={hook.shell === true ? "true" : hook.shell}
-                  />
-                ) : null}
-                {hook.statusMessage ? (
-                  <PluginDetailInlineValue
-                    label={intl.formatMessage({
-                      id: "settings.plugins.detail.hook.statusMessage",
-                    })}
-                    value={hook.statusMessage}
-                  />
-                ) : null}
-              </div>
-              <PluginDetailInlineValue
-                label={intl.formatMessage({
-                  id: "settings.plugins.detail.hook.sourcePath",
-                })}
-                value={hook.sourcePath}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PluginDetailInlineValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-ui-xs text-foreground-subtle">{label}</div>
-      <div className="mt-0.5 break-all font-mono text-ui-xs text-foreground">{value}</div>
-    </div>
-  );
-}
-
-function formatHookCommand(hook: NonNullable<ZCodePluginInfo["hookDetails"]>[number]): string {
-  if (!hook.args || hook.args.length === 0) return hook.command;
-  return `${hook.command} ${hook.args.join(" ")}`;
-}
-
-export function PluginDetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2">
-      <div className="text-ui-xs text-foreground-subtle">{label}</div>
-      <div className="mt-1 break-all font-mono text-ui-xs text-foreground">{value}</div>
+    <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-ui-base text-foreground-subtle">
+      {message}
     </div>
   );
 }

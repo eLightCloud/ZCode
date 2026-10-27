@@ -21,3 +21,7 @@ export { createConversationContinuation } from "./continuation.js";
 export { createConversationRuntimeDirectory } from "./runtime-directory.js";
 export { createConversationObjectBytes } from "./object-bytes.js";
 export type { ConversationRuntimeDirectory } from "./continuation-runtime-steps.js";
+
+export { createConversationSyncMonitor } from "./monitoring.js";
+
+export { createConversationTerminalStore } from "./terminals.js";

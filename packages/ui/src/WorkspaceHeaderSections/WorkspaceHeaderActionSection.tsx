@@ -7,6 +7,10 @@ import { ApplicationPageHeaderAction } from "@/root/ApplicationPages.js";
 import { WorkspaceHelpMenuButton } from "@/WorkspaceHelpMenuButton.js";
 import { ConversationShareMenu } from "@/ConversationShareMenu.js";
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
+import { MessageSquareIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export type { WorkspaceHeaderActionSectionProps } from "@/WorkspaceHeaderSections/shared.js";
 
@@ -31,6 +35,9 @@ export function WorkspaceHeaderActionSection({
   showWindowControls = false,
   useWindowsCaptionSpacing = false,
 }: WorkspaceHeaderActionSectionProps) {
+  const peripherals = useApplicationPeripherals();
+  const { intl } = useZCodeIntl();
+  const feedbackLabel = intl.formatMessage({ id: "remoteConnection.feedback" });
   return (
     <div
       className={cn(
@@ -61,6 +68,23 @@ export function WorkspaceHeaderActionSection({
         />
       ) : null}
       <ApplicationPageHeaderAction />
+      {peripherals && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 max-sm:min-h-11 max-sm:min-w-11"
+          aria-label={feedbackLabel}
+          title={feedbackLabel}
+          onClick={(event) => {
+            event.currentTarget.focus();
+            peripherals.openFeedback();
+          }}
+        >
+          <MessageSquareIcon className="size-4" aria-hidden="true" />
+          <span className="max-sm:hidden">{feedbackLabel}</span>
+        </Button>
+      )}
       {!simplifyForNarrowRemote ? (
         <>
           {!hideHelpMenu ? <WorkspaceHelpMenuButton isDesktop={Boolean(isDesktop)} /> : null}

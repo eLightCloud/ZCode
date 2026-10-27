@@ -54,6 +54,8 @@ export {
 // 可信应用装配与原生 UI 使用同一图标依赖，不要求外部源码复制私有组件。
 export {
   Archive,
+  ArrowLeft,
+  Paperclip,
   Cloud,
   RefreshCw,
   Info,

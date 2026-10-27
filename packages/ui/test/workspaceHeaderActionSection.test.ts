@@ -339,4 +339,44 @@ describe("WorkspaceHeaderActionSection", () => {
       remoteTarget,
     });
   });
+  it("routes application header and help feedback through the injected action", async () => {
+    const { WorkspaceHeaderActionSection } =
+      await import("@/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js");
+    const { ApplicationPeripheralsProvider } = await import("@/root/ApplicationPeripherals.js");
+    const openFeedback = vi.fn();
+    const openHelp = vi.fn();
+    capturedHeaderHelp.menuItems = [];
+    capturedHeaderHelp.openSubmit.mockClear();
+    capturedHeaderHelp.openFeatureRequest.mockClear();
+    const html = renderToStaticMarkup(
+      createElement(ApplicationPeripheralsProvider, {
+        value: {
+          nativeCloudEnabled: false,
+          openFeedback,
+          openHelp,
+          openShare: vi.fn(),
+          renderModelPlans: () => null,
+        },
+        children: withSettingsServices(WorkspaceHeaderActionSection, {
+          variant: "application",
+          isDesktop: false,
+          isTerminalOpen: false,
+          isSidePaneOpen: false,
+          onToggleTerminal: vi.fn(),
+          onToggleSidePane: vi.fn(),
+        }),
+      }),
+    );
+    expect(html).toContain('aria-label="remoteConnection.feedback"');
+    expect(html.indexOf('aria-label="remoteConnection.feedback"')).toBeLessThan(
+      html.indexOf('aria-label="workspaceHeader.help.menu"'),
+    );
+    await capturedHeaderHelp.menuItems[0]?.onSelect?.();
+    await capturedHeaderHelp.menuItems[2]?.onSelect?.();
+    await capturedHeaderHelp.menuItems[3]?.onSelect?.();
+    expect(openHelp).toHaveBeenCalledTimes(1);
+    expect(openFeedback).toHaveBeenCalledTimes(2);
+    expect(capturedHeaderHelp.openSubmit).not.toHaveBeenCalled();
+    expect(capturedHeaderHelp.openFeatureRequest).not.toHaveBeenCalled();
+  });
 });

@@ -8,19 +8,26 @@ import {
   ApplicationPageContent,
   type ApplicationPage,
 } from "@/root/ApplicationPages.js";
+import {
+  ApplicationSettingsProvider,
+  ApplicationSettingsContent,
+} from "@/root/ApplicationSettings.js";
+import { Package } from "lucide-react";
 import { useApplicationPageNavigationState } from "@/root/ApplicationPageNavigation.js";
 import { ApplicationPageIntentBridge } from "@/root/ApplicationPageIntent.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 const navigation = vi.hoisted(() => ({
   addTab: vi.fn(),
+  openSettings: vi.fn(),
   setActiveTask: vi.fn(),
   local: vi.fn(async () => ({ workspacePath: "/synthetic-local" })),
   remote: vi.fn(async () => ({ workspacePath: "/synthetic-remote" })),
 }));
 
 vi.mock("@/store/TabStoreProvider.js", () => ({
-  useTabStore: () => undefined,
+  useTabStore: (select: (state: unknown) => unknown) =>
+    select({ tabs: [], openSettingsTab: navigation.openSettings }),
   useTabStoreApi: () => ({ getState: () => ({ addTab: navigation.addTab }) }),
 }));
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
@@ -235,4 +242,56 @@ it("consumes successive open intents without closing the selected sidebar page",
   result.rerender(tree(2));
   await vi.waitFor(() => expect(consumed).toHaveBeenCalledTimes(2));
   expect(screen.getByRole("button", { name: "Back to draft" })).toBeTruthy();
+});
+
+it("opens only registered settings sections through the native tab and preserves the workspace", () => {
+  navigation.openSettings.mockClear();
+  const close = vi.fn();
+  render(
+    createElement(ApplicationSettingsProvider, {
+      settings: {
+        sections: [
+          {
+            id: "fixture",
+            label: "Fixture",
+            group: "basics",
+            Icon: Package,
+            render: () => createElement("p", null, "settings content"),
+          },
+        ],
+      },
+      children: createElement(
+        "div",
+        null,
+        createElement("input", { "aria-label": "workspace draft", defaultValue: "unsent" }),
+        createElement(ApplicationPageContent, {
+          onNavigate: close,
+          render: ({ openSettingsSection }) =>
+            createElement(
+              "div",
+              null,
+              createElement(
+                "button",
+                { onClick: () => openSettingsSection?.("missing") },
+                "unknown settings",
+              ),
+              createElement(
+                "button",
+                { onClick: () => openSettingsSection?.("fixture") },
+                "registered settings",
+              ),
+            ),
+        }),
+        createElement(ApplicationSettingsContent),
+      ),
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "unknown settings" }));
+  expect(navigation.openSettings).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "registered settings" }));
+  expect(navigation.openSettings).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledOnce();
+  expect(screen.getByText("settings content")).toBeTruthy();
+  expect((screen.getByLabelText("workspace draft") as HTMLInputElement).value).toBe("unsent");
 });

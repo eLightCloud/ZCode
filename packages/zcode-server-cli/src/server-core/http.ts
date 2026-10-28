@@ -32,6 +32,7 @@ import {
   type TopicResourcePeers,
   SourceServerWorkspaceIdentityChannelServer,
   type SourceServerWorkspaceIdentityMapper,
+  type ServiceLogger,
 } from "@zcode/services/node";
 import {
   SERVER_REMOTE_PROTOCOL_VERSION,
@@ -59,6 +60,35 @@ export interface CoreHttpServer {
 
 const WEBSOCKET_DRAIN_TIMEOUT_MS = 250;
 const log = createServiceLogger("server-core");
+
+/** Keep middleware timing while discarding its attached exception and RPC payloads. */
+export function createCoreRpcLogger(
+  logger: ServiceLogger,
+  clientMode: "desktop-continuous" | "web-remote-replayable",
+): (message: string, ...args: unknown[]) => void {
+  return (message) => {
+    const failed =
+      /^\[rpc:(call|listen)\] ([a-zA-Z0-9_-]{1,80})\.([a-zA-Z0-9_$-]{1,64}) FAIL(?: \((\d+(?:\.\d+)?)ms\))?$/.exec(
+        message,
+      );
+    const malformedFailure = /^\[rpc:(call|listen)\] [\s\S]* FAIL(?: \(\d+(?:\.\d+)?ms\))?$/.test(
+      message,
+    );
+    if (!failed && !malformedFailure) {
+      logger.debug(undefined, message);
+      return;
+    }
+    // 原 middleware 将异常附在 FAIL 后；绝不能把它提升到生产日志，只保留可信计时和有界名称。
+    logger.warn(undefined, "Server RPC failed", {
+      event: "server.rpc.failure",
+      outcome: "failed",
+      correlationId: randomUUID(),
+      ...(failed ? { channel: failed[2], method: failed[3] } : {}),
+      clientMode,
+      ...(failed?.[4] === undefined ? {} : { durationMs: Number(failed[4]) }),
+    });
+  };
+}
 
 async function closeWebSocketServer(wss: WebSocketServer): Promise<void> {
   for (const client of wss.clients) {
@@ -115,6 +145,7 @@ function exposeWebSocket(
   clientMode: "desktop-continuous" | "web-remote-replayable",
   workspaceIdentityMapper?: SourceServerWorkspaceIdentityMapper,
   resourcePeers?: TopicResourcePeers,
+  diagnosticLogger: ServiceLogger = log,
 ): Promise<void> {
   let resolveSettled!: () => void;
   const settled = new Promise<void>((resolve) => {
@@ -123,8 +154,9 @@ function exposeWebSocket(
   const socket = wrapWebSocket(ws);
   const protocol = new SocketProtocol(socket);
   const rawServer = new ChannelServer(protocol, "server");
-  const loggedServer = new LoggingChannelServer(rawServer, (...args) =>
-    log.debug(undefined, ...args),
+  const loggedServer = new LoggingChannelServer(
+    rawServer,
+    createCoreRpcLogger(diagnosticLogger, clientMode),
   );
   const server = workspaceIdentityMapper
     ? new SourceServerWorkspaceIdentityChannelServer(loggedServer, workspaceIdentityMapper)
@@ -229,6 +261,7 @@ export async function createCoreHttpServer(
     continuation?: ConversationRuntimePort;
     continuationIdentity?: () => Promise<unknown>;
     applicationControl?: (method: string, input: unknown) => Promise<unknown>;
+    diagnosticLogger?: ServiceLogger;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
@@ -467,7 +500,16 @@ export async function createCoreHttpServer(
     "/ws",
     upgradeWebSocket(() => ({
       onOpen(_event, socket) {
-        track(exposeWebSocket(socket.raw as WebSocket, services, "web-remote-replayable"));
+        track(
+          exposeWebSocket(
+            socket.raw as WebSocket,
+            services,
+            "web-remote-replayable",
+            undefined,
+            undefined,
+            options.diagnosticLogger,
+          ),
+        );
       },
     })),
   );
@@ -489,6 +531,7 @@ export async function createCoreHttpServer(
             "desktop-continuous",
             options.workspaceIdentityMapper,
             options.topicResourcePeers,
+            options.diagnosticLogger,
           ),
         );
       },

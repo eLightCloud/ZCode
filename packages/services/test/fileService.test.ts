@@ -1171,8 +1171,9 @@ describe("source directory snapshots", () => {
       utimesSync(root, future, future);
       return entries;
     });
-    await expect(createFileService().snapshotDirectory({ rootPath }))
-      .rejects.toThrow("directory_snapshot_changed");
+    await expect(createFileService().snapshotDirectory({ rootPath })).rejects.toThrow(
+      "directory_snapshot_changed",
+    );
   });
   it("captures exact asset bytes and an explicit selection without following symlinks", async () => {
     const rootPath = makeTempDir("directory-snapshot-");

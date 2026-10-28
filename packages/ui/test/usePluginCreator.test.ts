@@ -13,8 +13,16 @@ const mocks = vi.hoisted(() => {
     services: { skillsService: { list }, applicationHostService: { call: vi.fn() } },
     remoteSessionId: "attachment-a",
   };
-  return { tabs, pane, group, list, resolution, toast: vi.fn(), application,
-    section: undefined as typeof application | undefined };
+  return {
+    tabs,
+    pane,
+    group,
+    list,
+    resolution,
+    toast: vi.fn(),
+    application,
+    section: undefined as typeof application | undefined,
+  };
 });
 vi.mock("@/root/ApplicationPluginStoreSection.js", () => ({
   useApplicationPluginStoreSection: () => mocks.section,
@@ -89,31 +97,48 @@ describe("creator action admission", () => {
     const create = vi.fn();
     const app = await mount(create);
     await act(() => app.get().create());
-    expect(mocks.application.beforeCreate).toHaveBeenCalledWith("personal",
+    expect(mocks.application.beforeCreate).toHaveBeenCalledWith(
+      "personal",
       { workspaceIdentity: "host-a", workspacePath: "/workspace" },
-      mocks.resolution.services.applicationHostService);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      initialPrompt: "[$plugin-creator](/workspace/creator/SKILL.md) \nsynthetic asset location",
-    }));
+      mocks.resolution.services.applicationHostService,
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialPrompt: "[$plugin-creator](/workspace/creator/SKILL.md) \nsynthetic asset location",
+      }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
   it.each(["identity", "attachment", "unmount"])(
-    "does not create a draft when %s changes while application preparation is pending", async (kind) => {
+    "does not create a draft when %s changes while application preparation is pending",
+    async (kind) => {
       mocks.list.mockResolvedValue({ skills: [skill] });
       mocks.section = mocks.application;
       let finish!: (value: { promptSuffix: string }) => void;
-      mocks.application.beforeCreate.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+      mocks.application.beforeCreate.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
       const create = vi.fn();
       const app = await mount(create);
       let pending!: Promise<void>;
-      await act(async () => { pending = app.get().create(); });
-      if (kind === "unmount") { await act(() => root?.unmount()); root = undefined; }
-      else {
+      await act(async () => {
+        pending = app.get().create();
+      });
+      if (kind === "unmount") {
+        await act(() => root?.unmount());
+        root = undefined;
+      } else {
         if (kind === "identity") mocks.tabs.activeWorkspaceIdentity = "host-b";
         else mocks.resolution.remoteSessionId = "attachment-b";
         await app.render();
       }
-      await act(async () => { finish({ promptSuffix: "stale location" }); await pending; });
+      await act(async () => {
+        finish({ promptSuffix: "stale location" });
+        await pending;
+      });
       expect(create).not.toHaveBeenCalled();
     },
   );

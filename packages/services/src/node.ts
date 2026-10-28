@@ -368,7 +368,7 @@ export {
   OffPeakModelUnavailableError,
   OffPeakPermanentDispatchError,
 } from "./session/offPeakRuntimeModel.js";
-export { createServiceLogger } from "./logger/serviceLogger.js";
+export { createServiceLogger, type ServiceLogger } from "./logger/serviceLogger.js";
 export {
   buildOfficialMcpAuthHeaders,
   createOfficialMcpAuthHeadersResolver,
@@ -1205,6 +1205,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *        用于 BroadcastService 跨窗口中转。传 null 则广播为空操作。
  */
 export function createLocalServices(options: {
+  /** Trusted process sink for bounded Application Host operational diagnostics. */
+  applicationHostLogger?: ServiceLogger;
   onApplicationControlReady?: (
     port: import("./application-host/contract.js").ApplicationHostControlPort,
   ) => void;
@@ -3091,6 +3093,7 @@ export function createLocalServices(options: {
       : undefined;
   const applicationHost = createApplicationHostService({
     files: fileService,
+    logger: options.applicationHostLogger,
     projects: projectService,
     models: providerRuntime.modelSelection,
     runtime: continuationHost,
@@ -3318,6 +3321,7 @@ export { startupStorage } from "#src/startup-storage/index.js";
 
 /** 独立 Server 共用迁移屏障与身份装配；入口不得以 local owner 开放远端项目 RPC。 */
 export async function createServerHostServices(options: {
+  applicationHostLogger?: ServiceLogger;
   onApplicationControlReady?: NonNullable<
     Parameters<typeof createLocalServices>[0]
   >["onApplicationControlReady"];
@@ -3355,6 +3359,7 @@ export async function createServerHostServices(options: {
   });
   const migrationFailedPathCount = await workspaceAliasRepo.getFailedPathCount();
   const services = createLocalServices({
+    applicationHostLogger: options.applicationHostLogger,
     onApplicationControlReady: options.onApplicationControlReady,
     onAutomationManualRunRequested: options.onAutomationManualRunRequested,
     onLocalMaintenanceReady: options.onLocalMaintenanceReady,

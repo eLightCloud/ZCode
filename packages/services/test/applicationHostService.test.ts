@@ -9,6 +9,137 @@ import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 const native = {} as IZCodeAgentService;
 const credentials = {} as ICredentialService;
 describe("Application Host lifecycle", () => {
+  it("records method outcomes without input, result or exception contents", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zcode-app-diagnostics-"));
+    const modulePath = join(root, "extension.mjs");
+    const secret = "synthetic-private-token-and-prompt";
+    await writeFile(
+      modulePath,
+      `export async function createApplicationHost(){return {
+      async call(method,input){if(method==='fail')throw new Error(input.secret);return input;},
+      async control(method,input){if(method==='fail')throw new Error(input.secret);return input;},
+      async dispose(){} };}`,
+    );
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    let control!: import("../src/application-host/contract.js").ApplicationHostControlPort;
+    const service = createApplicationHostService({
+      native,
+      credentials,
+      storageRoot: root,
+      modulePath,
+      logger,
+      onControlReady: (port) => {
+        control = port;
+      },
+    });
+    try {
+      expect(
+        await service.call("inspect", { secret, commandId: secret, sessionId: secret }),
+      ).toEqual({ secret, commandId: secret, sessionId: secret });
+      await expect(service.call("fail", { secret })).rejects.toThrow(
+        "application_host_request_failed",
+      );
+      await expect(control.control("fail", { secret })).rejects.toThrow(
+        "application_control_request_failed",
+      );
+      await expect(service.call("invalid\n" + secret, { secret })).rejects.toThrow(
+        "application_host_invalid_request",
+      );
+      const completed = logger.info.mock.calls.find(
+        (call) => call[2]?.event === "application.host.call" && call[2]?.outcome === "completed",
+      )?.[2];
+      expect(completed).toMatchObject({
+        method: "inspect",
+        outcome: "completed",
+        durationMs: expect.any(Number),
+        correlationId: expect.any(String),
+      });
+      expect(completed.durationMs).toBeGreaterThanOrEqual(0);
+      expect(logger.warn.mock.calls.map((call) => call[2])).toEqual([
+        expect.objectContaining({
+          event: "application.host.call",
+          method: "fail",
+          outcome: "failed",
+          reasonCode: "extension_failed",
+        }),
+        expect.objectContaining({
+          event: "application.host.control",
+          method: "fail",
+          outcome: "failed",
+        }),
+        expect.objectContaining({
+          event: "application.host.call",
+          method: "invalid",
+          reasonCode: "invalid_request",
+        }),
+      ]);
+      expect(JSON.stringify([logger.info.mock.calls, logger.warn.mock.calls])).not.toContain(
+        secret,
+      );
+    } finally {
+      await service.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("records only started while a call waits, then correlates completion to the original command", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zcode-app-pending-"));
+    const modulePath = join(root, "extension.mjs");
+    await writeFile(
+      modulePath,
+      `export async function createApplicationHost(){let finish;return {
+      call(){return new Promise(resolve=>{finish=resolve;});},async dispose(){finish?.('released');}};}`,
+    );
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    const service = createApplicationHostService({
+      native,
+      credentials,
+      storageRoot: root,
+      modulePath,
+      logger,
+    });
+    const commandId = "11d91ca2-1d75-447f-a978-b7dd336db381";
+    const sessionId = "3284d0c9-c86c-4cca-85ba-4eb6308acaa1";
+    const secret = "synthetic-private-input-and-authorization";
+    const pending = service.call("conversationBindInput", {
+      commandId,
+      sessionId,
+      secret,
+      nested: { commandId: secret },
+      authorization: secret,
+    });
+    try {
+      await vi.waitFor(() =>
+        expect(logger.info.mock.calls.some((call) => call[2]?.outcome === "initialized")).toBe(
+          true,
+        ),
+      );
+      const calls = () =>
+        logger.info.mock.calls
+          .map((call) => call[2])
+          .filter((row) => row?.event === "application.host.call");
+      expect(calls()).toEqual([
+        expect.objectContaining({ outcome: "started", commandId, sessionId, durationMs: 0 }),
+      ]);
+      expect(logger.warn).not.toHaveBeenCalled();
+      const correlationId = calls()[0].correlationId;
+      await service.dispose();
+      await expect(pending).resolves.toBe("released");
+      expect(calls()).toEqual([
+        expect.objectContaining({ outcome: "started", correlationId, commandId, sessionId }),
+        expect.objectContaining({
+          outcome: "completed",
+          correlationId,
+          commandId,
+          sessionId,
+          durationMs: expect.any(Number),
+        }),
+      ]);
+      expect(JSON.stringify(logger.info.mock.calls)).not.toContain(secret);
+    } finally {
+      await service.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("starts the configured module without a renderer and disposes it", async () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-app-host-"));
     const marker = join(root, "started");

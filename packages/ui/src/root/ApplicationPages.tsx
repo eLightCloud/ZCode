@@ -30,6 +30,7 @@ import { isWorkspaceTab } from "@/store/tabStore.js";
 import type { ZCodeAgentWorkspaceTarget } from "@zcode/services";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { logger } from "@/logger.js";
+import { useApplicationSettings } from "@/root/ApplicationSettings.js";
 
 export interface ApplicationPage {
   id: string;
@@ -48,6 +49,7 @@ export interface ApplicationPageContext {
   rpcReady: boolean;
   /** Native navigation only; never sends input or grants execution. */
   openConversation?(session: string, draft?: string): Promise<void>;
+  openSettingsSection?(id: string): void;
 }
 
 const ApplicationPageActionContext = createContext<ReactNode>(null);
@@ -128,10 +130,19 @@ export function ApplicationPageContent({
   // 独立历史页始终使用当前窗口的基础 Host，不能借活动远端 tab 操作另一执行位置。
   const services = standalone ? base : resolution.services;
   const openConversation = useNativeConversationNavigation(services);
+  const settings = useApplicationSettings();
+  const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   return (
     <ServiceProvider services={services}>
       {render({
         close: () => onNavigate?.(),
+        openSettingsSection: (id) => {
+          if (!settings?.sections.some((section) => section.id === id)) return;
+          settings.openSection(id);
+          openSettingsTab();
+          onNavigate?.();
+          logger.info("application.page.settings_opened", { sectionId: id });
+        },
         rpcReady: Boolean(workspace) && resolution.rpcReady,
         openConversation: async (session, draft) => {
           await openConversation(session, draft);

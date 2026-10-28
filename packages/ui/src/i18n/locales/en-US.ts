@@ -6888,6 +6888,12 @@ const enUS: Record<string, string> = {
   "chat.error.remoteNoAvailableModel":
     "This remote device has no available model yet. Configure models on this computer first; they will sync to the remote device automatically after you save.",
   "chat.error.sendFailed": "Failed to send. Try again later.",
+  "chat.error.inputPreparationUnconfirmed":
+    "Preparation before sending is incomplete. Your input is retained. Please try again.",
+  "chat.error.inputPreparationRejected":
+    "Checks before sending did not pass. Your input is retained. Please review the conversation status.",
+  "chat.error.draftSessionFailed":
+    "Failed to create a draft conversation. Your input is retained. Please try again.",
   "chat.error.modelSettings": "Model settings",
   "chat.error.setModels": "Set",
   "chat.quota.startPlan.bucketDailyLow":

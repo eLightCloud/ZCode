@@ -42,6 +42,10 @@ warmup / createSession / sendText → workspace startup Promise → ready → �
 
 ## 输入与实时消息
 
+受信应用通过 client 的 `setApplicationInputPreparation` 注册派发前准备。`required` 阶段必须成功，之后才进入同一注册的 `optional` 观察阶段；两者共用五秒总预算。必需阶段失败或超时保留草稿，可选阶段超时只取消观察，不改变原命令与原生接纳 owner。替换或撤销注册取消旧代的全部等待，即使已经进入可选阶段也不得派发旧账号输入。
+
+准备回调只可报告低敏阶段码（`reportStage`），拒绝用 `ApplicationInputRejected.code/stage/reason` 表达；未知异常内容不进入界面或生产诊断。超时、取消不证明已发出的 Host RPC 未执行，应用必须在每个 await 后核对取消及身份，并清理迟到的准确授权；不得把已取消的挂起 Promise 交给下一次重试。
+
 ```text
 桌面 desktop-continuous ─ direct continuous 实时链路 ─┐
                                                     ├─ 同一 task owner
@@ -66,6 +70,7 @@ Renderer：未提交草稿 + pending optimistic overlay
 ## 运行时证据
 
 - RPC 通道使用 [LoggingChannelServer / LoggingChannelClient](../../packages/rpc/src/logging-middleware.ts) 记录频道、命令和耗时；优先利用已有日志定位调用链。
+- 独立 Server Core 的低敏 Application Host / RPC 故障诊断保存在 `<serverRoot>/run/core.log`，每份最多 1 MiB，保留 `.1` / `.2` 两份轮转；队列上限 64 KiB，溢出计数可见，退出尝试有界 flush。Core 只接收事件字段白名单，不开放任意 stdout/stderr、参数、结果或异常正文。RPC 失败提升为 warning，普通成功仍为 debug；Host 开始 / 完成 / 失败使用同一关联 ID，包含方法、结果、耗时及准确 UUID 格式的原 commandId / sessionId。详见 [Core 诊断规范](../../specs/server-core-diagnostics.md)。
 - Agent session 轨迹在 `~/.zcode/cli/rollout` 或 `~/.zcode/cli/debug`，CLI 日志在 `~/.zcode/cli/log`。
 - 界面复现优先使用 agent-browser；失败时可直接 CDP 调试，开发默认端口为 9229，连接前核实实际监听端口。
 - 验证分别覆盖受影响的桌面本地和手机远控路径，记录 owner、事件顺序、identity 和 delivery 边界证据；必要环境缺失按根 AGENTS.md 的阻塞规则处理。

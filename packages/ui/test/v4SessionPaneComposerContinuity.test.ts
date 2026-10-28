@@ -7,6 +7,7 @@ import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { pendingCommandRegistry, type PendingCommandEntry } from "@/v4/pendingCommandRegistry.js";
 import { SessionPane, type SessionPaneProps } from "@/v4/SessionPane.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
+import { DraftSessionCreationError } from "@/v4/composer/useDraftSessionPrewarm.js";
 
 type ProjectionState = {
   status: "connecting" | "live";
@@ -288,7 +289,8 @@ vi.mock("@/v4/composer/useDraftConfigControl.js", () => ({
   }),
 }));
 
-vi.mock("@/v4/composer/useDraftSessionPrewarm.js", () => ({
+vi.mock("@/v4/composer/useDraftSessionPrewarm.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/v4/composer/useDraftSessionPrewarm.js")>()),
   useDraftSessionPrewarm: (params: (typeof prewarmHookInputs.current)[number]) => {
     prewarmHookInputs.current.push(params);
     return {
@@ -769,17 +771,32 @@ describe("SessionPane composer continuity", () => {
     }
   });
 
-  it("首发传输失败不产生 session_create", async () => {
+  it.each([false, true])("首发失败不产生 session_create；准备诊断=%s", async (preparation) => {
     const root = createRoot(installMinimalDom());
     mountedRoots.push(root);
     renderPane(root, null);
-    conversationMock.sendCommand.mockRejectedValueOnce(new Error("transport offline"));
+    const failure = preparation
+      ? new DraftSessionCreationError("application_input_unconfirmed", {
+          source: "application-input",
+          stage: "conversation_bind_input",
+          reason: "timeout",
+        })
+      : new Error("transport offline");
+    conversationMock.sendCommand.mockRejectedValueOnce(failure);
     await act(async () => {
-      await expect(scrollFocus.composerProps?.onSendText("create session")).rejects.toThrow(
-        "transport offline",
-      );
+      await expect(scrollFocus.composerProps?.onSendText("create session")).rejects.toBe(failure);
     });
     expect(sessionCreateCapture.report).not.toHaveBeenCalled();
+    if (preparation) {
+      expect(scrollFocus.composerProps?.error).toMatchObject({
+        code: "application_input_unconfirmed",
+        message: "发送前准备尚未完成，输入已保留，请重试。",
+        detail: JSON.stringify({
+          code: failure.message,
+          ...(failure as DraftSessionCreationError).diagnostics,
+        }),
+      });
+    }
   });
 
   it("/goal 沿用点击发送时冻结的 Submission，不在异步准备后回读草稿", async () => {

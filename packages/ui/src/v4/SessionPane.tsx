@@ -167,7 +167,10 @@ import {
   createComposerSubmissionConfig,
   type ComposerSubmissionConfig,
 } from "@/v4/composer/composerSubmissionConfig.js";
-import { useDraftSessionPrewarm } from "@/v4/composer/useDraftSessionPrewarm.js";
+import {
+  DraftSessionCreationError,
+  useDraftSessionPrewarm,
+} from "@/v4/composer/useDraftSessionPrewarm.js";
 import { projectSessionConfigToTaskConfigOptions } from "@/v4/composer/sessionConfigTaskCache.js";
 import { useDraftRuntimeRebuildGate } from "@/v4/composer/useDraftRuntimeRebuildGate.js";
 import { useDraftModelReadinessGate } from "@/v4/composer/useDraftModelReadinessGate.js";
@@ -275,7 +278,10 @@ import {
 import { shouldResyncForStaleAuthority } from "@/v4/staleAuthorityRecovery.js";
 import { createCommandEnvelope } from "@/v4/commandFactory.js";
 import { createConfigCommandBarrier } from "@/v4/configCommandBarrier.js";
-import { recordV4CommandAck } from "@/v4/commandAckObservability.js";
+import {
+  getV4CommandFailureDiagnostics,
+  recordV4CommandAck,
+} from "@/v4/commandAckObservability.js";
 import { pendingCommandRegistry } from "@/v4/pendingCommandRegistry.js";
 import type {
   ChatSearchResultHighlightRequest,
@@ -2253,7 +2259,7 @@ export function SessionPane({
         recordV4CommandAck({
           type,
           status: "transport-error",
-          reasonCode: String(error),
+          ...getV4CommandFailureDiagnostics(error),
           at: Date.now(),
         });
         // 发送漏斗落定：telemetrySeed 只有真实用户发送才携带，两步式 createSession
@@ -3937,7 +3943,12 @@ export function SessionPane({
         }
         return "sent";
       } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+        const draftFailure = error instanceof DraftSessionCreationError ? error : null;
+        const detail = draftFailure
+          ? JSON.stringify({ code: draftFailure.code, ...draftFailure.diagnostics })
+          : error instanceof Error
+            ? error.message
+            : String(error);
         const runtimeModelUnavailable = detail.includes("provider.notInRegistry");
         // 首发前 switchModelConfig 失败只会抛回 Composer；Composer 为了保留草稿
         // 仅写日志，不会生成 snapshot.control.lastError，用户看到的结果就是“点击没反应”。
@@ -3945,11 +3956,21 @@ export function SessionPane({
         // Web remote replayable 的发送/恢复语义，草稿仍由 Composer 原路径保留。
         setSendSubmissionError({
           code:
+            draftFailure?.code ??
             getRemoteConnectionFailureCode(error) ??
             (runtimeModelUnavailable ? "ZCODE_RUNTIME_MODEL_UNAVAILABLE" : "SEND_FAILED"),
-          message: runtimeModelUnavailable
-            ? detail
-            : intl.formatMessage({ id: "chat.error.sendFailed" }),
+          message: draftFailure
+            ? intl.formatMessage({
+                id:
+                  draftFailure.code === "application_input_unconfirmed"
+                    ? "chat.error.inputPreparationUnconfirmed"
+                    : draftFailure.diagnostics.source === "application-input"
+                      ? "chat.error.inputPreparationRejected"
+                      : "chat.error.draftSessionFailed",
+              })
+            : runtimeModelUnavailable
+              ? detail
+              : intl.formatMessage({ id: "chat.error.sendFailed" }),
           detail,
           ...(sessionId ? { taskId: sessionId } : {}),
         });
@@ -4348,10 +4369,10 @@ export function SessionPane({
         recordV4CommandAck({
           type: `ui:${type}`,
           status: "dispatch-error",
-          reasonCode: String(error),
+          ...getV4CommandFailureDiagnostics(error),
           at: Date.now(),
         });
-        logger.warn(`[v4-pane] ${type} 失败: ${String(error)}`);
+        logger.warn(`[v4-pane] ${type} 失败`, getV4CommandFailureDiagnostics(error));
         return null;
       }
     },

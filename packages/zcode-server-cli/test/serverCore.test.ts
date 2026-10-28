@@ -170,6 +170,32 @@ describe("runServerCore startup wiring", () => {
     expect(releaseWriterLock).toHaveBeenCalledOnce();
   });
 
+  it("injects the private diagnostic sink and flushes a startup failure without raw errors", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    const diagnostics = {
+      logger,
+      flush: vi.fn(async () => ({ flushed: true, dropped: 0, writeFailures: 0 })),
+    };
+    const secret = "synthetic-migration-error-with-private-path";
+    createServerHostServices.mockRejectedValue(new Error(secret));
+    await expect(runServerCore(2, diagnostics)).rejects.toThrow(secret);
+    expect(createServerHostServices).toHaveBeenCalledWith(
+      expect.objectContaining({ applicationHostLogger: logger }),
+    );
+    expect(diagnostics.flush).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      undefined,
+      "Native Core startup failed",
+      expect.objectContaining({
+        event: "server.startup",
+        outcome: "failed",
+        generation: 2,
+        reasonCode: "initialization_failed",
+      }),
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(secret);
+  });
+
   it("prefers an explicitly configured built-in provider config file", async () => {
     process.env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE = "/explicit/zcode-builtin.json";
 

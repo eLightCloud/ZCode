@@ -665,16 +665,39 @@ it("deduplicates exact registered source identities only in discovery, preservin
     { id: "same@dev-one", name: "same", marketplace: "dev-one", installed: true },
     { id: "same@dev-two", name: "same", marketplace: "dev-two", installed: true },
   ] as StorePluginItem[];
-  expect(projectPluginDiscovery(raw, undefined, ["same@dev-one"]).map((item) => item.id))
-    .toEqual(["same@dev-two"]);
+  expect(projectPluginDiscovery(raw, undefined, ["same@dev-one"]).map((item) => item.id)).toEqual([
+    "same@dev-two",
+  ]);
   expect(projectPluginDiscovery(raw, undefined)).toBe(raw);
   expect(raw[0]!.installed).toBe(true);
 });
 
 it("overlays formal bilingual names for discovery search without changing identity or installed metadata", async () => {
-  const { projectPluginDiscovery, resolveItemDisplayName, storeItemMatches } = await import("../src/settings/pluginStoreListing.js");
-  const raw = [{ id: "documents@managed", name: "documents", marketplace: "managed", installed: true, restorable: false, orphaned: false, listing: { displayName: "Original" } }] as StorePluginItem[];
-  const [projected] = projectPluginDiscovery(raw, { marketplaceIds: ["managed"], entries: [{ pluginId: raw[0]!.id, group: "public", nameZh: "正式文档处理", nameEn: "Document Processing" }], loading: false });
+  const { projectPluginDiscovery, resolveItemDisplayName, storeItemMatches } =
+    await import("../src/settings/pluginStoreListing.js");
+  const raw = [
+    {
+      id: "documents@managed",
+      name: "documents",
+      marketplace: "managed",
+      installed: true,
+      restorable: false,
+      orphaned: false,
+      listing: { displayName: "Original" },
+    },
+  ] as StorePluginItem[];
+  const [projected] = projectPluginDiscovery(raw, {
+    marketplaceIds: ["managed"],
+    entries: [
+      {
+        pluginId: raw[0]!.id,
+        group: "public",
+        nameZh: "正式文档处理",
+        nameEn: "Document Processing",
+      },
+    ],
+    loading: false,
+  });
   expect(projected!.id).toBe(raw[0]!.id);
   expect(projected!.name).toBe("documents");
   expect(resolveItemDisplayName(projected!, "zh-CN")).toBe("正式文档处理");

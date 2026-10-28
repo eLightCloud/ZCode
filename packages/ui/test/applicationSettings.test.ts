@@ -74,11 +74,17 @@ function Probe() {
 function element(config?: ApplicationSettings) {
   return h(ZCodeIntlProvider, {
     initialLocale: "en-US",
-    children: h(ApplicationSettingsProvider, { settings: config, children: h(Probe) }),
+    children: h(ApplicationSettingsProvider, {
+      settings: config,
+      children: h(Probe),
+    }),
   });
 }
 function tab(name: string | RegExp) {
-  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0, ctrlKey: false });
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), {
+    button: 0,
+    ctrlKey: false,
+  });
 }
 
 it("leaves native configuration unchanged without application entries", () => {
@@ -117,7 +123,11 @@ it("retains both application and native unsaved inputs across tab changes", () =
   );
   tab(/custom models/i);
   expect(
-    (screen.getByRole("textbox", { name: "native provider draft" }) as HTMLInputElement).value,
+    (
+      screen.getByRole("textbox", {
+        name: "native provider draft",
+      }) as HTMLInputElement
+    ).value,
   ).toBe("unsaved provider");
 });
 it("lets a model panel navigate to real custom configuration and drops removed descriptors", () => {
@@ -136,7 +146,11 @@ it("supports precise member navigation and native provider overrides", () => {
   fireEvent.click(screen.getByRole("button", { name: "member budget" }));
   expect(screen.getByRole("textbox", { name: "managed draft" })).toBeTruthy();
   expect(screen.getByText("native")).toBeTruthy();
-  act(() => setPendingSettingsSectionIntent("modelProvider", { modelProviderId: "custom" }));
+  act(() =>
+    setPendingSettingsSectionIntent("modelProvider", {
+      modelProviderId: "custom",
+    }),
+  );
   expect(screen.getByRole("textbox", { name: "native provider draft" })).toBeTruthy();
   expect(screen.queryByRole("textbox", { name: "managed draft" })).toBeNull();
 });
@@ -147,4 +161,31 @@ it("changes the selected source through keyboard focus", () => {
     "true",
   );
   expect(screen.getByRole("button", { name: "Configure custom" })).toBeTruthy();
+});
+
+it("opens registered application sections from model panels through the selection owner", () => {
+  const config: ApplicationSettings = {
+    ...settings,
+    modelEntries: [
+      {
+        id: "managed",
+        label: "Managed",
+        Icon: Package,
+        render: ({ openSection }) =>
+          h(
+            "div",
+            null,
+            h("button", { onClick: () => openSection("account") }, "Open account"),
+            h("button", { onClick: () => openSection("missing") }, "Unknown section"),
+          ),
+      },
+    ],
+  };
+  const view = render(element(config));
+  fireEvent.click(screen.getByRole("button", { name: "Unknown section" }));
+  expect(screen.getByText("native")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Open account" }));
+  expect(screen.getByText("Account")).toBeTruthy();
+  view.rerender(element({ ...config, sections: [] }));
+  expect(screen.queryByText("Account")).toBeNull();
 });

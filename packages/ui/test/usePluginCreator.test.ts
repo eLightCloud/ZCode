@@ -7,13 +7,18 @@ const mocks = vi.hoisted(() => {
   const pane = { focusedPaneId: "primary", panes: {} };
   const group = { activeGroupId: null, groups: {} };
   const list = vi.fn();
+  const application = { beforeCreate: vi.fn() };
   const resolution = {
     rpcReady: true,
-    services: { skillsService: { list } },
+    services: { skillsService: { list }, applicationHostService: { call: vi.fn() } },
     remoteSessionId: "attachment-a",
   };
-  return { tabs, pane, group, list, resolution, toast: vi.fn() };
+  return { tabs, pane, group, list, resolution, toast: vi.fn(), application,
+    section: undefined as typeof application | undefined };
 });
+vi.mock("@/root/ApplicationPluginStoreSection.js", () => ({
+  useApplicationPluginStoreSection: () => mocks.section,
+}));
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useWorkspaceServicesResolution: () => mocks.resolution,
 }));
@@ -63,6 +68,7 @@ afterEach(async () => {
   mocks.tabs.activeWorkspaceIdentity = "host-a";
   mocks.resolution.remoteSessionId = "attachment-a";
   mocks.resolution.rpcReady = true;
+  mocks.section = undefined;
 });
 async function mount(onCreate: () => void) {
   let api!: ReturnType<typeof usePluginCreator>;
@@ -76,6 +82,51 @@ async function mount(onCreate: () => void) {
   return { get: () => api, render };
 }
 describe("creator action admission", () => {
+  it("awaits the trusted application preparation and appends its suffix to one unsent draft", async () => {
+    mocks.list.mockResolvedValue({ skills: [skill] });
+    mocks.section = mocks.application;
+    mocks.application.beforeCreate.mockResolvedValue({ promptSuffix: "synthetic asset location" });
+    const create = vi.fn();
+    const app = await mount(create);
+    await act(() => app.get().create());
+    expect(mocks.application.beforeCreate).toHaveBeenCalledWith("personal",
+      { workspaceIdentity: "host-a", workspacePath: "/workspace" },
+      mocks.resolution.services.applicationHostService);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      initialPrompt: "[$plugin-creator](/workspace/creator/SKILL.md) \nsynthetic asset location",
+    }));
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+  it.each(["identity", "attachment", "unmount"])(
+    "does not create a draft when %s changes while application preparation is pending", async (kind) => {
+      mocks.list.mockResolvedValue({ skills: [skill] });
+      mocks.section = mocks.application;
+      let finish!: (value: { promptSuffix: string }) => void;
+      mocks.application.beforeCreate.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+      const create = vi.fn();
+      const app = await mount(create);
+      let pending!: Promise<void>;
+      await act(async () => { pending = app.get().create(); });
+      if (kind === "unmount") { await act(() => root?.unmount()); root = undefined; }
+      else {
+        if (kind === "identity") mocks.tabs.activeWorkspaceIdentity = "host-b";
+        else mocks.resolution.remoteSessionId = "attachment-b";
+        await app.render();
+      }
+      await act(async () => { finish({ promptSuffix: "stale location" }); await pending; });
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps the current UI and reports preparation failure without creating a draft", async () => {
+    mocks.list.mockResolvedValue({ skills: [skill] });
+    mocks.section = mocks.application;
+    mocks.application.beforeCreate.mockRejectedValue(new Error("synthetic unavailable"));
+    const create = vi.fn();
+    const app = await mount(create);
+    await act(() => app.get().create());
+    expect(create).not.toHaveBeenCalled();
+    expect(mocks.toast).toHaveBeenCalled();
+  });
   it("coalesces duplicate clicks and creates one unsent draft with target identity", async () => {
     let finish!: (r: unknown) => void;
     mocks.list.mockImplementation(

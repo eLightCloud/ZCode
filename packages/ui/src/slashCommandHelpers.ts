@@ -128,8 +128,9 @@ export function buildSkillSuggestions(
     Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope" | "pluginName">
   >,
   locale?: Locale,
+  applicationName?: string,
 ): PromptInputSuggestionItem[] {
-  return mapSkillsToMentionItemsForTest(skills, locale).map((item) => ({
+  return mapSkillsToMentionItemsForTest(skills, locale, applicationName).map((item) => ({
     id: item.id,
     trigger: "/",
     value: item.value,

@@ -1,4 +1,5 @@
 import type { Locale, SkillScope } from "@zcode/shared";
+import { formatApplicationBrandMessage } from "@/application-brand.js";
 
 interface SkillDisplayCandidate {
   name: string;
@@ -212,11 +213,20 @@ export function resolveSkillSourceLabel(scope: SkillScope, locale?: Locale): str
 export function resolveSkillDisplayDescription(
   skill: SkillDisplayCandidate,
   locale?: Locale,
+  applicationName?: string,
 ): string {
   const localized = isOfficialBuiltinSkill(skill)
     ? BUILTIN_SKILL_DESCRIPTIONS[skill.name]?.[locale ?? "en-US"]
     : undefined;
-  return localized ?? skill.description;
+  // 内置技能菜单曾绕过品牌装配；仅处理自有展示文案，保留第三方正文与旧版恢复的来源说明。
+  if (!localized || skill.name === "restore-legacy-sessions") {
+    return localized ?? skill.description;
+  }
+  return formatApplicationBrandMessage(
+    applicationName,
+    `skills.${skill.name}.description`,
+    localized,
+  );
 }
 
 function isOfficialBuiltinSkill(skill: SkillDisplayCandidate): boolean {

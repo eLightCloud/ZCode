@@ -236,6 +236,34 @@ describe("slashCommandHelpers", () => {
     });
   });
 
+  it("/ 面板的插件创建描述沿品牌装配，技能身份与路径不变", () => {
+    const skill = {
+      id: "builtin-plugin-creator",
+      name: "plugin-creator",
+      description: "Create or update ZCode plugin source",
+      path: "/cache/vantage-native/plugin-creator/0.1.1/skills/plugin-creator/SKILL.md",
+      scope: "plugin" as const,
+      pluginName: "plugin-creator",
+    };
+    const [native] = buildSkillSuggestions([skill], "zh-CN");
+    const [chinese] = buildSkillSuggestions([skill], "zh-CN", "翼辉睿观");
+    const [english] = buildSkillSuggestions([skill], "en-US", "eLight Vantage");
+
+    expect(native?.description).toBe("插件 · 创建、校验 ZCode 插件，并指导本地安装与更新。");
+    expect(chinese).toMatchObject({
+      id: "skill:builtin-plugin-creator",
+      label: "$plugin-creator",
+      value: "plugin-creator",
+      description: "插件 · 创建、校验 翼辉睿观 插件，并指导本地安装与更新。",
+      data: { path: skill.path, scope: "plugin" },
+    });
+    expect(english?.description).toBe(
+      "Plugin · Create and validate eLight Vantage plugins, and guide local installation and updates.",
+    );
+    expect(chinese?.keywords).toContain("创建、校验 翼辉睿观 插件，并指导本地安装与更新。");
+    expect(skill.description).toBe("Create or update ZCode plugin source");
+  });
+
   it("replaceActiveSlashToken 不把完整 token 后面的正文当 tail 删除", () => {
     expect(replaceActiveSlashToken("请执行 /goal", "修复这个问题", "/goal")).toEqual({
       cursorOffset: 10,

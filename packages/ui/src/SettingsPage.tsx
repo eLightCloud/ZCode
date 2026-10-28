@@ -1846,6 +1846,24 @@ export function SettingsPage({
                           ) : null}
                         </div>
                         <div className="space-y-8">
+                          {activeSection === "modelProvider" && (
+                            <div hidden={Boolean(applicationSection)}>
+                              <ServiceProvider services={localHostServices}>
+                                {/* 模型配置属于本机全局事实源；激活远端 workspace 时也不能注入远端 Host。 */}
+                                <ModelProviderSection
+                                  workspacePath={activeWorkspacePath ?? captionWorkspacePath ?? ""}
+                                  connectivityWorkspacePath={
+                                    localModelProviderConnectivityWorkspacePath
+                                  }
+                                  connectivityWorkspaceRequired={isRemoteModelProviderWorkspace}
+                                  pendingModelProviderTarget={pendingModelProviderTarget}
+                                  onConsumePendingModelProviderTarget={() =>
+                                    setPendingModelProviderTarget(undefined)
+                                  }
+                                />
+                              </ServiceProvider>
+                            </div>
+                          )}
                           {applicationSection ? (
                             <ApplicationSettingsContent />
                           ) : activeSection === "general" ? (
@@ -2118,22 +2136,8 @@ export function SettingsPage({
                             />
                           ) : activeSection === "shortcuts" ? (
                             <ShortcutSettingsSection isDesktop={Boolean(isDesktop)} />
-                          ) : activeSection === "modelProvider" ? (
-                            <ServiceProvider services={localHostServices}>
-                              {/* 模型配置属于本机全局事实源；激活远端 workspace 时也不能注入远端 Host。 */}
-                              <ModelProviderSection
-                                workspacePath={activeWorkspacePath ?? captionWorkspacePath ?? ""}
-                                connectivityWorkspacePath={
-                                  localModelProviderConnectivityWorkspacePath
-                                }
-                                connectivityWorkspaceRequired={isRemoteModelProviderWorkspace}
-                                pendingModelProviderTarget={pendingModelProviderTarget}
-                                onConsumePendingModelProviderTarget={() =>
-                                  setPendingModelProviderTarget(undefined)
-                                }
-                              />
-                            </ServiceProvider>
-                          ) : activeSection === "memory" ? (
+                          ) : activeSection === "modelProvider" ? null : activeSection ===
+                            "memory" ? (
                             <ServiceProvider services={localHostServices}>
                               {/* Memory catalog 始终使用本地 Host，避免远程 workspace 误读本机数据。 */}
                               <MemorySettingsSection

@@ -55,7 +55,10 @@ function ApplicationModelPanel({
     >
       {(active || visited) && (
         <ScopedErrorBoundary scope={`application-model:${entry.id}`}>
-          {entry.render({ openCustomModels: () => settings?.selectModelEntry(null) })}
+          {entry.render({
+            openCustomModels: () => settings?.selectModelEntry(null),
+            openSection: (id) => settings?.openSection(id),
+          })}
         </ScopedErrorBoundary>
       )}
     </TabsContent>

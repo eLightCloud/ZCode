@@ -3090,6 +3090,7 @@ export function createLocalServices(options: {
         })
       : undefined;
   const applicationHost = createApplicationHostService({
+    files: fileService,
     projects: projectService,
     models: providerRuntime.modelSelection,
     runtime: continuationHost,

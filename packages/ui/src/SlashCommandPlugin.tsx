@@ -27,6 +27,7 @@ import { useSkills } from "@/hooks/useSkills.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
+import { useApplicationBrand } from "@/application-brand.js";
 import { useSlashCommands } from "./hooks/useSlashCommands.js";
 import { $createPromptMentionNode } from "./mentions/nodes/PromptMentionNode.js";
 import {
@@ -70,6 +71,8 @@ export function SlashCommandPlugin({
 }: SlashCommandPluginProps & { provider: ZCodeProvider }) {
   const [editor] = useLexicalComposerContext();
   const { intl, locale } = useZCodeIntl();
+  const brand = useApplicationBrand();
+  const applicationName = brand?.localizedNames?.[locale] ?? brand?.name;
   const [activeTrigger, setActiveTrigger] = useState<ActivePromptInputTrigger | null>(null);
   // 远程 workspace 的 slashCommands 写在 workspaceIdentity 桶。
   // 这里只按 workspacePath 读取会落到 path 桶，表现为 ZCode Agent 已收到 available_commands_update 但 / 面板为空。
@@ -111,8 +114,9 @@ export function SlashCommandPlugin({
       buildSkillSuggestions(
         filterSkillsForProvider(skills, provider).filter((skill) => skill.enabled),
         locale,
+        applicationName,
       ),
-    [locale, provider, skills],
+    [applicationName, locale, provider, skills],
   );
   const filteredCommandSuggestions = useMemo(
     () => filterPromptInputSuggestions(commandSuggestions, activeTrigger?.query ?? null),

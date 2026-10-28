@@ -192,10 +192,15 @@ export function resolvePluginStoreSegment(item: StorePluginItem): PluginStoreSeg
 export function projectPluginDiscovery(
   items: StorePluginItem[],
   catalog: ApplicationPluginDiscoveryCatalog | undefined,
+  registeredSourcePluginIds?: readonly string[],
 ): StorePluginItem[] {
-  if (!catalog) return items;
+  // 只按准确来源身份去重发现项；管理安装时不传此投影，保留原生启停与配置。
+  const candidates = registeredSourcePluginIds?.length
+    ? items.filter((item) => !registeredSourcePluginIds.includes(item.id))
+    : items;
+  if (!catalog) return candidates;
   const entries = new Map(catalog.entries.map((entry) => [entry.pluginId, entry]));
-  return items.flatMap((item) => {
+  return candidates.flatMap((item) => {
     if (!catalog.marketplaceIds.includes(item.marketplace)) return [item];
     const entry = catalog.loading ? undefined : entries.get(item.id);
     if (!entry) return [];

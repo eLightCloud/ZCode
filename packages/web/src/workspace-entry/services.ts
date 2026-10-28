@@ -110,6 +110,7 @@ export function createWorkspaceEntryServices(locale: Locale): RootServices {
   return {
     projectService,
     fileService: {
+      snapshotDirectory: unsupported("fileService.snapshotDirectory"),
       readdir: unsupported("fileService.readdir"),
       stat: unsupported("fileService.stat"),
       checkFilesExist: unsupported("fileService.checkFilesExist"),

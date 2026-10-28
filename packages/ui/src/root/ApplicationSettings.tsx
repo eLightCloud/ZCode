@@ -15,9 +15,13 @@ import {
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import { logger } from "@/logger.js";
 
-type SettingsIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+type SettingsIcon = ComponentType<{
+  className?: string;
+  "aria-hidden"?: boolean;
+}>;
 export interface ApplicationSettingsNavigation {
   openModelEntry: (id: string) => void;
+  openSection: (id: string) => void;
 }
 export interface ApplicationSettingsSection {
   id: string;
@@ -30,7 +34,10 @@ export interface ApplicationModelEntry {
   id: string;
   label: string;
   Icon: SettingsIcon;
-  render: (navigation: { openCustomModels: () => void }) => ReactNode;
+  render: (navigation: {
+    openCustomModels: () => void;
+    openSection: (id: string) => void;
+  }) => ReactNode;
 }
 export interface ApplicationSettings {
   sections?: readonly ApplicationSettingsSection[];
@@ -77,6 +84,13 @@ export function ApplicationSettingsProvider({
       }),
     [],
   );
+  const openSection = useCallback(
+    (id: string) => {
+      if (!sections.some((section) => section.id === id)) return;
+      selectSection(id);
+    },
+    [sections, selectSection],
+  );
   const openModelEntry = useCallback(
     (id: string) => {
       if (!modelEntries.some((entry) => entry.id === id)) return;
@@ -97,6 +111,7 @@ export function ApplicationSettingsProvider({
       selectSection,
       selectModelEntry,
       openModelEntry,
+      openSection,
     }),
     [
       sections,
@@ -106,6 +121,7 @@ export function ApplicationSettingsProvider({
       selectSection,
       selectModelEntry,
       openModelEntry,
+      openSection,
     ],
   );
   return <Context value={value}>{children}</Context>;
@@ -124,6 +140,7 @@ export function ApplicationSettingsContent() {
     >
       {settings.section.render({
         openModelEntry: settings.openModelEntry,
+        openSection: settings.openSection,
       })}
     </ScopedErrorBoundary>
   );

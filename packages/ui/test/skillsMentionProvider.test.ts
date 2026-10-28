@@ -92,4 +92,39 @@ describe("skills mention provider", () => {
       "插件 · 使用 ZCode Browser Use 对网页和本地 Web 前端执行纯 GUI 黑盒测试",
     );
   });
+
+  it("brands curated builtin descriptions without rewriting user content or historical sources", () => {
+    const skills = [
+      {
+        id: "builtin-browser",
+        name: "control-browser",
+        description: "original source description",
+        path: "/plugins/browser-use-plugin/skills/control-browser/SKILL.md",
+        scope: "plugin" as const,
+        pluginName: "browser-use",
+      },
+      {
+        id: "custom",
+        name: "custom",
+        description: "Read ZCode documentation using ${ZCODE_PLUGIN_ROOT}",
+        path: "/repo/.zcode/skills/custom/SKILL.md",
+        scope: "workspace" as const,
+      },
+      {
+        id: "restore",
+        name: "restore-legacy-sessions",
+        description: "restore source description",
+        path: "/plugins/restore-legacy-sessions-plugin/skills/restore-legacy-sessions/SKILL.md",
+        scope: "plugin" as const,
+        pluginName: "restore-legacy-sessions",
+      },
+    ];
+    const original = structuredClone(skills);
+    const items = mapSkillsToMentionItemsForTest(skills, "zh-CN", "翼辉睿观");
+
+    expect(items[0]?.description).toContain("控制 翼辉睿观 内置浏览器");
+    expect(items[1]?.description).toBe(`工作区 · ${skills[1]!.description}`);
+    expect(items[2]?.description).toContain("ACP 时代 ZCode 旧 session");
+    expect(skills).toEqual(original);
+  });
 });

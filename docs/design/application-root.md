@@ -16,6 +16,11 @@ to the mounted workspace through context; it does not position a floating button
 The optional icon comes from the trusted assembly, without business semantics in
 the shared shell. Static localized product copy can be supplied through
 ApplicationBrand.localizedMessages; native terminology remains the default.
+Curated builtin skill descriptions in the `/` and `$` menus use the configured
+localized application name, falling back to the application name. This is a
+display projection only: skill names, paths, source content and insertion payloads
+remain unchanged. Third-party descriptions and historical restoration source
+references retain their wording. Without a brand, native descriptions remain.
 The callback receives the current native workspace reference and rpcReady state;
 its service provider resolves the same workspace route. An offline remote target
 must never fall back to local services. This context is navigation, not authority.

@@ -218,8 +218,13 @@ export function PluginStorePage({
     ],
   );
   const discoveryItems = useMemo(
-    () => projectPluginDiscovery(items, applicationSection?.catalog),
-    [items, applicationSection?.catalog],
+    () =>
+      projectPluginDiscovery(
+        items,
+        applicationSection?.catalog,
+        view === "manage" ? undefined : applicationSection?.registeredSourcePluginIds,
+      ),
+    [items, applicationSection?.catalog, applicationSection?.registeredSourcePluginIds, view],
   );
   const itemById = useMemo(
     () => new Map(discoveryItems.map((item) => [item.id, item])),
@@ -688,6 +693,7 @@ export function PluginStorePage({
               </Button>
             </ControlHintTooltip>
             <PluginAddMenu
+              segment={segment}
               testId="plugin-store-create"
               variant="secondary"
               size="lg"

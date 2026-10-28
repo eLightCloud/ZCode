@@ -5,8 +5,10 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +20,11 @@ import {
 import { setDataBaseDir } from "../src/paths.js";
 import { unpackWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
 import type { IFileService } from "../src/file/file.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, readdir: vi.fn(actual.readdir) };
+});
 
 // 分块拉全量（测试语义等价旧单次 listWorkspaceFiles）。
 async function readAllPacked(service: IFileService, rootPath: string): Promise<string> {
@@ -1149,5 +1156,41 @@ describe("fileService", () => {
         expect(synced.content).not.toContain("legacy-rules/");
       });
     });
+  });
+});
+
+describe("source directory snapshots", () => {
+  it("rejects a directory changed between enumeration and the old signature point", async () => {
+    const rootPath = makeTempDir("directory-snapshot-race-");
+    const root = await fsPromises.realpath(rootPath);
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fsPromises.readdir).mockImplementationOnce(async (...args) => {
+      const entries = await actual.readdir(...args);
+      writeFileSync(join(root, "late.txt"), "synthetic late asset");
+      const future = new Date(Date.now() + 1000);
+      utimesSync(root, future, future);
+      return entries;
+    });
+    await expect(createFileService().snapshotDirectory({ rootPath }))
+      .rejects.toThrow("directory_snapshot_changed");
+  });
+  it("captures exact asset bytes and an explicit selection without following symlinks", async () => {
+    const rootPath = makeTempDir("directory-snapshot-");
+    mkdirSync(join(rootPath, "skills"));
+    mkdirSync(join(rootPath, "__pycache__"));
+    writeFileSync(join(rootPath, "skills", "SKILL.md"), "source bytes");
+    writeFileSync(join(rootPath, "__pycache__", "run.pyc"), "cache");
+    const service = createFileService();
+    const first = await service.snapshotDirectory({ rootPath, excludeNames: ["__pycache__"] });
+    expect(first.files).toEqual([
+      { path: "skills/SKILL.md", contentBase64: Buffer.from("source bytes").toString("base64") },
+    ]);
+    expect(
+      (await service.snapshotDirectory({ rootPath, excludeNames: ["__pycache__"] })).sha256,
+    ).toBe(first.sha256);
+    symlinkSync(join(rootPath, "skills", "SKILL.md"), join(rootPath, "link"));
+    await expect(service.snapshotDirectory({ rootPath })).rejects.toThrow(
+      "directory_snapshot_file_type",
+    );
   });
 });

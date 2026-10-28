@@ -659,6 +659,18 @@ it("applies publication only to managed discovery, preserving raw installed data
   ).toHaveLength(3);
 });
 
+it("deduplicates exact registered source identities only in discovery, preserving raw installation choices", async () => {
+  const { projectPluginDiscovery } = await import("../src/settings/pluginStoreListing.js");
+  const raw = [
+    { id: "same@dev-one", name: "same", marketplace: "dev-one", installed: true },
+    { id: "same@dev-two", name: "same", marketplace: "dev-two", installed: true },
+  ] as StorePluginItem[];
+  expect(projectPluginDiscovery(raw, undefined, ["same@dev-one"]).map((item) => item.id))
+    .toEqual(["same@dev-two"]);
+  expect(projectPluginDiscovery(raw, undefined)).toBe(raw);
+  expect(raw[0]!.installed).toBe(true);
+});
+
 it("overlays formal bilingual names for discovery search without changing identity or installed metadata", async () => {
   const { projectPluginDiscovery, resolveItemDisplayName, storeItemMatches } = await import("../src/settings/pluginStoreListing.js");
   const raw = [{ id: "documents@managed", name: "documents", marketplace: "managed", installed: true, restorable: false, orphaned: false, listing: { displayName: "Original" } }] as StorePluginItem[];

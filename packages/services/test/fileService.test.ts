@@ -1151,3 +1151,25 @@ describe("fileService", () => {
     });
   });
 });
+
+describe("source directory snapshots", () => {
+  it("captures exact asset bytes and an explicit selection without following symlinks", async () => {
+    const rootPath = makeTempDir("directory-snapshot-");
+    mkdirSync(join(rootPath, "skills"));
+    mkdirSync(join(rootPath, "__pycache__"));
+    writeFileSync(join(rootPath, "skills", "SKILL.md"), "source bytes");
+    writeFileSync(join(rootPath, "__pycache__", "run.pyc"), "cache");
+    const service = createFileService();
+    const first = await service.snapshotDirectory({ rootPath, excludeNames: ["__pycache__"] });
+    expect(first.files).toEqual([
+      { path: "skills/SKILL.md", contentBase64: Buffer.from("source bytes").toString("base64") },
+    ]);
+    expect(
+      (await service.snapshotDirectory({ rootPath, excludeNames: ["__pycache__"] })).sha256,
+    ).toBe(first.sha256);
+    symlinkSync(join(rootPath, "skills", "SKILL.md"), join(rootPath, "link"));
+    await expect(service.snapshotDirectory({ rootPath })).rejects.toThrow(
+      "directory_snapshot_file_type",
+    );
+  });
+});

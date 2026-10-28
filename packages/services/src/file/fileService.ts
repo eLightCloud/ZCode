@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
-import type { Dirent } from "node:fs";
-import { mkdir, open, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { constants, type Dirent } from "node:fs";
+import { createHash } from "node:crypto";
+import { lstat, mkdir, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, relative, sep } from "node:path";
 import type {
@@ -369,6 +370,64 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
   };
 
   return {
+    async snapshotDirectory({ rootPath, excludeNames = [] }) {
+      const root = await realpath(rootPath);
+      if (!(await lstat(rootPath)).isDirectory())
+        throw new Error("directory_snapshot_invalid_root");
+      const excluded = new Set(excludeNames);
+      const files: { path: string; contentBase64: string }[] = [];
+      const signatures = new Map<string, string>();
+      let total = 0;
+      const signature = (value: Awaited<ReturnType<typeof lstat>>) =>
+        [value.dev, value.ino, value.mode, value.size, value.mtimeMs, value.ctimeMs].join(":");
+      const walk = async (dir: string, prefix: string): Promise<void> => {
+        const children = (await readdir(dir, { withFileTypes: true })).sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+        signatures.set(dir, signature(await lstat(dir)));
+        for (const child of children) {
+          if (excluded.has(child.name)) continue;
+          const full = join(dir, child.name),
+            path = prefix + child.name;
+          if (child.isSymbolicLink() || (!child.isDirectory() && !child.isFile()))
+            throw new Error("directory_snapshot_file_type");
+          if (signatures.size >= 5000 || path.length > 240)
+            throw new Error("directory_snapshot_limit");
+          if (child.isDirectory()) {
+            await walk(full, path + "/");
+            continue;
+          }
+          const before = await lstat(full);
+          if (!before.isFile() || before.size > 20 * 1024 * 1024)
+            throw new Error("directory_snapshot_limit");
+          total += before.size;
+          if (total > 100 * 1024 * 1024) throw new Error("directory_snapshot_limit");
+          const handle = await open(full, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+          try {
+            if (
+              (await realpath(full)) !== full ||
+              signature(await handle.stat()) !== signature(before)
+            )
+              throw new Error("directory_snapshot_changed");
+            const bytes = Buffer.alloc(before.size + 1);
+            const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+            if (bytesRead !== before.size || signature(await handle.stat()) !== signature(before))
+              throw new Error("directory_snapshot_changed");
+            signatures.set(full, signature(before));
+            files.push({ path, contentBase64: bytes.subarray(0, bytesRead).toString("base64") });
+          } finally {
+            await handle.close();
+          }
+        }
+      };
+      await walk(root, "");
+      for (const [path, expected] of signatures) {
+        if ((await realpath(path)) !== path || signature(await lstat(path)) !== expected)
+          throw new Error("directory_snapshot_changed");
+      }
+      const sha256 = createHash("sha256").update(JSON.stringify(files)).digest("hex");
+      return { rootPath: root, files, sha256 };
+    },
     async readdir(params: { path: string; includeHidden?: boolean }): Promise<FileEntry[]> {
       const entries = await readdir(params.path, { withFileTypes: true });
       const visibleEntries = await Promise.all(

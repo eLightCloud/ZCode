@@ -19,6 +19,12 @@ export interface WorkspaceFileSearchParams {
 }
 
 export interface IFileService {
+  /** Exact bounded source snapshot. Rejects links, special files and concurrent mutation. */
+  snapshotDirectory(params: { rootPath: string; excludeNames?: string[] }): Promise<{
+    rootPath: string;
+    files: { path: string; contentBase64: string }[];
+    sha256: string;
+  }>;
   /** Host 匹配并返回有界候选，避免 Renderer 下载完整文件索引。 */
   searchWorkspaceFiles(params: WorkspaceFileSearchParams): Promise<WorkspaceFileEntry[]>;
   readdir(params: { path: string; includeHidden?: boolean }): Promise<FileEntry[]>;

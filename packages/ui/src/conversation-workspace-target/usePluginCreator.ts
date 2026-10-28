@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useApplicationPluginStoreSection } from "@/root/ApplicationPluginStoreSection.js";
 import { ZCODE_AGENT_PROVIDER } from "@zcode/shared";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
@@ -15,8 +16,10 @@ import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
 export function usePluginCreator(
   onCreateTask: ((request?: CreateTaskRequest) => void) | undefined,
   isWebRemoteControl = false,
+  segment: "public" | "community" | "personal" | "application" = "personal",
 ) {
   const { intl } = useZCodeIntl();
+  const application = useApplicationPluginStoreSection();
   const tabStore = useTabStoreApi();
   const activeWorkspacePath = useTabStore((state) => state.activeWorkspacePath);
   const activeWorkspaceIdentity = useTabStore((state) => state.activeWorkspaceIdentity);
@@ -84,9 +87,21 @@ export function usePluginCreator(
           }),
         isCurrent,
       );
-      if (prefill) {
+      if (prefill && isCurrent()) {
+        const prepared = await application?.beforeCreate?.(
+          segment,
+          target,
+          resolution.services.applicationHostService,
+        );
+        if (!isCurrent()) return;
         logger.info("[PluginCreator] 已解析创建技能", { workspaceKey: targetKey });
-        onCreateTask({ ...prefill, expectedWorkspaceKey: targetKey });
+        onCreateTask({
+          ...prefill,
+          initialPrompt: prepared?.promptSuffix
+            ? prefill.initialPrompt + "\n" + prepared.promptSuffix
+            : prefill.initialPrompt,
+          expectedWorkspaceKey: targetKey,
+        });
       }
     } catch (error) {
       if (isCurrent()) {
@@ -100,6 +115,17 @@ export function usePluginCreator(
       if (pending.current === scope) pending.current = null;
       if (scope.active) setBusyScope(null);
     }
-  }, [intl, isWebRemoteControl, onCreateTask, resolution, scope, tabStore, target, targetKey]);
+  }, [
+    application,
+    segment,
+    intl,
+    isWebRemoteControl,
+    onCreateTask,
+    resolution,
+    scope,
+    tabStore,
+    target,
+    targetKey,
+  ]);
   return { create, busy: busyScope === scope, available: Boolean(target && onCreateTask) };
 }

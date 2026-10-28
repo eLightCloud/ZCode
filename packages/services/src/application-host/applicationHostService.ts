@@ -20,6 +20,7 @@ const defaultLog = createServiceLogger("application-host");
 /** Configured only by the trusted process launcher; never loaded from RPC input. */
 export function createApplicationHostService(options: {
   native: IZCodeAgentService;
+  files?: import("../file/file.js").IFileService;
   conversations?: ConversationSyncHost;
   runtime?: ConversationRuntimePort;
   projects?: Pick<IProjectService, "readProjects">;
@@ -44,6 +45,7 @@ export function createApplicationHostService(options: {
         throw new Error("application_host_invalid_module");
       const value: unknown = await module.createApplicationHost({
         native: options.native,
+        files: options.files,
         projects: options.projects,
         models: options.models,
         conversations: options.conversations,

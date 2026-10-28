@@ -24,7 +24,13 @@ export interface ApplicationPluginDiscoveryCatalog {
 export interface ApplicationPluginStoreSection {
   /** Presentation only; the application server still authorizes every request. */
   visible?: boolean;
+  beforeCreate?: (
+    segment: "public" | "community" | "personal" | "application",
+    workspace: { workspacePath: string; workspaceIdentity?: string },
+    host?: import("@zcode/services").IApplicationHostService,
+  ) => Promise<void | { promptSuffix: string }>;
   onImport?: (segment: "public" | "community" | "personal" | "application") => void;
+  registeredSourcePluginIds?: readonly string[];
   label: string;
   marketplaceIds: readonly string[];
   onRefresh: () => void;

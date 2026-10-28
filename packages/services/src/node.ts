@@ -3092,6 +3092,7 @@ export function createLocalServices(options: {
         })
       : undefined;
   const applicationHost = createApplicationHostService({
+    files: fileService,
     logger: options.applicationHostLogger,
     projects: projectService,
     models: providerRuntime.modelSelection,

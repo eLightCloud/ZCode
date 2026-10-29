@@ -9,6 +9,7 @@ import { Bot, Check, Plus, Trash2 } from "lucide-react";
 import { completeNewModelSelection } from "@zcode/provider";
 import {
   ZCODE_AGENT_PROVIDER,
+  createUuid,
   type AgentColor,
   type AgentsCapability,
   type AgentsListResult,
@@ -622,6 +623,7 @@ function SubagentModelOverrideControl({
       : undefined,
     thoughtLevel: agent.modelSelectionOverride?.options?.reasoningLevel,
   }));
+  const previousOverrideRef = useRef(agent.modelSelectionOverride);
   const defaultLabel = intl.formatMessage({
     id: "settings.subagents.model.defaultMain",
   });
@@ -655,6 +657,10 @@ function SubagentModelOverrideControl({
             model: value,
           });
   useEffect(() => {
+    // 初值已由 initializer 建立；DOM 提交后的用户操作可能先于 mount effect，
+    // 重写同一快照会把 pending 的乐观档位覆盖回旧值。仅同步后续来源变化。
+    if (previousOverrideRef.current === agent.modelSelectionOverride) return;
+    previousOverrideRef.current = agent.modelSelectionOverride;
     setConfig({
       model: agent.modelSelectionOverride
         ? toSubagentModelValue(agent.modelSelectionOverride)
@@ -1579,6 +1585,9 @@ export function SubagentsSection({
       if (!agentName && agent.source !== "plugin") {
         return;
       }
+      const operationId = createUuid();
+      const event = { operation_id: operationId, agent_source: agent.source };
+      logger.lifecycle.info("[subagents] model override", { ...event, outcome: "started" });
       setOperatingAgentId(agent.id);
       try {
         const modelSelection = toSubagentModelSelection(config.model, config.thoughtLevel);
@@ -1588,14 +1597,21 @@ export function SubagentsSection({
           // 稳定 ID 不含插件版本；升级换目录后继续读取同一份用户 Selection 覆盖。
           await subagentsService.setPluginAgentModelOverride({ agentId: agent.id, modelSelection });
         }
+        logger.lifecycle.info("[subagents] model override", { ...event, outcome: "committed" });
       } catch (changeError) {
+        logger.lifecycle.warn("[subagents] model override", { ...event, outcome: "write_failed" });
         toast(changeError instanceof Error ? changeError.message : String(changeError));
         setOperatingAgentId(null);
         throw changeError;
       }
       try {
         await Promise.all([refresh(), refreshMentionStore()]);
+        logger.lifecycle.info("[subagents] model override", { ...event, outcome: "refreshed" });
       } catch (refreshError) {
+        logger.lifecycle.warn("[subagents] model override", {
+          ...event,
+          outcome: "refresh_failed",
+        });
         // 持久化成功即为提交点；后续投影刷新失败只能提示，不能让控件回滚磁盘状态。
         toast(refreshError instanceof Error ? refreshError.message : String(refreshError));
       } finally {

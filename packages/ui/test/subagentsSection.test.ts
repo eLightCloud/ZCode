@@ -20,6 +20,7 @@ let useStateCallCount = 0;
 let stateOverrides = new Map<number, unknown>();
 let onManageModels = vi.fn();
 let useRealReactHooks = false;
+let onThoughtLevelMount: ((button: HTMLButtonElement) => void) | undefined;
 const mockTabs = vi.hoisted(() => ({ tabs: [] as unknown[] }));
 const mockScopeRouting = vi.hoisted(() => ({
   enabled: false,
@@ -273,6 +274,25 @@ vi.mock("@/chat-input-toolbar/ThoughtLevelCycleControl.js", () => ({
     return createElement("button", {
       type: "button",
       "data-testid": "subagent-thought-level",
+      disabled: props.disabled as boolean,
+      "data-current-value": (props.option as { currentValue: string }).currentValue,
+      onClick: () => {
+        const option = props.option as {
+          currentValue: string;
+          options: Array<{ value: string }>;
+        };
+        const index = option.options.findIndex((entry) => entry.value === option.currentValue);
+        (props.onValueChange as (value: string) => void)(
+          option.options[(index + 1) % option.options.length]!.value,
+        );
+      },
+      ref: (button: HTMLButtonElement | null) => {
+        if (button && onThoughtLevelMount) {
+          const onMount = onThoughtLevelMount;
+          onThoughtLevelMount = undefined;
+          onMount(button);
+        }
+      },
     });
   },
 }));
@@ -476,6 +496,7 @@ describe("SubagentsSection", () => {
     stateOverrides = new Map<number, unknown>();
     onManageModels = vi.fn();
     useRealReactHooks = false;
+    onThoughtLevelMount = undefined;
     mockScopeRouting.enabled = false;
     mockScopeRouting.context = null;
     mockScopeRouting.modelServices = [];
@@ -1319,59 +1340,75 @@ describe("SubagentsSection", () => {
     });
   });
 
-  it("keeps the committed built-in config when the follow-up refresh fails", async () => {
-    const agent = {
-      id: "built-in:explore",
-      name: "Explore",
-      description: "Search broadly",
-      systemPrompt: "",
-      path: "built-in:Explore",
-      scope: "built-in" as const,
-      source: "built-in" as const,
-      enabled: true,
-      readOnly: true,
-      modelSelection: {
-        providerId: "custom-openai",
-        modelId: "glm-5.2",
-        options: { reasoningLevel: "high" },
-      },
-      modelSelectionOverride: {
-        providerId: "custom-openai",
-        modelId: "glm-5.2",
-        options: { reasoningLevel: "high" },
-      },
-      tools: ["Read"],
-    };
-    mockSubagentsService.list.mockResolvedValue({
-      agents: [agent],
-      userAgents: [agent],
-      pluginAgents: [],
-      capability: { userScopeAvailable: true },
-    });
-    mockRefreshLoadedSubagentsStoreForWorkspace.mockRejectedValueOnce(new Error("refresh failed"));
-    let resolveWrite: (() => void) | undefined;
-    mockSubagentsService.setBuiltInModelOverride.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveWrite = resolve;
-        }),
-    );
+  it.each([
+    { timing: "after mount", early: false, result: "refresh failure", rejectWrite: false },
+    {
+      timing: "before passive effects",
+      early: true,
+      result: "refresh failure",
+      rejectWrite: false,
+    },
+    { timing: "before passive effects", early: true, result: "write failure", rejectWrite: true },
+  ])(
+    "preserves built-in config on $result with selection $timing",
+    async ({ early, rejectWrite }) => {
+      const agent = {
+        id: "built-in:explore",
+        name: "Explore",
+        description: "Search broadly",
+        systemPrompt: "",
+        path: "built-in:Explore",
+        scope: "built-in" as const,
+        source: "built-in" as const,
+        enabled: true,
+        readOnly: true,
+        modelSelection: {
+          providerId: "custom-openai",
+          modelId: "glm-5.2",
+          options: { reasoningLevel: "high" },
+        },
+        modelSelectionOverride: {
+          providerId: "custom-openai",
+          modelId: "glm-5.2",
+          options: { reasoningLevel: "high" },
+        },
+        tools: ["Read"],
+      };
+      const listing = {
+        agents: [agent],
+        userAgents: [agent],
+        pluginAgents: [],
+        capability: { userScopeAvailable: true },
+      };
+      mockSubagentsService.list.mockResolvedValue(listing);
+      if (!rejectWrite) {
+        mockRefreshLoadedSubagentsStoreForWorkspace.mockRejectedValueOnce(
+          new Error("refresh failed"),
+        );
+      }
+      let resolveWrite!: () => void;
+      let failWrite!: (error: Error) => void;
+      mockSubagentsService.setBuiltInModelOverride.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            resolveWrite = resolve;
+            failWrite = reject;
+          }),
+      );
 
-    await renderInteractiveSubagentsSection();
-    await waitFor(() => {
-      expect(capturedThoughtLevelControls.at(-1)?.option).toMatchObject({
-        currentValue: "high",
+      // ref 位于真实 DOM 的提交阶段。直接点击已挂载按钮，确定性地先于父控件的
+      // 被动 mount effect；不使用延迟、重试或尚未提交的 render props 回调。
+      if (early) onThoughtLevelMount = (button) => button.click();
+      await act(async () => {
+        await renderInteractiveSubagentsSection();
       });
-    });
+      if (!early) {
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("subagent-thought-level"));
+        });
+      }
 
-    const onThoughtLevelChange = capturedThoughtLevelControls.at(-1)?.onValueChange;
-    expect(onThoughtLevelChange).toBeTypeOf("function");
-    act(() => {
-      (onThoughtLevelChange as (value: string) => void)("max");
-    });
-
-    await waitFor(() => {
-      expect(mockSubagentsService.setBuiltInModelOverride).toHaveBeenCalledWith({
+      expect(mockSubagentsService.setBuiltInModelOverride).toHaveBeenCalledExactlyOnceWith({
         agentName: "Explore",
         modelSelection: {
           providerId: "custom-openai",
@@ -1379,27 +1416,55 @@ describe("SubagentsSection", () => {
           options: { reasoningLevel: "max" },
         },
       });
-      expect(capturedThoughtLevelControls.at(-1)).toMatchObject({
-        disabled: true,
-        option: expect.objectContaining({ currentValue: "max" }),
-      });
-    });
+      const pendingControl = screen.getByTestId("subagent-thought-level") as HTMLButtonElement;
+      expect(pendingControl.disabled).toBe(true);
+      expect(pendingControl.dataset.currentValue).toBe("max");
+      expect(mockRefreshLoadedSubagentsStoreForWorkspace).not.toHaveBeenCalled();
 
-    expect(resolveWrite).toBeTypeOf("function");
-    // 显式控制持久化提交点，避免慢速 CI 中乐观渲染与后续刷新微任务乱序。
-    await act(async () => {
-      resolveWrite!();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(mockRefreshLoadedSubagentsStoreForWorkspace).toHaveBeenCalledTimes(1);
-      expect(capturedThoughtLevelControls.at(-1)).toMatchObject({
-        disabled: false,
-        option: expect.objectContaining({ currentValue: "max" }),
+      await act(async () => {
+        if (rejectWrite) failWrite(new Error("write failed"));
+        else resolveWrite();
       });
-    });
-  });
+      const committedControl = screen.getByTestId("subagent-thought-level") as HTMLButtonElement;
+      expect(committedControl.disabled).toBe(false);
+      expect(committedControl.dataset.currentValue).toBe(rejectWrite ? "high" : "max");
+      expect(mockRefreshLoadedSubagentsStoreForWorkspace).toHaveBeenCalledTimes(
+        rejectWrite ? 0 : 1,
+      );
+
+      // 防止修复变成永久冻结初值：后续来源的新覆盖及清除覆盖仍须接纳。
+      const refreshedEffort = rejectWrite ? "max" : "high";
+      const refreshedAgent = {
+        ...agent,
+        modelSelectionOverride: {
+          ...agent.modelSelectionOverride,
+          options: { reasoningLevel: refreshedEffort },
+        },
+      };
+      mockSubagentsService.list.mockResolvedValue({
+        ...listing,
+        agents: [refreshedAgent],
+        userAgents: [refreshedAgent],
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      });
+      expect(screen.getByTestId("subagent-thought-level").dataset.currentValue).toBe(
+        refreshedEffort,
+      );
+
+      const clearedAgent = { ...agent, modelSelectionOverride: undefined };
+      mockSubagentsService.list.mockResolvedValue({
+        ...listing,
+        agents: [clearedAgent],
+        userAgents: [clearedAgent],
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      });
+      expect(screen.queryByTestId("subagent-thought-level")).toBeNull();
+    },
+  );
 
   it("clears built-in model overrides through the default model item", async () => {
     stateOverrides = new Map<number, unknown>([

@@ -14,7 +14,11 @@ let actions: PluginStoreActions;
 const effects = vi.hoisted(() => ({
   invalidate: vi.fn(async () => {}),
   skills: vi.fn(async () => {}),
+  toast: vi.fn(),
 }));
+// 本套用 SSR 捕获安装动作，不拥有真实 toast 的独立 React root。
+// 让提示留在单测边界并校验内容，避免 jsdom 销毁后仍有被动提交访问 window。
+vi.mock("@/components/ui/toast.js", () => ({ toast: effects.toast }));
 vi.mock("@/store/pluginManagementStore.js", async (original) => ({
   ...(await original<typeof import("@/store/pluginManagementStore.js")>()),
   useScopedPluginManagementStore: () => store,
@@ -170,11 +174,12 @@ it.each(["install", "restore", "update"])(
         marketplace: "example",
         restorable: operation === "restore",
       } as never);
-    await vi.waitFor(() => expect(beforeAcquire).toHaveBeenCalledWith("panel@example"));
-    await Promise.resolve();
+    await vi.waitFor(() => expect(effects.toast).toHaveBeenCalledExactlyOnceWith("withdrawn"));
+    expect(beforeAcquire).toHaveBeenCalledWith("panel@example");
     expect(service.installPlugin).not.toHaveBeenCalled();
     expect(service.restoreBuiltinPlugin).not.toHaveBeenCalled();
     expect(service.updatePlugin).not.toHaveBeenCalled();
+    expect(document.getElementById("zcode-toast-host")).toBeNull();
   },
 );
 

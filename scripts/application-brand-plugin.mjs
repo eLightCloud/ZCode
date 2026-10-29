@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 
 /** Public build hook: a trusted application supplies static display metadata and assets. */
@@ -51,6 +52,17 @@ export async function applicationBrandPlugin(env) {
     value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
   return {
     name: "application-brand",
+    enforce: "pre",
+    resolveId(id) {
+      // 编辑器装饰与历史消息图标不消费 React Context；在既有品牌构建入口替换同一产品帮助资源。
+      const guideAsset = fileURLToPath(
+        new URL("../packages/ui/src/assets/plugin-icons/zcode-guide.png", import.meta.url),
+      );
+      if (id === "@/assets/plugin-icons/zcode-guide.png" || id === guideAsset) {
+        return join(dirname(manifestFile), "assets", "app-icon-192.png");
+      }
+      return null;
+    },
     config() {
       const id = metadata.builtinMarketplaceId ?? "zcode-plugins-official";
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id))

@@ -52,10 +52,9 @@ import {
 } from "@/settings/pluginStoreTryPrompt.js";
 import { usePluginUninstall } from "@/settings/usePluginUninstall.js";
 import {
+  usePluginPresentation,
   buildStoreItems,
   type StorePluginItem,
-  resolveManagedPluginDisplay,
-  resolvePluginDisplayName,
 } from "@/settings/pluginStoreListing.js";
 import { useScopedPluginManagementStore } from "@/store/pluginManagementStore.js";
 import {
@@ -119,6 +118,7 @@ export function InstalledPluginList({
   cacheAuthorityKey?: string;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName, resolveManagedPluginDisplay } = usePluginPresentation();
   const applicationSection = useApplicationPluginStoreSection();
   const targetServiceResolution = useWorkspaceServicesResolution(
     target?.workspacePath,
@@ -723,6 +723,7 @@ export function InstalledPluginList({
             uninstall.pendingPlugin
               ? resolvePluginDisplayName(
                   storeItemById.get(uninstall.pendingPlugin.id) ?? {
+                    id: uninstall.pendingPlugin.id,
                     name: uninstall.pendingPlugin.name,
                   },
                   locale,
@@ -874,6 +875,7 @@ export function InstalledPluginList({
           uninstall.pendingPlugin
             ? resolvePluginDisplayName(
                 storeItemById.get(uninstall.pendingPlugin.id) ?? {
+                  id: uninstall.pendingPlugin.id,
                   name: uninstall.pendingPlugin.name,
                 },
                 locale,

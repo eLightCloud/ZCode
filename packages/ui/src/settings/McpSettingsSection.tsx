@@ -54,7 +54,7 @@ import {
   groupPluginMcpServersByPlugin,
   type PluginMcpServerItem,
 } from "@/settings/pluginManagedResourceGroups.js";
-import { resolvePluginDisplayName } from "@/settings/pluginStoreListing.js";
+import { usePluginPresentation } from "@/settings/pluginStoreListing.js";
 import {
   McpFailurePresentation,
   resolveMcpFailureMessageId,
@@ -580,6 +580,7 @@ export function McpSettingsSection({
   cacheAuthorityKey,
 }: McpSettingsSectionProps) {
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName } = usePluginPresentation();
   const confirmDialog = useConfirmDialog();
   const services = useWorkspaceServices(
     workspacePath,
@@ -1573,6 +1574,7 @@ export function McpSettingsSection({
               count={group.items.length}
               title={resolvePluginDisplayName(
                 {
+                  id: group.pluginId,
                   name: group.pluginName,
                   listing: pluginListingById.get(group.pluginId),
                 },

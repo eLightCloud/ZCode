@@ -78,6 +78,9 @@ it("uses packaged originals for application builtin identities and known remote 
   vi.resetModules();
   try {
     const { resolvePluginIconSource } = await import("../src/lib/pluginIconSource.js");
+    const { isApplicationGuidePlugin } = await import("../src/components/PluginIcon.js");
+    expect(isApplicationGuidePlugin("zcode-guide@vantage-native")).toBe(true);
+    expect(isApplicationGuidePlugin("zcode-guide@personal")).toBe(false);
     expect(resolvePluginIconSource("documents@vantage-native")).toContain("documents.png");
     expect(
       resolvePluginIconSource(
@@ -102,3 +105,32 @@ it("uses packaged originals for application builtin identities and known remote 
     vi.resetModules();
   }
 });
+
+it.each(["zcode-plugins-official", "personal"])(
+  "brands only the application guide icon from %s",
+  (marketplace) => {
+    const html = renderToStaticMarkup(
+      createElement(ApplicationBrandProvider, {
+        brand: {
+          name: "Vantage",
+          Mark: () => createElement("svg", { "data-guide-mark": true }),
+          Wordmark: () => null,
+        },
+        children: createElement(PluginStoreAvatar, {
+          item: {
+            id: `zcode-guide@${marketplace}`,
+            name: "zcode-guide",
+            listing: { icon: "https://example.test/personal.png" },
+          },
+        }),
+      }),
+    );
+    if (marketplace === "zcode-plugins-official") {
+      expect(html).toContain("data-guide-mark");
+      expect(html).not.toContain("<img");
+    } else {
+      expect(html).not.toContain("data-guide-mark");
+      expect(html).toContain("<img");
+    }
+  },
+);

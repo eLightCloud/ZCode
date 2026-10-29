@@ -5,11 +5,13 @@ import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 export function buildPluginStoreTryMention({
   item,
   locale,
+  displayName,
 }: {
   item: StorePluginItem;
   locale: string;
+  displayName?: string;
 }): ComposerMentionPrefill {
-  const label = resolveItemDisplayName(item, locale);
+  const label = displayName ?? resolveItemDisplayName(item, locale);
   return {
     id: `plugin:${item.id}`,
     category: "plugins",
@@ -31,12 +33,14 @@ export function buildPluginStoreTryPrompt({
   item,
   locale,
   prompt,
+  displayName,
 }: {
   item: StorePluginItem;
   locale: string;
   prompt: string;
+  displayName?: string;
 }): string {
-  const pluginMention = buildPluginStoreTryMention({ item, locale }).markdown;
+  const pluginMention = buildPluginStoreTryMention({ item, locale, displayName }).markdown;
   const normalizedPrompt = prompt.trim();
   return normalizedPrompt ? `${pluginMention} ${normalizedPrompt}` : pluginMention;
 }

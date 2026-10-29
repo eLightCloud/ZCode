@@ -43,12 +43,11 @@ import {
 import { PluginStoreSourcesDialog } from "@/settings/PluginStoreSourcesDialog.js";
 import type { PluginStoreActions } from "@/settings/PluginStoreCard.js";
 import {
+  usePluginPresentation,
   buildStoreItems,
   projectPluginDiscovery,
   canUpdatePluginItem,
   isPluginUpdatePending,
-  resolveItemDisplayName,
-  resolvePluginDisplayName,
   type StorePluginItem,
 } from "@/settings/pluginStoreListing.js";
 import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
@@ -93,6 +92,7 @@ export function PluginStorePage({
 }: PluginStorePageProps) {
   const platform = usePlatform();
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName, resolveItemDisplayName } = usePluginPresentation();
   const applicationSection = useApplicationPluginStoreSection();
   const { order: storeOrder, refresh: refreshStoreOrder } = usePluginStoreOrder();
   const { pluginManagementService, skillsService } = useServices();
@@ -523,11 +523,20 @@ export function PluginStorePage({
       // Settings 遮罩不会退出，composer remount 还可能覆盖预填。现在统一委托 Root，
       // 同时复用 @ Picker 的 canonical Plugin 链接，不新增第二套引用语义。
       onCreateTask({
-        initialPrompt: buildPluginStoreTryPrompt({ item, locale, prompt }),
-        initialPromptMention: buildPluginStoreTryMention({ item, locale }),
+        initialPrompt: buildPluginStoreTryPrompt({
+          item,
+          locale,
+          prompt,
+          displayName: resolveItemDisplayName(item, locale),
+        }),
+        initialPromptMention: buildPluginStoreTryMention({
+          item,
+          locale,
+          displayName: resolveItemDisplayName(item, locale),
+        }),
       });
     },
-    [handleInstall, locale, onCreateTask, workspacePath],
+    [handleInstall, locale, onCreateTask, workspacePath, resolveItemDisplayName],
   );
 
   const actions: PluginStoreActions = useMemo(
@@ -949,6 +958,7 @@ export function PluginStorePage({
           uninstall.pendingPlugin
             ? resolvePluginDisplayName(
                 itemById.get(uninstall.pendingPlugin.id) ?? {
+                  id: uninstall.pendingPlugin.id,
                   name: uninstall.pendingPlugin.name,
                 },
                 locale,

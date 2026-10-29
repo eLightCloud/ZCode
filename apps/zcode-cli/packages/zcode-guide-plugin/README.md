@@ -1,10 +1,10 @@
 # zcode-guide
 
-The official built-in ZCode plugin for configuration and self-diagnosis. It is content-only (skills) and enabled by default.
+The built-in client plugin for configuration and self-diagnosis. It is content-only (skills) and enabled by default.
 
 ## What it provides
 
-A set of skills that teach both users and agents how to configure ZCode's five extension resource types in the ZCode client, and how to locate and fix configuration problems for each:
+A set of skills that teach both users and agents how to configure the client's five extension resource types in the client, and how to locate and fix configuration problems for each:
 
 | Skill | Purpose |
 |---|---|

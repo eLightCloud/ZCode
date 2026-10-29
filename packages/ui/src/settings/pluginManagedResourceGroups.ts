@@ -151,6 +151,7 @@ function normalizedQueryMatches(query: string, values: readonly (string | undefi
 export function groupSkillsByPlugin(
   skills: SkillSummary[],
   query: string,
+  displayKeywords?: (skill: SkillSummary) => string[],
 ): ResourceGroups<SkillSummary, SkillSummary> {
   const seenPaths = new Set<string>();
   const local: SkillSummary[] = [];
@@ -161,7 +162,14 @@ export function groupSkillsByPlugin(
       continue;
     }
     seenPaths.add(normalizedPath);
-    if (!normalizedQueryMatches(query, [skill.name, skill.description, skill.pluginName])) {
+    if (
+      !normalizedQueryMatches(query, [
+        skill.name,
+        skill.description,
+        skill.pluginName,
+        ...(displayKeywords?.(skill) ?? []),
+      ])
+    ) {
       continue;
     }
     if (skill.scope === "plugin") {

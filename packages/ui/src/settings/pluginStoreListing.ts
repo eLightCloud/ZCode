@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+import { useApplicationBrand, formatApplicationBrandMessage } from "@/application-brand.js";
+import { isApplicationGuidePlugin } from "@/components/PluginIcon.js";
 import type {
   PluginStoreModeOrder,
   ZCodeAvailablePluginSummary,
@@ -29,6 +32,73 @@ export {
 
 export { isPublicStoreMarketplaceId };
 export { isTrustedImageUrl } from "@/lib/trustedImageUrl.js";
+
+/** Application-owned help presentation; installation IDs and third-party listings stay authoritative. */
+export function usePluginPresentation() {
+  const brand = useApplicationBrand();
+  return useMemo(() => {
+    const brandName = (locale: string) =>
+      brand?.localizedNames?.[locale === "zh-CN" ? "zh-CN" : "en-US"] ?? brand?.name;
+    const displayName = (
+      plugin: Parameters<typeof resolvePluginDisplayName>[0] & { id?: string },
+      locale: string,
+    ) => {
+      const name = resolvePluginDisplayName(plugin, locale);
+      if (!brand || !isApplicationGuidePlugin(plugin.id)) return name;
+      return locale === "zh-CN" ? `${brandName(locale)} 使用指南` : `${brandName(locale)} Guide`;
+    };
+    const guideDescription = (locale: string) =>
+      formatApplicationBrandMessage(
+        brandName(locale),
+        "plugins.guide.description",
+        locale === "zh-CN"
+          ? "ZCode 使用与排障指南，帮助配置 MCP、命令、技能、钩子与场景。"
+          : "ZCode configuration and troubleshooting guide for MCP, commands, skills, hooks, and plugins.",
+      );
+    const description = (item: StorePluginItem, locale: string) =>
+      brand && isApplicationGuidePlugin(item.id)
+        ? guideDescription(locale)
+        : resolveItemDescription(item, locale);
+    return {
+      resolvePluginDisplayName: displayName,
+      resolveItemDisplayName: displayName,
+      resolveItemDescription: description,
+      storeItemMatches: (item: StorePluginItem, keyword: string, locale: string) =>
+        storeItemMatches(item, keyword, locale, [
+          displayName(item, locale),
+          description(item, locale) ?? "",
+        ]),
+      resolveItemExamplePrompts: (item: StorePluginItem, locale: string) => {
+        const prompts =
+          resolveLocalizedList(
+            locale,
+            item.listing?.examplePrompts,
+            item.listing?.examplePromptsI18n,
+          ) ?? [];
+        return brand && isApplicationGuidePlugin(item.id)
+          ? prompts.map((prompt) =>
+              formatApplicationBrandMessage(brandName(locale), "plugins.guide.prompt", prompt),
+            )
+          : prompts;
+      },
+      resolveManagedPluginDisplay: (
+        plugin: ZCodePluginInfo,
+        item: StorePluginItem | undefined,
+        locale: string,
+      ) => {
+        const matchingItem = item?.id === plugin.id ? item : undefined;
+        return {
+          name: displayName(matchingItem ?? plugin, locale),
+          description: matchingItem
+            ? description(matchingItem, locale)
+            : brand && isApplicationGuidePlugin(plugin.id)
+              ? guideDescription(locale)
+              : plugin.description,
+        };
+      },
+    };
+  }, [brand]);
+}
 
 /**
  * 仅在名称唯一时允许从目录条目回退解析 listing。
@@ -435,10 +505,16 @@ export function groupItemsByCategory(
   }));
 }
 
-export function storeItemMatches(item: StorePluginItem, keyword: string, locale: string): boolean {
+export function storeItemMatches(
+  item: StorePluginItem,
+  keyword: string,
+  locale: string,
+  displayKeywords: string[] = [],
+): boolean {
   return pluginSearchMatches(
     keyword,
     [
+      ...displayKeywords,
       item.name,
       item.id,
       item.marketplace,
@@ -447,7 +523,12 @@ export function storeItemMatches(item: StorePluginItem, keyword: string, locale:
       item.listing?.category ?? "",
       item.listing?.author ?? "",
     ],
-    [item.name, item.listing?.displayName, ...Object.values(item.listing?.displayNameI18n ?? {})],
+    [
+      ...displayKeywords,
+      item.name,
+      item.listing?.displayName,
+      ...Object.values(item.listing?.displayNameI18n ?? {}),
+    ],
   );
 }
 

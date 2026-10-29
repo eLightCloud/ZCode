@@ -1,3 +1,5 @@
+import { BUNDLED_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+import { useApplicationBrand } from "@/application-brand.js";
 import { useState, type ReactNode } from "react";
 import { Blocks } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
@@ -18,6 +20,9 @@ export function PluginIcon({
   iconClassName?: string;
   fallbackIcon?: ReactNode;
 }) {
+  const brand = useApplicationBrand();
+  // 指南属于产品帮助，安装身份保持原值；完整身份匹配避免覆盖同名个人插件。
+  const useProductMark = Boolean(brand && isApplicationGuidePlugin(pluginId, src));
   const [failedSrc, setFailedSrc] = useState<string>();
   const resolvedSrc = resolvePluginIconSource(pluginId, src);
   const showImage = Boolean(resolvedSrc) && failedSrc !== resolvedSrc;
@@ -30,7 +35,9 @@ export function PluginIcon({
         className,
       )}
     >
-      {showImage ? (
+      {useProductMark && brand ? (
+        <brand.Mark className="size-full p-1 text-foreground" />
+      ) : showImage ? (
         <img
           src={resolvedSrc}
           alt=""
@@ -48,4 +55,17 @@ export function PluginIcon({
       )}
     </span>
   );
+}
+
+/** Only the product-owned guide may adopt application artwork; personal plugins keep theirs. */
+export function isApplicationGuidePlugin(pluginId: string | undefined, icon?: string): boolean {
+  if (pluginId) {
+    const separator = pluginId.lastIndexOf("@");
+    const marketplace = pluginId.slice(separator + 1);
+    return (
+      pluginId.slice(0, separator) === "zcode-guide" &&
+      (marketplace === BUNDLED_PLUGIN_MARKETPLACE_ID || marketplace === "zcode-plugins-official")
+    );
+  }
+  return icon === "https://cdn-zcode.z.ai/zcode/official-plugin/assets/zcode-guide/icon.png";
 }

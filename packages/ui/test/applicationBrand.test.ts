@@ -1,3 +1,4 @@
+import { usePluginPresentation } from "@/settings/pluginStoreListing.js";
 // @vitest-environment jsdom
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -125,3 +126,38 @@ it("localizes application navigation without renaming native sources", () => {
   );
   expect(configured).toContain("企业场景 / 插件市场");
 });
+
+it.each(["zh-CN", "en-US"])(
+  "brands guide catalog names and descriptions in %s while preserving personal sources",
+  (locale) => {
+    function GuidePresentation() {
+      const presentation = usePluginPresentation();
+      const native = {
+        id: "zcode-guide@zcode-plugins-official",
+        name: "zcode-guide",
+        marketplace: "zcode-plugins-official",
+        installed: true,
+        restorable: false,
+        orphaned: false,
+      };
+      const personal = { ...native, id: "zcode-guide@personal", marketplace: "personal" };
+      return createElement(
+        "div",
+        null,
+        createElement("span", null, presentation.resolveItemDisplayName(native, locale)),
+        createElement("p", null, presentation.resolveItemDescription(native, locale)),
+        createElement("aside", null, presentation.resolveItemDisplayName(personal, locale)),
+      );
+    }
+    const branded = renderToStaticMarkup(
+      createElement(ApplicationBrandProvider, {
+        brand: { ...brand, localizedNames: { "zh-CN": "翼辉睿观", "en-US": "eLight Vantage" } },
+        children: createElement(GuidePresentation),
+      }),
+    );
+    expect(branded).toContain(locale === "zh-CN" ? "翼辉睿观 使用指南" : "eLight Vantage Guide");
+    expect(branded).toContain("<aside>ZCode Guide</aside>");
+    expect(branded.split("<aside>")[0]).not.toMatch(/ZCode/);
+    expect(renderToStaticMarkup(createElement(GuidePresentation))).toContain("ZCode Guide");
+  },
+);

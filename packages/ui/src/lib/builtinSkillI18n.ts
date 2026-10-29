@@ -1,4 +1,4 @@
-import type { Locale, SkillScope } from "@zcode/shared";
+import { BUNDLED_PLUGIN_MARKETPLACE_ID, type Locale, type SkillScope } from "@zcode/shared";
 import { formatApplicationBrandMessage } from "@/application-brand.js";
 
 interface SkillDisplayCandidate {
@@ -7,6 +7,7 @@ interface SkillDisplayCandidate {
   path: string;
   scope: SkillScope;
   pluginName?: string;
+  pluginId?: string;
 }
 
 const OFFICIAL_BUILTIN_PLUGIN_NAMES = new Set([
@@ -44,7 +45,57 @@ const OFFICIAL_PLUGIN_PATH_MARKERS = [
   "/zcode-guide-plugin/",
 ];
 
+const GUIDE_SKILL_NAMES: Record<string, Record<Locale, string>> = {
+  "zcode-configuration-guide": { "zh-CN": "配置指南", "en-US": "Configuration guide" },
+  "diagnosing-commands": { "zh-CN": "命令排障", "en-US": "Command troubleshooting" },
+  "diagnosing-hooks": { "zh-CN": "钩子排障", "en-US": "Hook troubleshooting" },
+  "diagnosing-mcp": { "zh-CN": "MCP 排障", "en-US": "MCP troubleshooting" },
+  "diagnosing-plugins": { "zh-CN": "场景排障", "en-US": "Plugin troubleshooting" },
+  "diagnosing-skills": { "zh-CN": "技能排障", "en-US": "Skill troubleshooting" },
+};
+
+export function resolveSkillDisplayName(
+  skill: SkillDisplayCandidate,
+  locale?: Locale,
+  applicationName?: string,
+): string {
+  return applicationName && isOfficialBuiltinSkill(skill)
+    ? (GUIDE_SKILL_NAMES[skill.name]?.[locale ?? "en-US"] ?? skill.name)
+    : skill.name;
+}
+
 const BUILTIN_SKILL_DESCRIPTIONS: Record<string, Record<Locale, string>> = {
+  "zcode-configuration-guide": {
+    "zh-CN":
+      "配置 ZCode 的 MCP 服务、命令、技能、钩子、场景与工作区指令，了解配置位置、作用域和优先级。",
+    "en-US":
+      "Configure ZCode extension resources and workspace instructions, including locations, scopes, and precedence.",
+  },
+  "diagnosing-commands": {
+    "zh-CN": "诊断并修复 ZCode 命令缺失、覆盖冲突、格式错误和参数替换问题。",
+    "en-US":
+      "Diagnose and fix missing ZCode commands, conflicts, formatting errors, and argument substitution.",
+  },
+  "diagnosing-hooks": {
+    "zh-CN": "诊断并修复 ZCode 钩子的触发、匹配、脚本权限、超时与异常阻断问题。",
+    "en-US":
+      "Diagnose and fix ZCode hook triggers, matchers, script permissions, timeouts, and unexpected blocks.",
+  },
+  "diagnosing-mcp": {
+    "zh-CN": "在 ZCode 中诊断并修复 MCP 服务连接、工具发现、认证与超时问题。",
+    "en-US":
+      "Diagnose and fix MCP connections, tool discovery, authentication, and timeouts in ZCode.",
+  },
+  "diagnosing-plugins": {
+    "zh-CN": "诊断并修复 ZCode 场景来源、安装、启用、组件缺失与配置问题。",
+    "en-US":
+      "Diagnose and fix ZCode plugin sources, installation, activation, missing components, and configuration.",
+  },
+  "diagnosing-skills": {
+    "zh-CN": "诊断并修复 ZCode 技能发现、触发、覆盖、停用与文件格式问题。",
+    "en-US":
+      "Diagnose and fix ZCode skill discovery, triggering, shadowing, disabled skills, and file formatting.",
+  },
   "android-dev": {
     "zh-CN": "通过 android-emulator MCP 工具构建、运行、检查并轻量自动化 Android 应用。",
     "en-US":
@@ -232,6 +283,13 @@ export function resolveSkillDisplayDescription(
 function isOfficialBuiltinSkill(skill: SkillDisplayCandidate): boolean {
   if (skill.scope !== "plugin") {
     return false;
+  }
+  if (skill.pluginId) {
+    const marketplace = skill.pluginId.slice(skill.pluginId.lastIndexOf("@") + 1);
+    return (
+      (marketplace === BUNDLED_PLUGIN_MARKETPLACE_ID || marketplace === "zcode-plugins-official") &&
+      OFFICIAL_BUILTIN_PLUGIN_NAMES.has(skill.pluginId.slice(0, skill.pluginId.lastIndexOf("@")))
+    );
   }
   const pluginName = skill.pluginName?.trim();
   if (pluginName && OFFICIAL_BUILTIN_PLUGIN_NAMES.has(pluginName)) {

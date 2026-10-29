@@ -7,7 +7,11 @@ import { useSkills } from "@/hooks/useSkills.js";
 import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useApplicationBrand } from "@/application-brand.js";
-import { resolveSkillDisplayDescription, resolveSkillSourceLabel } from "@/lib/builtinSkillI18n.js";
+import {
+  resolveSkillDisplayDescription,
+  resolveSkillDisplayName,
+  resolveSkillSourceLabel,
+} from "@/lib/builtinSkillI18n.js";
 
 export function mapSkillsToMentionItemsForTest(
   skills: Array<{
@@ -17,6 +21,7 @@ export function mapSkillsToMentionItemsForTest(
     path: string;
     scope: SkillScope;
     pluginName?: string;
+    pluginId?: string;
   }>,
   locale?: Locale,
   applicationName?: string,
@@ -45,7 +50,7 @@ export function mapSkillsToMentionItemsForTest(
     return {
       id: `skill:${skill.id}`,
       category: "skills",
-      label: skill.name,
+      label: resolveSkillDisplayName(skill, locale, applicationName),
       description: description ? `${sourceLabel} · ${description}` : sourceLabel,
       value: skill.name,
       markdown: buildSkillMentionMarkdown(skill.name, skill.path),

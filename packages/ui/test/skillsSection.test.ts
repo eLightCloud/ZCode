@@ -451,6 +451,40 @@ describe("SkillsSection", () => {
     vi.resetModules();
   });
 
+  it("品牌指南的技能详情沿产品展示配置并保持技术路径准确", async () => {
+    const { ApplicationBrandProvider } = await import("../src/application-brand.js");
+    const { SkillsSection } = await import("../src/settings/SkillsSection.js");
+    const skill = {
+      id: "guide-config",
+      name: "zcode-configuration-guide",
+      description: "Configure ZCode",
+      path: "/cache/zcode-guide/skills/zcode-configuration-guide/SKILL.md",
+      scope: "plugin",
+      enabled: true,
+      pluginName: "zcode-guide",
+      pluginId: "zcode-guide@zcode-plugins-official",
+    };
+    mockSkillsState = [skill];
+    mockSelectedSkillState = skill;
+    mockLoadedSkillTargetKeyState = activeWorkspaceIdentity!;
+    useStateCallCount = 0;
+    const html = renderToStaticMarkup(
+      createElement(ApplicationBrandProvider, {
+        brand: { name: "eLight Vantage", Mark: () => createElement("svg"), Wordmark: () => null },
+        children: createElement(SkillsSection, {
+          workspacePath: activeWorkspacePath,
+          workspaceIdentity: activeWorkspaceIdentity,
+          scopeFilter: activeScopeFilter,
+          searchQuery: "",
+        }),
+      }),
+    );
+    expect(html).toContain("eLight Vantage Guide");
+    expect(html).toContain("Configuration guide");
+    expect(html).not.toContain("Configure ZCode");
+    expect(html).toContain(skill.path);
+  });
+
   it("顶部展示统一刷新按钮", async () => {
     await renderSkillsSection();
 

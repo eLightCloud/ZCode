@@ -1,3 +1,5 @@
+import { useApplicationBrand } from "@/application-brand.js";
+import { resolveSkillDisplayName, resolveSkillDisplayDescription } from "@/lib/builtinSkillI18n.js";
 /* eslint-disable max-lines -- 插件详情共享商店与已安装面板的组件、Hook 及配置呈现。 */
 import { useState, type ReactNode } from "react";
 import {
@@ -46,14 +48,12 @@ import {
   type PluginStoreActions,
 } from "@/settings/PluginStoreCard.js";
 import {
+  usePluginPresentation,
   isItemBusy,
   isTrustedImageUrl,
   isUiPluginItem,
   KNOWN_CATEGORY_LABEL_IDS,
-  resolveItemDescription,
   resolveStoreCategory,
-  resolveItemDisplayName,
-  resolveLocalizedList,
   type StorePluginItem,
   isPluginUpdatePending,
 } from "@/settings/pluginStoreListing.js";
@@ -125,12 +125,12 @@ export function PluginStoreDetailView({
   advanced?: ReactNode;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const { resolveItemDisplayName, resolveItemDescription, resolveItemExamplePrompts } =
+    usePluginPresentation();
   const displayName = resolveItemDisplayName(item, locale);
   const description = resolveItemDescription(item, locale);
   const heroImage = item.listing?.heroImage;
-  const examplePrompts =
-    resolveLocalizedList(locale, item.listing?.examplePrompts, item.listing?.examplePromptsI18n) ??
-    [];
+  const examplePrompts = resolveItemExamplePrompts(item, locale);
   const describeMetadata =
     describeEntry?.status === "loaded" ? describeEntry.data?.metadata : undefined;
 
@@ -267,7 +267,9 @@ export function PluginStoreDetailView({
           </Button>
         </div>
       ) : (
-        orderedGroups.map((group) => <ComponentSection key={group.kind} group={group} />)
+        orderedGroups.map((group) => (
+          <ComponentSection key={group.kind} group={group} pluginId={item.id} />
+        ))
       )}
 
       {/* 信息区：listing 优先，manifest（运行时/describe）回退；无值整行省略（ADR-0001）。 */}
@@ -404,8 +406,23 @@ function HeroSection({
   );
 }
 
-function ComponentSection({ group }: { group: PluginComponentDisplayGroup }) {
-  const { intl } = useZCodeIntl();
+function ComponentSection({
+  group,
+  pluginId,
+}: {
+  group: PluginComponentDisplayGroup;
+  pluginId: string;
+}) {
+  const { intl, locale } = useZCodeIntl();
+  const brand = useApplicationBrand();
+  const applicationName = brand?.localizedNames?.[locale] ?? brand?.name;
+  const skill = (item: { name: string; description?: string }) => ({
+    ...item,
+    description: item.description ?? "",
+    path: "",
+    scope: "plugin" as const,
+    pluginId,
+  });
   const Icon = SECTION_ICONS[group.kind];
   return (
     <section data-testid="plugin-store-component-section" data-component-kind={group.kind}>
@@ -426,11 +443,15 @@ function ComponentSection({ group }: { group: PluginComponentDisplayGroup }) {
             </span>
             <div className="min-w-0 flex-1">
               <div className="truncate text-ui-base font-medium text-foreground">
-                {componentItem.name}
+                {group.kind === "skill"
+                  ? resolveSkillDisplayName(skill(componentItem), locale, applicationName)
+                  : componentItem.name}
               </div>
               {componentItem.description ? (
                 <div className="mt-0.5 line-clamp-1 text-ui-base text-foreground-subtle">
-                  {componentItem.description}
+                  {group.kind === "skill"
+                    ? resolveSkillDisplayDescription(skill(componentItem), locale, applicationName)
+                    : componentItem.description}
                 </div>
               ) : null}
             </div>

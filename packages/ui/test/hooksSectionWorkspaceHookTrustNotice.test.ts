@@ -116,7 +116,9 @@ vi.mock("@/settings/SettingsResourceHeaderActions.js", () => ({
   SettingsResourceHeaderActions: () => null,
 }));
 vi.mock("@/settings/HooksList.js", () => ({ HooksList: () => null }));
-vi.mock("@/settings/pluginStoreListing.js", () => ({
+// 保留真实的展示 hook；只替换本用例需要的格式化函数，避免新增导出令信任提示回归失效。
+vi.mock("@/settings/pluginStoreListing.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/settings/pluginStoreListing.js")>()),
   formatCanonicalPluginName: (name: string) => name,
 }));
 vi.mock("@/components/ui/button.js", () => ({

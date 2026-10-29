@@ -1,3 +1,5 @@
+import { useApplicationBrand } from "@/application-brand.js";
+import { resolveSkillDisplayName, resolveSkillDisplayDescription } from "@/lib/builtinSkillI18n.js";
 /* eslint-disable max-lines -- 技能管理面板需共享筛选、安装与开关交互状态，集中维护更便于一致性 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -48,7 +50,7 @@ import {
   PluginSearchEmptyState,
 } from "@/settings/PluginInstallEmptyState.js";
 import {
-  resolvePluginDisplayName,
+  usePluginPresentation,
   resolveUniquePluginListingByName,
 } from "@/settings/pluginStoreListing.js";
 import { groupSkillsByPlugin } from "@/settings/pluginManagedResourceGroups.js";
@@ -177,6 +179,10 @@ export function SkillsSection({
   cacheAuthorityKey,
 }: SkillsSectionProps) {
   const { intl, locale } = useZCodeIntl();
+  const brand = useApplicationBrand();
+  const applicationName = brand?.localizedNames?.[locale] ?? brand?.name;
+  const noDescription = intl.formatMessage({ id: "settings.skills.noDescription" });
+  const { resolvePluginDisplayName } = usePluginPresentation();
   const platform = usePlatform();
   const baseServices = useBaseWorkspaceServices();
   const plugins = usePluginManagementStore((state) => state.plugins);
@@ -211,7 +217,6 @@ export function SkillsSection({
   const [loadedSkillTargetKey, setLoadedSkillTargetKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const query = searchQuery;
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null);
   useEffect(() => {
     onDetailOpenChange?.(selectedSkill !== null);
@@ -266,33 +271,27 @@ export function SkillsSection({
 
   const renderScopeLabel = useCallback(
     (skill: SkillSummary): string => {
-      switch (skill.scope) {
-        case "workspace":
-          // workspace 作用域显示 workspace 名，没有 workspace 时退回到通用文案。
-          return (
-            workspaceLabel ||
-            intl.formatMessage({
-              id: "settings.skills.scope.workspaceFallback",
-            })
-          );
-        case "plugin":
-          return skill.pluginName?.trim()
-            ? resolvePluginDisplayName(
-                {
-                  name: skill.pluginName,
-                  listing:
-                    (skill.pluginId ? pluginListingById.get(skill.pluginId) : undefined) ??
-                    resolveUniquePluginListingByName(availablePlugins, skill.pluginName),
-                },
-                locale,
-              )
-            : intl.formatMessage({ id: "settings.skills.scope.plugin" });
-        case "user":
-        default:
-          return intl.formatMessage({ id: "settings.skills.scope.personal" });
+      if (skill.scope === "workspace") {
+        return (
+          workspaceLabel || intl.formatMessage({ id: "settings.skills.scope.workspaceFallback" })
+        );
       }
+      if (skill.scope !== "plugin")
+        return intl.formatMessage({ id: "settings.skills.scope.personal" });
+      if (!skill.pluginName?.trim())
+        return intl.formatMessage({ id: "settings.skills.scope.plugin" });
+      return resolvePluginDisplayName(
+        {
+          id: skill.pluginId,
+          name: skill.pluginName,
+          listing:
+            (skill.pluginId ? pluginListingById.get(skill.pluginId) : undefined) ??
+            resolveUniquePluginListingByName(availablePlugins, skill.pluginName),
+        },
+        locale,
+      );
     },
-    [availablePlugins, intl, locale, pluginListingById, workspaceLabel],
+    [availablePlugins, intl, locale, pluginListingById, workspaceLabel, resolvePluginDisplayName],
   );
 
   const renderDiagnosticCodeLabel = useCallback(
@@ -490,8 +489,12 @@ export function SkillsSection({
     skills,
   ]);
   const groupedSkills = useMemo(
-    () => groupSkillsByPlugin(scopedProviderSkills, query),
-    [query, scopedProviderSkills],
+    () =>
+      groupSkillsByPlugin(scopedProviderSkills, searchQuery, (skill) => [
+        resolveSkillDisplayName(skill, locale, applicationName),
+        resolveSkillDisplayDescription(skill, locale, applicationName),
+      ]),
+    [searchQuery, scopedProviderSkills, locale, applicationName],
   );
   const skillSourceGroups = useMemo(() => {
     return groupScopedSkillsBySource(
@@ -502,17 +505,17 @@ export function SkillsSection({
     );
   }, [groupedSkills.local, groupedSkills.plugin, intl, scopeFilter, workspaceLabel]);
   const filteredSkillCount = groupedSkills.local.length + groupedSkills.plugin.length;
-  const hasEmptySearchResult = Boolean(query.trim()) && filteredSkillCount === 0;
+  const hasEmptySearchResult = Boolean(searchQuery.trim()) && filteredSkillCount === 0;
   const directInstalledSkillCount = scopedProviderSkills.filter(
     (skill) => skill.scope !== "plugin",
   ).length;
-  const hideInstalledGroup = Boolean(query.trim()) && groupedSkills.local.length === 0;
+  const hideInstalledGroup = Boolean(searchQuery.trim()) && groupedSkills.local.length === 0;
   const pluginIconItemById = useMemo(
     () =>
       new Map(
         plugins.map((plugin) => [
           plugin.id,
-          { name: plugin.name, listing: pluginListingById.get(plugin.id) },
+          { id: plugin.id, name: plugin.name, listing: pluginListingById.get(plugin.id) },
         ]),
       ),
     [pluginListingById, plugins],
@@ -590,6 +593,7 @@ export function SkillsSection({
       ? pluginIconItemById.get(skill.pluginId)
       : skill.pluginName
         ? {
+            id: skill.pluginId,
             name: skill.pluginName,
             listing: resolveUniquePluginListingByName(availablePlugins, skill.pluginName),
           }
@@ -622,13 +626,12 @@ export function SkillsSection({
           }}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-ui-base font-medium text-foreground">{skill.name}</span>
+            <span className="truncate text-ui-base font-medium text-foreground">
+              {resolveSkillDisplayName(skill, locale, applicationName)}
+            </span>
           </div>
           <div className="mt-0.5 truncate text-ui-sm text-foreground-subtle">
-            {skill.description ||
-              intl.formatMessage({
-                id: "settings.skills.noDescription",
-              })}
+            {resolveSkillDisplayDescription(skill, locale, applicationName) || noDescription}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -704,9 +707,9 @@ export function SkillsSection({
                     label: intl.formatMessage({ id: "settings.plugins.title" }),
                     onSelect: () => setSelectedSkill(null),
                   },
-                  { label: detailSkill.name },
+                  { label: resolveSkillDisplayName(detailSkill, locale, applicationName) },
                 ]
-              : [{ label: detailSkill.name }]
+              : [{ label: resolveSkillDisplayName(detailSkill, locale, applicationName) }]
           }
           onSectionSelect={
             showMarketplaceBreadcrumb && onOpenPluginStore
@@ -826,7 +829,7 @@ export function SkillsSection({
             </div>
             {groupedSkills.local.length > 0 ? (
               renderSkillList(groupedSkills.local)
-            ) : directInstalledSkillCount === 0 && !query.trim() ? (
+            ) : directInstalledSkillCount === 0 && !searchQuery.trim() ? (
               <PluginInstallEmptyState
                 title={intl.formatMessage({
                   id: "settings.plugin.skills.emptyInstalledTitle",
@@ -867,6 +870,7 @@ export function SkillsSection({
                   count={group.skills.length}
                   title={resolvePluginDisplayName(
                     {
+                      id: group.pluginId,
                       name: group.label,
                       listing:
                         (group.pluginId ? pluginListingById.get(group.pluginId) : undefined) ??
@@ -892,7 +896,9 @@ export function SkillsSection({
           {detailSkill ? (
             <div className="flex min-h-0 flex-col">
               <DialogHeader className="border-b border-popover-border px-4 pt-4 pb-3">
-                <DialogTitle className="truncate pr-8 text-ui-lg">{detailSkill.name}</DialogTitle>
+                <DialogTitle className="truncate pr-8 text-ui-lg">
+                  {resolveSkillDisplayName(detailSkill, locale, applicationName)}
+                </DialogTitle>
               </DialogHeader>
               <div className="min-h-0 space-y-4 overflow-auto px-4 py-5">
                 <div className="grid gap-1.5">
@@ -902,66 +908,38 @@ export function SkillsSection({
                     })}
                   </div>
                   <div className="max-h-40 overflow-auto whitespace-pre-wrap text-ui-base/relaxed text-foreground-subtle">
-                    {detailSkill.description ||
-                      intl.formatMessage({
-                        id: "settings.skills.noDescription",
-                      })}
+                    {resolveSkillDisplayDescription(detailSkill, locale, applicationName) ||
+                      noDescription}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.scope",
-                    })}
-                    value={renderScopeLabel(detailSkill)}
-                  />
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.status",
-                    })}
-                    value={
-                      detailSkill.enabled
-                        ? intl.formatMessage({
-                            id: "settings.skills.detail.enabled",
-                          })
-                        : intl.formatMessage({
-                            id: "settings.skills.detail.disabled",
-                          })
-                    }
-                  />
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.version",
-                    })}
-                    value={detailSkill.metadata?.version}
-                    mono
-                  />
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.slug",
-                    })}
-                    value={detailSkill.metadata?.slug}
-                    mono
-                  />
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.publishedAt",
-                    })}
-                    value={selectedSkillPublishedAt}
-                    mono
-                  />
-                  <SkillDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.ownerId",
-                    })}
-                    value={detailSkill.metadata?.ownerId}
-                    mono
-                    className="col-span-2"
-                  />
+                  {(
+                    [
+                      ["scope", renderScopeLabel(detailSkill)],
+                      [
+                        "status",
+                        intl.formatMessage({
+                          id: detailSkill.enabled
+                            ? "settings.skills.detail.enabled"
+                            : "settings.skills.detail.disabled",
+                        }),
+                      ],
+                      ["version", detailSkill.metadata?.version],
+                      ["slug", detailSkill.metadata?.slug],
+                      ["publishedAt", selectedSkillPublishedAt],
+                      ["ownerId", detailSkill.metadata?.ownerId],
+                    ] as const
+                  ).map(([field, value]) => (
+                    <SkillDetailField
+                      key={field}
+                      label={intl.formatMessage({ id: `settings.skills.detail.${field}` })}
+                      value={value}
+                      mono={field !== "scope" && field !== "status"}
+                      className={field === "ownerId" ? "col-span-2" : undefined}
+                    />
+                  ))}
                   <SkillPathDetailField
-                    label={intl.formatMessage({
-                      id: "settings.skills.detail.path",
-                    })}
+                    label={intl.formatMessage({ id: "settings.skills.detail.path" })}
                     path={detailSkill.path}
                     openLabel={intl.formatMessage({
                       id: "settings.skills.detail.openPath",

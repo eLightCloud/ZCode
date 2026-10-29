@@ -72,3 +72,25 @@ describe("Plugin Store try prompt", () => {
     });
   });
 });
+
+it("uses the application guide label for example prefills without changing plugin identity", () => {
+  const item = pluginItem({ id: "zcode-guide@zcode-plugins-official", name: "zcode-guide" });
+  const prefill = buildPluginStoreTryMention({
+    item,
+    locale: "zh-CN",
+    displayName: "翼辉睿观 使用指南",
+  });
+  expect(prefill.label).toBe("翼辉睿观 使用指南");
+  expect(prefill.value).toBe(item.id);
+  expect(prefill.markdown).toBe(
+    "[@翼辉睿观 使用指南](plugin://zcode-guide@zcode-plugins-official)",
+  );
+  expect(
+    buildPluginStoreTryPrompt({
+      item,
+      locale: "zh-CN",
+      prompt: "配置帮助",
+      displayName: prefill.label,
+    }),
+  ).toBe(`${prefill.markdown} 配置帮助`);
+});

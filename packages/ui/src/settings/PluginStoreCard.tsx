@@ -20,11 +20,10 @@ import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
 import {
+  usePluginPresentation,
   canUpdatePluginItem,
   isItemBusy,
   isUiPluginItem,
-  resolveItemDescription,
-  resolveItemDisplayName,
   type StorePluginItem,
 } from "@/settings/pluginStoreListing.js";
 import { runUserAction } from "@/lib/userActionTelemetry.js";
@@ -317,6 +316,7 @@ export function PluginStoreCard({
   locale: string;
 }) {
   const { intl } = useZCodeIntl();
+  const { resolveItemDisplayName, resolveItemDescription } = usePluginPresentation();
   const displayName = resolveItemDisplayName(item, locale);
   const description = resolveItemDescription(item, locale);
   // 卡片整行统一进入详情；打开 UI 只走会话右侧市场提供的「打开」按钮。

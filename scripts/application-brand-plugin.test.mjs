@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { applicationRootPlugin } from "./application-root-plugin.mjs";
 import { test, after } from "node:test";
 import { execFileSync } from "node:child_process";
@@ -151,4 +152,21 @@ test("branded packaging applies display identity to the real package description
     encoding: "utf8",
   });
   assert.equal(JSON.parse(value), "Example Product Desktop App");
+});
+
+test("guide icon uses the product asset across React and non-React consumers", async () => {
+  const plugin = await applicationBrandPlugin({ ZCODE_APPLICATION_BRAND_MANIFEST: manifest });
+  assert.equal(
+    plugin.resolveId("@/assets/plugin-icons/zcode-guide.png"),
+    resolve(fixture, "assets/app-icon-192.png"),
+  );
+  assert.equal(
+    plugin.resolveId(
+      fileURLToPath(
+        new URL("../packages/ui/src/assets/plugin-icons/zcode-guide.png", import.meta.url),
+      ),
+    ),
+    resolve(fixture, "assets/app-icon-192.png"),
+  );
+  assert.equal(plugin.resolveId("@/assets/plugin-icons/documents.png"), null);
 });

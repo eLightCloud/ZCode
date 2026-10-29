@@ -128,3 +128,44 @@ describe("skills mention provider", () => {
     expect(skills).toEqual(original);
   });
 });
+
+it.each(["zh-CN", "en-US"] as const)(
+  "brands all six builtin guide suggestions in %s without changing execution references",
+  (locale) => {
+    const names = [
+      "diagnosing-commands",
+      "diagnosing-hooks",
+      "diagnosing-mcp",
+      "diagnosing-plugins",
+      "diagnosing-skills",
+      "zcode-configuration-guide",
+    ];
+    const skills = names.map((name) => ({
+      id: name,
+      name,
+      description: "Use ZCode configuration",
+      scope: "plugin" as const,
+      path: `/cache/zcode-plugins-official/zcode-guide/0.3.0/skills/${name}/SKILL.md`,
+      pluginName: "zcode-guide",
+      pluginId: "zcode-guide@zcode-plugins-official",
+    }));
+    const brand = locale === "zh-CN" ? "翼辉睿观" : "eLight Vantage";
+    const items = mapSkillsToMentionItemsForTest(skills, locale, brand);
+    for (const [i, item] of items.entries()) {
+      expect(item.label).not.toMatch(/zcode/i);
+      expect(item.description).toContain(brand);
+      expect(item.description).not.toMatch(/zcode/i);
+      expect(item.value).toBe(names[i]);
+      expect(item.markdown).toContain(skills[i]!.path);
+    }
+    const personal = {
+      ...skills[5]!,
+      pluginId: "zcode-guide@personal",
+      path: "/personal/SKILL.md",
+    };
+    expect(mapSkillsToMentionItemsForTest([personal], locale, brand)[0]).toMatchObject({
+      label: personal.name,
+      description: expect.stringContaining(personal.description),
+    });
+  },
+);

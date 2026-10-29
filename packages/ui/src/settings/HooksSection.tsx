@@ -25,7 +25,7 @@ import { useWorkspaceHookReviewStore } from "@/store/workspaceHookReviewStore.js
 import { PluginScopeMenu, getPluginWorkspaceKey } from "@/settings/PluginScopeMenu.js";
 import { PluginLoadingState, PluginSearchEmptyState } from "@/settings/PluginInstallEmptyState.js";
 import {
-  resolvePluginDisplayName,
+  usePluginPresentation,
   resolveUniquePluginListingByName,
 } from "@/settings/pluginStoreListing.js";
 import {
@@ -160,6 +160,7 @@ export function HooksSection({
   settingsSourceServerId,
 }: HooksSectionProps) {
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName } = usePluginPresentation();
   const confirmDialog = useConfirmDialog();
   const currentServices = useServices();
   const hooksState = useHooksStore();
@@ -596,6 +597,7 @@ export function HooksSection({
           formatPluginName={(name, pluginId) =>
             resolvePluginDisplayName(
               {
+                id: pluginId,
                 name,
                 listing:
                   (pluginId ? pluginListingById.get(pluginId) : undefined) ??

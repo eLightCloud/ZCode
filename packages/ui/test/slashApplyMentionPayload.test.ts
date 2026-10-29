@@ -92,3 +92,19 @@ describe("buildSlashApplyMentionPayload", () => {
     expect(payload.markdown).toBe("/review");
   });
 });
+
+it("keeps a localized guide chip label separate from its canonical execution reference", () => {
+  const path = "/cache/zcode-guide/skills/zcode-configuration-guide/SKILL.md";
+  const payload = buildSlashApplyMentionPayload({
+    id: "skill:guide",
+    trigger: "/",
+    label: "配置指南",
+    value: "zcode-configuration-guide",
+    description: "配置翼辉睿观",
+    data: { path },
+  });
+  expect(payload.label).toBe("配置指南");
+  expect(payload.value).toBe("zcode-configuration-guide");
+  expect(payload.markdown).toContain(path);
+  expect(payload.markdown).toContain("$zcode-configuration-guide");
+});

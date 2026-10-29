@@ -14,7 +14,7 @@ export function buildSlashApplyMentionPayload(
     return {
       id: suggestion.id,
       category: "skills",
-      label: suggestion.value,
+      label: suggestion.label?.replace(/^\$/, "") || suggestion.value,
       value: suggestion.value,
       markdown: buildSkillMentionMarkdown(suggestion.value, suggestion.data?.path),
       description: suggestion.description,

@@ -26,7 +26,7 @@ import {
   PluginLoadingState,
   PluginSearchEmptyState,
 } from "@/settings/PluginInstallEmptyState.js";
-import { resolvePluginDisplayName } from "@/settings/pluginStoreListing.js";
+import { usePluginPresentation } from "@/settings/pluginStoreListing.js";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
 import {
   selectCommandsForScope,
@@ -67,6 +67,7 @@ export function CommandsSection({
   cacheAuthorityKey,
 }: CommandsSectionProps) {
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName } = usePluginPresentation();
   const confirmDialog = useConfirmDialog();
 
   const currentWorkspaceKey = workspaceIdentity?.trim() || workspacePath || "";
@@ -495,6 +496,7 @@ export function CommandsSection({
                 count={items.length}
                 title={resolvePluginDisplayName(
                   {
+                    id: pluginId,
                     name: items[0]?.pluginName ?? pluginId,
                     listing: pluginListingById.get(pluginId),
                   },

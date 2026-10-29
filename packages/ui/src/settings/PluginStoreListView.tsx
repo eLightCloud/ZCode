@@ -10,15 +10,14 @@ import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
 import { PluginStoreCard, type PluginStoreActions } from "@/settings/PluginStoreCard.js";
 import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
 import {
+  usePluginPresentation,
   FALLBACK_CATEGORY,
   KNOWN_CATEGORY_LABEL_IDS,
   groupItemsByCategory,
   resolvePluginStoreSegment,
   isUiPluginItem,
-  resolveItemDisplayName,
   selectFeaturedItems,
   sortPersonalMarketplaceGroups,
-  storeItemMatches,
   type PersonalMarketplaceGroup,
   type StorePluginItem,
 } from "@/settings/pluginStoreListing.js";
@@ -70,6 +69,7 @@ export function PluginStoreListView({
   onSegmentChange: (segment: PluginStoreSegment) => void;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const { resolveItemDisplayName, storeItemMatches } = usePluginPresentation();
   const isOfficeMode = useIsOfficeMode();
   const modeOrder = isOfficeMode ? order?.work : order?.code;
   const keyword = query.trim().toLowerCase();
@@ -164,7 +164,7 @@ export function PluginStoreListView({
       }),
     );
     return sortPersonalMarketplaceGroups(titled, marketplaces, locale);
-  }, [intl, locale, marketplaces, personalItems]);
+  }, [intl, locale, marketplaces, personalItems, resolveItemDisplayName]);
 
   const searchResults = useMemo(() => {
     if (!keyword) return [];
@@ -176,7 +176,7 @@ export function PluginStoreListView({
           locale,
         ),
       );
-  }, [segmentItems, keyword, locale]);
+  }, [segmentItems, keyword, locale, storeItemMatches, resolveItemDisplayName]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups((current) => ({
@@ -405,6 +405,7 @@ function CollapsibleCardGroup({
   locale: string;
 }) {
   const { intl } = useZCodeIntl();
+  const { resolveItemDisplayName } = usePluginPresentation();
   const visible = expanded ? items : items.slice(0, CATEGORY_VISIBLE_LIMIT);
   const hidden = expanded ? [] : items.slice(CATEGORY_VISIBLE_LIMIT);
   const hiddenNames = hidden.slice(0, 2).map((item) => resolveItemDisplayName(item, locale));

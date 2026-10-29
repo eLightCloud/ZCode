@@ -125,7 +125,7 @@ export function buildSubagentSuggestions(
 
 export function buildSkillSuggestions(
   skills: Array<
-    Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope" | "pluginName">
+    Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope" | "pluginName" | "pluginId">
   >,
   locale?: Locale,
   applicationName?: string,
@@ -134,7 +134,7 @@ export function buildSkillSuggestions(
     id: item.id,
     trigger: "/",
     value: item.value,
-    label: `$${item.value}`,
+    label: item.label === item.value ? `$${item.value}` : item.label,
     description: item.description,
     keywords: [...new Set([...(item.keywords ?? []), "skill", "skills", item.value])],
     data: item.data,

@@ -76,7 +76,7 @@ import {
   PluginSearchEmptyState,
 } from "@/settings/PluginInstallEmptyState.js";
 import {
-  resolvePluginDisplayName,
+  usePluginPresentation,
   resolveUniquePluginListingByName,
 } from "@/settings/pluginStoreListing.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
@@ -1276,6 +1276,7 @@ export function SubagentsSection({
   settingsSourceServerId,
 }: SubagentsSectionProps) {
   const { intl, locale } = useZCodeIntl();
+  const { resolvePluginDisplayName } = usePluginPresentation();
   const confirmDialog = useConfirmDialog();
   const plugins = usePluginManagementStore((state) => state.plugins);
   const availablePlugins = usePluginManagementStore((state) => state.availablePlugins);
@@ -1881,6 +1882,7 @@ export function SubagentsSection({
                 count={items.length}
                 title={resolvePluginDisplayName(
                   {
+                    id: pluginId,
                     name: items[0]?.pluginName ?? pluginId,
                     listing:
                       (items[0]?.pluginId ? pluginListingById.get(items[0].pluginId) : undefined) ??

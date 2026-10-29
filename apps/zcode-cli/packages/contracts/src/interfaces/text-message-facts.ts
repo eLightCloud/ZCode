@@ -158,6 +158,8 @@ export const portableMessageInfoSchema = z.discriminatedUnion("role", [
               code: z.union([z.string(), z.number()]).optional(),
               statusCode: z.number().optional(),
               isRetryable: z.boolean().optional(),
+              // 原生 Stop 保存取消终态；冷恢复依赖它，不能遗漏或抹去后再同步。
+              turnResult: z.literal("cancelled").optional(),
               // 原生失败消息已持久归因；缺少白名单会误拒绝完整检查点，不能靠丢字段修复。
               attribution: z
                 .custom<ErrorAttribution>(

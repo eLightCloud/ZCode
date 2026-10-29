@@ -59,6 +59,17 @@ it("preserves actual canonical V4 input and its exact legacy projection in text 
   expect(textCheckpointSchema.parse(value)).toEqual(value);
   expect(textCheckpointSchema.safeParse({ ...value, version: 1 }).success).toBe(false);
 });
+it.each(["edit", "plan", "yolo"])("preserves settled native %s submission history", (mode) => {
+  const value = actualInput();
+  const user = value.messages[0]!.info;
+  if (user.role !== "user" || !user.metadata || !("conversationInputIntent" in user.metadata))
+    throw new Error("synthetic_input_missing");
+  user.metadata.conversationInputIntent.mode = mode;
+  user.metadata.inputIntent.mode = mode;
+  expect(textCheckpointSchema.parse(value)).toEqual(value);
+  user.metadata.conversationInputIntent.mode = "unknown";
+  expect(textCheckpointSchema.safeParse(value).success).toBe(false);
+});
 it.each([
   "unknown",
   "wrong_client",

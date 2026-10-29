@@ -17,3 +17,6 @@
 隔离 Core / Host / Nginx / Web 纵切证明。
 
 同一 Host 接合同时覆盖既有 createConversationSyncHost 的捕获/索引恢复 façade；只有 TaskIndexRepo 和 Core 原 writer 写入，仍没有新增 Host 或接纳队列。该源路径纳管不改实现。
+
+同步捕获、接续 control / content 与索引屏障经现有 TaskIndexRepo.listConversationSyncTargets 的同一 resolveConversationSyncTarget 解析准确 session 目录。原生 Agent 服务由可信装配注入该解析器，不接受浏览器自报目录；多目录同 ID 明确拒绝，解析失败不得退回 default。仅无索引的首次导入沿原默认命名空间，Core 继续核对实际持库目录、workspaceID 与 taskType，未知存量不因 fallback 改绑。目录映射不缓存、不迁移文件、不改变会话 ID，也不新建持久化 owner。既有控制请求日志继续关联 session / operation / action，目录路由不输出路径或正文。
+索引恢复接受已由原生登记用途的准确独立 draft，仍要求原操作屏障，并拒绝目录项目、identity 别名和附加执行目录；不能仅凭目录名扩大资格。

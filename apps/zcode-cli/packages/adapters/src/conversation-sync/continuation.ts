@@ -252,6 +252,12 @@ export function createConversationContinuation(options: {
         saved,
         "primary",
         input.targetModel,
+        // 原位首次登记不应把排除私有推理与本机配置的同步投影覆盖回来源。
+        state.selected === null &&
+          state.candidates.length === 1 &&
+          saved.generation === 0 &&
+          saved.location === input.target &&
+          input.targetModel === undefined,
       );
       const receipt = await command(scope, input, "select", {
         kind: "select",

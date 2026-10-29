@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { DatabaseSync } from "node:sqlite";
 import type { Logger, SessionId, SessionContinuationStorePort } from "@zcode/contracts";
 import { textCheckpointSchema, checkpointArtifactUris } from "@zcode/contracts";
@@ -205,7 +206,11 @@ export function controlContinuation(
           refs.some((uri) => files.filter((file) => file.uri === uri).length !== 1)
         )
           throw new ConversationRuntimeError("artifact_manifest");
-        const data = JSON.stringify({ checkpoint, management: input.management });
+        const data = JSON.stringify({
+          checkpoint,
+          management: input.management,
+          ...(input.preserveSource ? { preserveSource: true } : {}),
+        });
         db.prepare(
           "update session_continuation set state='staged',digest=?,staged_json=?,branch_mode=?,files_json=? where session_id=?",
         ).run(
@@ -228,9 +233,12 @@ export function controlContinuation(
         )
           throw new ConversationRuntimeError("target_ineligible");
         // Existing target must itself be fully portable; never discard unknown state.
+        let sourceUnchanged = false;
+        const staged = JSON.parse(row.staged_json);
         if (old) {
           db.exec("commit");
-          exportTextCheckpoint(db, { sessionID: input.session as SessionId }, logger);
+          const local = exportTextCheckpoint(db, { sessionID: input.session as SessionId }, logger);
+          sourceUnchanged = isDeepStrictEqual(JSON.parse(JSON.stringify(local)), staged.checkpoint);
           db.exec("begin immediate");
           row = read();
           if (
@@ -241,12 +249,23 @@ export function controlContinuation(
           )
             throw new ConversationRuntimeError("operation_conflict");
         }
-        importTextCheckpoint(
-          db,
-          { checkpoint: JSON.parse(row.staged_json).checkpoint, target },
-          logger,
-          true,
-        );
+        // 只在可信原位登记且投影准确相同的情况下保留源记录；跨位置恢复不携带此标记。
+        if (staged.preserveSource && !sourceUnchanged)
+          throw new ConversationRuntimeError("checkpoint_changed");
+        if (!staged.preserveSource)
+          importTextCheckpoint(
+            db,
+            { checkpoint: JSON.parse(row.staged_json).checkpoint, target },
+            logger,
+            true,
+          );
+        if (staged.preserveSource)
+          logger?.info("Native source enrollment preserved", {
+            event: "conversation.continuation",
+            sessionId: input.session,
+            operationId: input.operation,
+            outcome: "source_preserved",
+          });
         db.prepare(
           "update session_continuation set state='applied',staged_json=null where session_id=?",
         ).run(input.session);

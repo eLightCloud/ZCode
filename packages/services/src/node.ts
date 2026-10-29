@@ -1,7 +1,10 @@
 import { IApplicationHostService } from "./application-host/contract.js";
 export type { ApplicationHostControlPort } from "./application-host/contract.js";
 import { createApplicationHostService } from "./application-host/applicationHostService.js";
-import { createConversationSyncHost } from "./session/conversationSyncHost.js";
+import {
+  createConversationSyncHost,
+  resolveConversationSyncTarget,
+} from "./session/conversationSyncHost.js";
 import {
   createRemoteProjectService,
   IRemoteProjectService,
@@ -2271,6 +2274,8 @@ export function createLocalServices(options: {
     onConversationRuntimeReady: (port) => {
       conversationRuntime = port;
     },
+    resolveConversationWorkspace: async (session) =>
+      (await resolveConversationSyncTarget(taskIndexRepo, session)).workspacePath,
     ...(agentAccountProviderConfigSource
       ? { accountProviderConfigSource: agentAccountProviderConfigSource }
       : {}),

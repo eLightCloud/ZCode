@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import {ApplicationPeripheralsProvider, type ApplicationPeripherals} from "@/root/ApplicationPeripherals.js";
 import { render, cleanup, act } from "@testing-library/react";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import { RemoteProjectPresentationProvider } from "@/hooks/RemoteProjectPresentationContext.js";
@@ -258,7 +259,9 @@ describe("WorkspaceHeaderTitleSection", () => {
     capturedGitBranchSwitcherProps.length = 0;
     const { WorkspaceHeaderTitleSection } = await import("@/WorkspaceHeaderSections.js");
 
-    const html = renderToStaticMarkup(
+    const renderStatus = vi.fn(() => createElement("button", {"aria-label": "会话已同步"}));
+    const peripherals: ApplicationPeripherals = {nativeCloudEnabled: false, openHelp() {}, openFeedback() {}, openShare() {}, renderModelPlans() {return null;}, renderConversationStatus: renderStatus};
+    const title = (
       createElement(WorkspaceHeaderTitleSection, {
         workspaceAbsPath: "/workspace/zcode-cli",
         projectName: "zcode-cli",
@@ -286,8 +289,13 @@ describe("WorkspaceHeaderTitleSection", () => {
         selectedEditor: null,
         simplifyForNarrowRemote: true,
         onRefreshGit: vi.fn(),
-      }),
+      })
     );
+    const html = renderToStaticMarkup(createElement(ApplicationPeripheralsProvider, {value: peripherals, children: title}));
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    expect(parsed.querySelector("h1")?.nextElementSibling?.hasAttribute("data-conversation-title-status")).toBe(true);
+    expect(parsed.querySelectorAll('[aria-label="会话已同步"]')).toHaveLength(1);
+    expect(renderStatus).toHaveBeenCalledWith({sessionId: "session-1", workspacePath: "/workspace/zcode-cli"});
 
     expect(capturedGitBranchSwitcherProps).toHaveLength(0);
     expect(html).toContain('data-icon="folder"');

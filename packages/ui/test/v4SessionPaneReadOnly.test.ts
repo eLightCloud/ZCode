@@ -34,6 +34,7 @@ const timelineState = vi.hoisted(() => ({
 // 的写入。这里直接替换 store，让测试能声明式地摆出任意 share draft。
 const shareStoreState = vi.hoisted(() => ({
   draft: undefined as unknown,
+  live: false,
 }));
 
 vi.mock("@/store/conversationShareSelectionStore.js", async (importOriginal) => {
@@ -56,10 +57,16 @@ vi.mock("@/store/conversationShareSelectionStore.js", async (importOriginal) => 
     syncAvailableTurns: vi.fn(),
   });
   // 只替换 hook 与 getState；派生 selector 保留真实实现，避免测试自证。
-  const hook = (selector: (state: unknown) => unknown) => selector(fakeState());
+  const hook = (selector: (state: unknown) => unknown) =>
+    shareStoreState.live
+      ? actual.useConversationShareSelectionStore(selector)
+      : selector(fakeState());
   return {
     ...actual,
-    useConversationShareSelectionStore: Object.assign(hook, { getState: fakeState }),
+    useConversationShareSelectionStore: Object.assign(hook, {
+      getState: () =>
+        shareStoreState.live ? actual.useConversationShareSelectionStore.getState() : fakeState(),
+    }),
   };
 });
 
@@ -67,13 +74,24 @@ vi.mock("@/v4/useConversationProjection.js", () => ({
   useConversationProjection: () => projectionState.current,
 }));
 
-vi.mock("@/v4/V4ConversationContext.js", () => ({
-  useV4Conversation: () => ({
+vi.mock("@/v4/V4ConversationContext.js", () => {
+  const context = {
     attachmentPut: vi.fn(),
-    layer: { acquire: vi.fn() },
+    workflowRuns: () => new Promise(() => {}),
+    layer: {
+      acquire: () => ({
+        release() {},
+        store: {
+          onOnlineModelTransition: () => () => {},
+          refreshPlans: async () => {},
+          getState: () => projectionState.current,
+        },
+      }),
+    },
     sendCommand: vi.fn(),
-  }),
-}));
+  };
+  return { useV4Conversation: () => context };
+});
 
 vi.mock("@/store/StoreProvider.js", () => ({
   useZCodeStoreWithDefault: (_selector: unknown, fallback: unknown) => fallback,
@@ -89,18 +107,24 @@ vi.mock("@/hooks/useSettingService.js", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useServices.js", () => ({
-  useComposerClientNamespace: () => "desktop",
-  useOptionalServices: () => null,
-  useServices: () => ({
+vi.mock("@/hooks/useServices.js", () => {
+  const services = {
     zcodeSessionService: {
       updateProviderRegistry: vi.fn(),
     },
     zcodeTaskService: {
       restartWorkspaceProcess: vi.fn(),
     },
-  }),
-}));
+    broadcastService: { onMessage: () => ({ dispose() {} }) },
+    botsService: { getBotStates: () => new Promise(() => {}) },
+    highspeedCardService: { getSnapshot: () => new Promise(() => {}) },
+  };
+  return {
+    useComposerClientNamespace: () => "desktop",
+    useOptionalServices: () => null,
+    useServices: () => services,
+  };
+});
 
 vi.mock("@/v4/composer/useDraftConfigControl.js", () => ({
   buildDraftCreateConfigPayload: () => ({}),
@@ -443,3 +467,108 @@ describe("SessionPane 分享模式接线", () => {
     expect(html).not.toContain('data-conversation-bottom-dock-mode="confirmation"');
   });
 });
+
+it.each(["visible", "empty", "stale"] as const)(
+  "应用分享首次点击直接交接当前会话消息：%s",
+  async (scenario) => {
+    const { render, act, cleanup, waitFor } = await import("@testing-library/react");
+    const { ApplicationPeripheralsProvider } = await import("@/root/ApplicationPeripherals.js");
+    const { useConversationShareSelectionStore } =
+      await import("@/store/conversationShareSelectionStore.js");
+    const { conversationRowSchema } = await import("@zcode/shared/zcode-protocol-v4");
+    const snapshot = makeSnapshot();
+    const base = { turnId: "turn", productTurnId: "product-turn", createdAt: 1, createdAtSeq: 1 };
+    snapshot.rows.window =
+      scenario === "empty"
+        ? []
+        : [
+            conversationRowSchema.parse({
+              ...base,
+              rowId: 1,
+              kind: "userInput",
+              origin: "realUser",
+              text: "公开问题",
+            }),
+            conversationRowSchema.parse({
+              ...base,
+              rowId: 2,
+              kind: "reasoning",
+              text: "私有推理",
+              state: "complete",
+            }),
+            conversationRowSchema.parse({
+              ...base,
+              rowId: 3,
+              kind: "assistantText",
+              text: "完整回答",
+              state: "complete",
+            }),
+            conversationRowSchema.parse({
+              ...base,
+              rowId: 4,
+              kind: "assistantText",
+              text: "尚未结束",
+              state: "streaming",
+            }),
+          ];
+    if (scenario === "stale") snapshot.sessionId = "previous-session";
+    projectionState.current = {
+      status: "live",
+      snapshot,
+      subscriptionId: "sub",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    shareStoreState.live = true;
+    const store = useConversationShareSelectionStore;
+    store.getState().resetForTests();
+    const openShare = vi.fn();
+    try {
+      const tree = () =>
+        createElement(ZCodeIntlProvider, {
+          initialLocale: "zh-CN",
+          children: createElement(ApplicationPeripheralsProvider, {
+            value: {
+              nativeCloudEnabled: false,
+              openHelp: vi.fn(),
+              openFeedback: vi.fn(),
+              openShare,
+              renderModelPlans: () => null,
+            },
+            children: createElement(SessionPane, {
+              paneId: "test-share",
+              sessionId: "child-session",
+              workspacePath: "/workspace",
+              readOnly: true,
+            }),
+          }),
+        });
+      const view = render(tree());
+      act(() => store.getState().openShare("child-session"));
+      if (scenario === "stale") {
+        expect(openShare).not.toHaveBeenCalled();
+        snapshot.sessionId = "child-session";
+        view.rerender(tree());
+      }
+      await waitFor(() => expect(openShare).toHaveBeenCalledTimes(1));
+      expect(openShare).toHaveBeenCalledWith({
+        title: "Subagent",
+        messages:
+          scenario === "empty"
+            ? []
+            : [
+                { role: "user", content: "公开问题" },
+                { role: "assistant", content: "完整回答" },
+              ],
+      });
+      expect(store.getState().drafts["child-session"]?.open).toBe(false);
+      act(() => store.getState().openShare("child-session"));
+      await waitFor(() => expect(openShare).toHaveBeenCalledTimes(2));
+    } finally {
+      cleanup();
+      store.getState().resetForTests();
+      shareStoreState.live = false;
+    }
+  },
+);

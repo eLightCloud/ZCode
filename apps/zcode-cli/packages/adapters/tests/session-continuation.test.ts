@@ -80,6 +80,102 @@ it("persistent close serializes with admission; accepted input may settle; resta
   await reopened.saveSessionInput({ ...input, id: "after-cancel" });
   reopened.close();
 });
+
+it("first enrollment keeps the exact source bytes while a target restore still resets grants", async () => {
+  const { path, store, target, session } = await setup();
+  await store.importTextCheckpoint({ checkpoint: checkpoint(), target });
+  await store.saveSessionEntry({
+    id: "source-grant",
+    sessionID: session,
+    type: "runtime/permission_full_access",
+    time: { created: 1, updated: 2 },
+    data: { synthetic: true },
+  });
+  await store.saveSessionEntry({
+    id: "execution",
+    sessionID: session,
+    type: "runtime/execution_state",
+    time: { created: 1, updated: 2 },
+    data: { mode: "yolo", planEnabled: false },
+  });
+  const before = {
+    session: await store.getSession(session),
+    messages: await store.messages({ sessionID: session }),
+    entries: await store.sessionEntries({ sessionID: session }),
+  };
+  const portable = await store.exportTextCheckpoint({ sessionID: session }),
+    operation = randomUUID();
+  await store.controlContinuation({ kind: "close", session, operation }, target);
+  await store.controlContinuation(
+    {
+      kind: "stage",
+      session,
+      operation,
+      preserveSource: true,
+      management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+      dataBase64: Buffer.from(JSON.stringify(portable)).toString("base64"),
+    },
+    target,
+  );
+  store.close();
+  const reopened = await createSqliteSessionStore({ dbPath: path });
+  try {
+    await reopened.controlContinuation({ kind: "apply", session, operation }, target);
+    await reopened.controlContinuation({ kind: "apply", session, operation }, target);
+    expect({
+      session: await reopened.getSession(session),
+      messages: await reopened.messages({ sessionID: session }),
+      entries: await reopened.sessionEntries({ sessionID: session }),
+    }).toEqual(before);
+    expect(
+      (await reopened.sessionEntries({ sessionID: session, type: "runtime/execution_state" }))[0]
+        ?.data,
+    ).toEqual({ mode: "yolo", planEnabled: false });
+    const other = await createSqliteSessionStore({ dbPath: ":memory:" });
+    try {
+      await other.importTextCheckpoint({ checkpoint: portable, target });
+      expect(
+        await other.sessionEntries({ sessionID: session, type: "runtime/permission_full_access" }),
+      ).toEqual([]);
+      expect(
+        (await other.sessionEntries({ sessionID: session, type: "runtime/execution_state" }))[0]
+          ?.data,
+      ).toEqual({ mode: "build", planEnabled: false });
+    } finally {
+      other.close();
+    }
+  } finally {
+    reopened.close();
+  }
+});
+
+it("refuses source preservation when staged history does not match the source", async () => {
+  const { store, target, session } = await setup();
+  try {
+    await store.importTextCheckpoint({ checkpoint: checkpoint("original"), target });
+    const operation = randomUUID();
+    await store.controlContinuation({ kind: "close", session, operation }, target);
+    await store.controlContinuation(
+      {
+        kind: "stage",
+        session,
+        operation,
+        preserveSource: true,
+        management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+        dataBase64: Buffer.from(JSON.stringify(checkpoint("other"))).toString("base64"),
+      },
+      target,
+    );
+    await expect(
+      store.controlContinuation({ kind: "apply", session, operation }, target),
+    ).rejects.toThrow("checkpoint_changed");
+    expect((await store.exportTextCheckpoint({ sessionID: session })).messages[1]?.parts).toEqual(
+      checkpoint("original").messages[1]?.parts,
+    );
+  } finally {
+    store.close();
+  }
+});
 it("whole-copy apply is fenced, atomic and exactly replayable; old operations cannot reopen a new barrier", async () => {
   const { path, store, target, session } = await setup();
   await store.importTextCheckpoint({ checkpoint: checkpoint("old target"), target });

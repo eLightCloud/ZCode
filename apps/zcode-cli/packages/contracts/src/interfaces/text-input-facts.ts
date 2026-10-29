@@ -8,6 +8,8 @@ import {
 /** The existing native intent schema owns the DTO. This codec only limits portability. */
 function portableIntent(allowFiles: boolean) {
   return z.custom<ConversationInputIntent>((value) => {
+    // 终态输入中的 mode 沿原生 Submission 合同保留历史；可执行 execution 另受
+    // 检查点严格合同约束，不由历史输入重新接纳或恢复权限。
     const parsed = conversationInputIntentSchema.safeParse(value);
     if (!parsed.success) return false;
     const intent = parsed.data;
@@ -16,7 +18,6 @@ function portableIntent(allowFiles: boolean) {
       (allowFiles
         ? intent.attachments.every((ref) => portableAttachmentRef.safeParse(ref).success)
         : intent.attachments.length === 0) &&
-      (!intent.mode || ["build", "guarded"].includes(intent.mode)) &&
       intent.steer.state === "notRequested" &&
       ["admitted", "queued", "drained"].includes(intent.dispatch.state) &&
       [

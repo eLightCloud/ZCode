@@ -4,6 +4,8 @@ export { App } from "./App.js";
 export { AppErrorBoundary, ScopedErrorBoundary } from "./ErrorBoundary.js";
 export type { ScopedErrorBoundaryVariant } from "./ErrorBoundary.js";
 export { Button, buttonVariants } from "./components/ui/button.js";
+export { Popover, PopoverTrigger, PopoverContent } from "./components/ui/popover.js";
+export { Tooltip, TooltipTrigger, TooltipContent } from "./components/ui/tooltip.js";
 export { DesktopWindowFrame } from "./DesktopWindowFrame.js";
 export { WebRemoteControlDialog } from "@/web-remote-control/index.js";
 export {
@@ -58,6 +60,10 @@ export {
   ArrowLeft,
   Paperclip,
   Cloud,
+  CloudCheck,
+  CloudUpload,
+  CloudAlert,
+  CloudOff,
   RefreshCw,
   Info,
   SearchX,
@@ -172,6 +178,7 @@ export { logger } from "./logger.js";
 export type {
   ApplicationPeripherals,
   ApplicationShareCandidate,
+  ApplicationConversationContext,
 } from "./root/ApplicationPeripherals.js";
 export { ApplicationDialog } from "./root/ApplicationDialog.js";
 export {

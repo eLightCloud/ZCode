@@ -173,6 +173,7 @@ export async function stageRuntime(
   version: SyncVersion,
   branchMode: "primary" | "offline" = "primary",
   targetModel?: ModelSelection,
+  preserveSource = false,
 ) {
   if (
     !version.checkpoint ||
@@ -212,6 +213,7 @@ export async function stageRuntime(
     operation,
     branchMode,
     management: version.management,
+    ...(preserveSource ? { preserveSource: true as const } : {}),
     ...(version.files?.length ? { files: version.files } : {}),
     dataBase64: Buffer.from(JSON.stringify(checkpoint)).toString("base64"),
   });

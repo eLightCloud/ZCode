@@ -55,6 +55,8 @@ export const conversationRuntimeCommandSchema = z.discriminatedUnion("kind", [
       ...base,
       kind: z.literal("stage"),
       branchMode: z.enum(["primary", "offline"]).optional(),
+      /** Trusted native first enrollment at the unchanged source, never browser input. */
+      preserveSource: z.literal(true).optional(),
       management: conversationIndexFactsSchema,
       files: z.array(conversationFileSchema).max(1000).optional(),
       dataBase64: z

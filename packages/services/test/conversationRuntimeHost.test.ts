@@ -1,6 +1,6 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   ConversationRuntimeError,
@@ -244,4 +244,110 @@ it("remote native creation uses only the explicitly registered conversation name
       projectId: null,
     }),
   ).toThrow("project.remote-project-required");
+});
+
+it("uses an existing independent draft for Core capture and the index barrier without changing its route", async () => {
+  const workspacePath = join(
+    dirname(getConversationWorkspaceDir()),
+    "draft-4022e859-2b0a-4588-9081-af8d6c43c411",
+  );
+  await index.registerConversationWorkspace(workspacePath);
+  await index.applyCliFacts({
+    meta: {
+      taskId: session,
+      traceId: "synthetic",
+      workspacePath,
+      workspacePurpose: "conversation",
+      title: "Draft",
+      createdAt: 1,
+      updatedAt: 2,
+      provider: "glm",
+      mode: "build",
+      status: "completed",
+    },
+  });
+  const capture = vi.fn();
+  const host = createConversationRuntimeHost({
+    index,
+    agent: { captureTextCheckpoint: capture },
+    runtime: { control: async (input) => result(input.kind === "activate" ? "active" : "closed") },
+  });
+  await host.control({ kind: "close", session, operation });
+  await expect(
+    index.updateTaskState({ workspacePath, taskId: session, patch: { pinned: true } }),
+  ).rejects.toThrow("admission_closed");
+  await host.control({ kind: "capture", session, operation });
+  await host.control({ kind: "activate", session, operation, version: "version-1", generation: 2 });
+  await index.updateTaskState({ workspacePath, taskId: session, patch: { pinned: true } });
+  expect(
+    await index.withConversationSyncFacts(
+      { workspacePath, taskId: session },
+      async (facts) => facts.pinned,
+    ),
+  ).toBe(true);
+  expect(
+    await index.getTaskMeta({ workspacePath: getConversationWorkspaceDir(), taskId: session }),
+  ).toBeNull();
+});
+
+it("applies a restored projection to a registered draft under its exact native barrier", async () => {
+  const workspacePath = join(
+    dirname(getConversationWorkspaceDir()),
+    "draft-4022e859-2b0a-4588-9081-af8d6c43c412",
+  );
+  await index.registerConversationWorkspace(workspacePath);
+  await index.controlConversationIndexBarrier({
+    workspacePath,
+    taskId: session,
+    operation,
+    hold: true,
+  });
+  const meta = {
+    taskId: session,
+    workspacePath,
+    workspacePurpose: "conversation" as const,
+    traceId: "synthetic",
+    title: "Restored",
+    createdAt: 1,
+    updatedAt: 2,
+    mode: "build" as const,
+    provider: "glm" as const,
+  };
+  await index.applyContinuationIndex({
+    meta,
+    operation,
+    management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+    cliFacts: { titleSource: "generated", lastOutcome: "completed", deleted: false },
+    searchableText: "synthetic",
+  });
+  expect((await index.getTaskMeta({ workspacePath, taskId: session }))?.title).toBe("Restored");
+  await expect(
+    index.updateTaskState({ workspacePath, taskId: session, patch: { pinned: true } }),
+  ).rejects.toThrow("admission_closed");
+  await index.controlConversationIndexBarrier({
+    workspacePath,
+    taskId: session,
+    operation,
+    hold: false,
+  });
+  await index.updateTaskState({ workspacePath, taskId: session, patch: { pinned: true } });
+  const unknown = join(
+    dirname(getConversationWorkspaceDir()),
+    "draft-4022e859-2b0a-4588-9081-af8d6c43c413",
+  );
+  await index.controlConversationIndexBarrier({
+    workspacePath: unknown,
+    taskId: "unknown",
+    operation,
+    hold: true,
+  });
+  await expect(
+    index.applyContinuationIndex({
+      meta: { ...meta, taskId: "unknown", workspacePath: unknown },
+      operation,
+      management: { titleOverride: null, archived: false, deleted: false, pinned: false },
+      cliFacts: { titleSource: "generated", lastOutcome: "completed", deleted: false },
+      searchableText: "synthetic",
+    }),
+  ).rejects.toThrow("ineligible");
 });

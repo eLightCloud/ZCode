@@ -1,5 +1,6 @@
 import {
   useApplicationPeripherals,
+  ApplicationConversationContent,
   applicationShareCandidate,
 } from "@/root/ApplicationPeripherals.js";
 import { remoteHostIdFromWorkspaceIdentity } from "@zcode/shared";
@@ -778,16 +779,18 @@ export function SessionPane({
       !peripherals ||
       !shareDraft?.open ||
       !sessionId ||
-      !snapshot ||
-      shareDraft.availableRowIds.length === 0
+      snapshot?.sessionId !== sessionId
     )
       return;
-    const selected = new Set(
-      shareDraft.availableRowIds.filter((id) => !shareDraft.excludedRowIds.includes(id)),
-    );
-    const rows = snapshot.rows.window.filter((row) => selected.has(row.rowId));
-    peripherals.openShare(applicationShareCandidate(shareTitle, rows));
+    // 企业预览自己选择消息；原生范围目录在企业模式下不填充，且代表行不包含助手正文。
+    const candidate = applicationShareCandidate(shareTitle, snapshot.rows.window);
     closeShare(sessionId);
+    peripherals.openShare(candidate);
+    logger.info("application.share.preview_requested", {
+      sessionId,
+      messageCount: candidate.messages.length,
+      outcome: candidate.messages.length ? "ready" : "empty",
+    });
   }, [peripherals, shareDraft, sessionId, snapshot, shareTitle, closeShare]);
   const updateShareDockState = useConversationShareSelectionStore((value) => value.updateDockState);
   const confirmShareSelection = useConversationShareSelectionStore(
@@ -5766,7 +5769,6 @@ export function SessionPane({
           </div>
         ) : null}
         <ConversationHeader
-          conversation={sessionId ? { sessionId, workspacePath } : undefined}
           title={snapshot?.meta.title ?? ""}
           onClosePane={onClosePane}
           workspaceBadge={workspaceBadge}
@@ -5909,6 +5911,23 @@ export function SessionPane({
                 workspacePath={workspacePath}
                 workspaceIdentity={workspaceIdentity}
               >
+                <ApplicationConversationContent context={{
+                  sessionId: sessionId ?? "",
+                  workspacePath,
+                  workspaceIdentity,
+                  fileChangeQueries: snapshot?.rows.window
+                .filter(
+                  (row) =>
+                    row.kind === "turnHeader" && row.entityId,
+                )
+                .slice(-32)
+                .map((row) => ({
+                  sessionId: sessionId ?? "",
+                  target: { rowId: row.rowId, entityId: row.entityId! },
+                  baseRevision: snapshot.revision,
+                  baseLogEpoch: snapshot.logEpoch,
+                })),
+                }}>
                 <ConversationTimeline
                   compactForRemoteControl={compactForRemoteControl}
                   scrollToBottomActionRef={timelineScrollToBottomRef}
@@ -6019,6 +6038,7 @@ export function SessionPane({
                       : undefined
                   }
                 />
+                </ApplicationConversationContent>
               </BotGroupDeliveryProvider>
             </SessionPluginReferenceIconBoundary>
           )}

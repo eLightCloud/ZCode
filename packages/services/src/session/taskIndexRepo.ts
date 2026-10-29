@@ -1534,7 +1534,7 @@ export class TaskIndexRepo {
     const meta = zcodeTaskMetaSchema.parse(params.meta),
       facts = conversationIndexFactsSchema.parse(params.management);
     if (
-      meta.workspacePath !== getConversationWorkspaceDir() ||
+      !isConversationWorkspaceCandidate(meta.workspacePath) ||
       meta.workspaceIdentity ||
       meta.workspacePurpose !== "conversation" ||
       facts.pinned === undefined
@@ -1545,6 +1545,19 @@ export class TaskIndexRepo {
         key = workspaceKey(meta);
       db.exec("BEGIN IMMEDIATE");
       try {
+        // 独立 draft 与旧 default 使用同一原生用途登记；路径形态本身不授予恢复资格。
+        const registered = db
+          .prepare("SELECT purpose FROM conversation_workspace_purpose WHERE workspace_key=?")
+          .get(key);
+        const existing = this.getTaskRow(meta);
+        if (
+          registered?.purpose !== "conversation" ||
+          (existing &&
+            (existing.project_id ||
+              existing.workspace_identity ||
+              existing.execution_directories != null))
+        )
+          throw new Error("conversation_index_ineligible");
         const barrier = db
           .prepare(
             "SELECT operation FROM conversation_index_barriers WHERE workspace_key=? AND task_id=?",

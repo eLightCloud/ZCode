@@ -56,7 +56,7 @@ import type {
   ModelSelectionView,
   ProviderSource,
 } from "@zcode/provider";
-import { completeNewModelSelection } from "@zcode/provider";
+import { applicationModelAutomationAllowed, completeNewModelSelection } from "@zcode/provider";
 import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPlanSubscription.js";
 import {
   subagentRuntimeConfigSchema,
@@ -1001,6 +1001,7 @@ interface CreateZCodeAgentServiceOptions extends Omit<
 > {
   onLocalMaintenanceReady?: (maintenance: LocalRuntimeMaintenance) => void;
   onConversationRuntimeReady?: (port: import("@zcode/shared").ConversationRuntimePort) => void;
+  resolveConversationWorkspace?: (session: string) => Promise<string>;
   /** 仅供 MCP 状态探测进程使用，不能把空闲回收传给 chat。 */
   mcpStatusIdleTimeoutMs?: number;
   accountProviderConfigSource?: ProviderSource<AccountProviderConfigSnapshot>;
@@ -1248,7 +1249,17 @@ export function createZCodeAgentService(
       : undefined;
   // AutomationRepo 也持有 tasks-index.sqlite 连接，disposeAll 需一并收口（见下方 disposeAll 注释）
   const automationRepo = new AutomationRepo();
-  const automationService = new AutomationService(automationRepo, options?.prepareProjectExecution);
+  const automationService = new AutomationService(
+    automationRepo,
+    options?.prepareProjectExecution,
+    applicationModelAutomationAllowed(process.env) && options?.modelSelectionReadinessSource
+      ? async () => {
+          const preferred = (await options.modelSelectionReadinessSource!.getView())
+            .preferredSelection;
+          return preferred?.providerId.startsWith("application:") ? preferred : undefined;
+        }
+      : undefined,
+  );
   const automationTaskIndexRepo = new TaskIndexRepo();
   const pluginProcessManager = new ZCodeAgentProcessManager({
     commandResolver: options?.commandResolver,
@@ -3849,7 +3860,11 @@ export function createZCodeAgentService(
       const { conversationContentRequestSchema, conversationContentResultSchema } =
         await import("@zcode/shared");
       const { getConversationWorkspaceDir } = await import("../paths.js");
-      const client = await getReadOnlyClient({ workspacePath: getConversationWorkspaceDir() });
+      const client = await getReadOnlyClient({
+        workspacePath:
+          (await options?.resolveConversationWorkspace?.(input.session)) ??
+          getConversationWorkspaceDir(),
+      });
       return client.request(
         zcodeProtocolMethods.sessionContinuationContent,
         conversationContentRequestSchema.parse(input),
@@ -3861,7 +3876,11 @@ export function createZCodeAgentService(
       const { conversationRuntimeCommandSchema, conversationRuntimeResultSchema } =
         await import("@zcode/shared");
       const { getConversationWorkspaceDir } = await import("../paths.js");
-      const client = await getReadOnlyClient({ workspacePath: getConversationWorkspaceDir() });
+      const client = await getReadOnlyClient({
+        workspacePath:
+          (await options?.resolveConversationWorkspace?.(input.session)) ??
+          getConversationWorkspaceDir(),
+      });
       return client.request(
         zcodeProtocolMethods.sessionContinuation,
         conversationRuntimeCommandSchema.parse(input),
@@ -5225,6 +5244,7 @@ export function createZCodeAgentService(
           workspace: buildWorkspaceRef(params),
           ...(params.pluginName ? { pluginName: params.pluginName } : {}),
           ...(params.marketplace ? { marketplace: params.marketplace } : {}),
+          ...(params.path ? { path: params.path } : {}),
           ...(params.source ? { source: params.source } : {}),
         },
         zcodePluginsValidateResultSchema,
@@ -5240,6 +5260,7 @@ export function createZCodeAgentService(
           workspace: buildWorkspaceRef(params),
           marketplace: params.marketplace,
           pluginName: params.pluginName,
+          ...(params.source ? { source: params.source } : {}),
         },
         zcodePluginsDescribeResultSchema,
         { timeoutMs: PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS },

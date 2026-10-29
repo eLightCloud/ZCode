@@ -1,3 +1,4 @@
+import {ApplicationPeripheralsProvider, type ApplicationPeripherals} from "@/root/ApplicationPeripherals.js";
 import { readFileSync } from "node:fs";
 import { createElement, type ContextType } from "react";
 import { DeliveryContext } from "@/v4/botGroupDeliveryContext.js";
@@ -300,6 +301,7 @@ function renderUnit(
   unit: ConversationTurnRenderUnit,
   options: {
     locale?: "zh-CN" | "en-US";
+    peripherals?: ApplicationPeripherals;
     botContext?: ContextType<typeof DeliveryContext>;
     chatLoadingBlockedByActiveWork?: boolean;
     chatLoadingBlockedByInteraction?: boolean;
@@ -315,7 +317,7 @@ function renderUnit(
     context?: Partial<ConversationRowRenderContext>;
   } = {},
 ): string {
-  return renderToStaticMarkup(
+  const content = (
     createElement(
       DeliveryContext.Provider,
       { value: options.botContext ?? null },
@@ -348,11 +350,24 @@ function renderUnit(
           ),
         ),
       ),
-    ),
+    )
   );
+  return renderToStaticMarkup(createElement(ApplicationPeripheralsProvider, {value: options.peripherals, children: content}));
 }
 
 describe("ConversationTurnGroup layout", () => {
+  it("keeps optional deliveries after the native reply and before its actions using canonical product-turn identity", () => {
+    const deliver = vi.fn((context) => createElement("section", {"data-product-delivery": context.turn.productTurnId}, "plugin delivery"));
+    const peripherals: ApplicationPeripherals = {nativeCloudEnabled: false, openHelp() {}, openFeedback() {}, openShare() {}, renderModelPlans() {return null;}, renderTurnDeliverables: deliver};
+    const row = assistantTextRow(4, {text: "final native response"});
+    const header = turnHeader({productTurnId: "canonical-product-turn", entityId: "native-header"});
+    const html = renderUnit(baseUnit({header, latestAssistantTextRow: row, assistantTextRows: [row]}), {context: {sessionId: "native-session"}, peripherals});
+    expect(deliver).toHaveBeenCalledWith(expect.objectContaining({sessionId: "native-session", turn: expect.objectContaining({productTurnId: "canonical-product-turn", entityId: "native-header", state: "completedSuccess"})}));
+    expect(html.indexOf("final native response")).toBeLessThan(html.indexOf("data-product-delivery"));
+    expect(html.indexOf("data-product-delivery")).toBeLessThan(html.indexOf('data-testid="v4-copy-4"'));
+    expect(renderUnit(baseUnit({header, latestAssistantTextRow: row}))).not.toContain("plugin delivery");
+  });
+
   it("removes the complete external assistant container after its response becomes CUA", () => {
     const responseId = "assistant-response-cua";
     const message = assistantTextRow(3, {

@@ -1,7 +1,7 @@
 import type { ConversationRuntimePort, ConversationRuntimeCommand } from "@zcode/shared";
 import { conversationIndexProjectionSchema, conversationRuntimeResultSchema } from "@zcode/shared";
 import type { ConversationRuntimeHostOptions } from "./contract.js";
-import { getConversationWorkspaceDir } from "../../paths.js";
+import { resolveConversationSyncTarget } from "../conversationSyncHost.js";
 
 /** Native Host joins two existing owners. Neither index nor Core receives a second queue. */
 export function createConversationRuntimeHost(
@@ -10,8 +10,7 @@ export function createConversationRuntimeHost(
   const tails = new Map<string, Promise<unknown>>();
   async function run(input: ConversationRuntimeCommand) {
     const target = {
-      workspacePath: getConversationWorkspaceDir(),
-      taskId: input.session,
+      ...(await resolveConversationSyncTarget(options.index, input.session)),
       operation: input.operation,
     };
     if (input.kind === "cancel" && input.generation === undefined && input.version === undefined) {

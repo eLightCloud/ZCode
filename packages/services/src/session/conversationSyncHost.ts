@@ -8,19 +8,25 @@ import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import type { TaskIndexRepo } from "./taskIndexRepo.js";
 import { getConversationWorkspaceDir } from "../paths.js";
 
+/** 同步与接续共用原生索引的准确目录；缺索引的首次导入仍由 Core 核对旧默认命名空间。 */
+export async function resolveConversationSyncTarget(
+  index: Pick<TaskIndexRepo, "listConversationSyncTargets">,
+  taskId: string,
+) {
+  const matches = (await index.listConversationSyncTargets()).filter(
+    (row) => row.taskId === taskId,
+  );
+  if (matches.length > 1) throw new Error("conversation_sync_ambiguous_index");
+  return matches[0] ?? { workspacePath: getConversationWorkspaceDir(), taskId };
+}
+
 /** Host-only producer; no renderer-supplied workspace or qualification flags. */
 export function createConversationSyncHost(options: {
   index: TaskIndexRepo;
   agent: Pick<IZCodeAgentService, "captureTextCheckpoint">;
   continuation?: () => import("@zcode/shared").ConversationRuntimePort | undefined;
 }): ConversationSyncHost {
-  async function target(taskId: string) {
-    const matches = (await options.index.listConversationSyncTargets()).filter(
-      (row) => row.taskId === taskId,
-    );
-    if (matches.length > 1) throw new Error("conversation_sync_ambiguous_index");
-    return matches[0] ?? { workspacePath: getConversationWorkspaceDir(), taskId };
-  }
+  const target = (taskId: string) => resolveConversationSyncTarget(options.index, taskId);
   async function capture(
     session: string,
     management: import("@zcode/shared").ConversationIndexFacts,
@@ -91,7 +97,7 @@ export function createConversationSyncHost(options: {
       await options.index.rebuildConversationIndex({
         meta: {
           ...projection.meta,
-          workspacePath: getConversationWorkspaceDir(),
+          workspacePath: currentTarget.workspacePath,
           workspacePurpose: "conversation",
           provider: "glm",
         },

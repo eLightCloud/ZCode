@@ -81,6 +81,44 @@ async function setup() {
   return { root, dbPath, store, target: { projectID: "target" as ProjectId, directory: root } };
 }
 describe("native text checkpoint contract", () => {
+  it("preserves a stopped model turn through checkpoint export, restore and reopen", async () => {
+    const { store, target, dbPath } = await setup();
+    const destination = await setup();
+    const base = example();
+    const sessionID = base.session.id as SessionId;
+    await store.importTextCheckpoint({ checkpoint: base, target });
+    const messages = await store.messages({ sessionID });
+    const assistant = messages.find((message) => message.info.role === "assistant")!;
+    // 模拟原生 Stop 的真实持久化形状；不得先用待修复的 checkpoint schema 构造来源。
+    await store.saveMessage({
+      ...assistant.info,
+      error: { name: "Error", data: { message: "Synthetic stop", turnResult: "cancelled" } },
+    });
+    await store.close();
+    const reopened = await createSqliteSessionStore({ dbPath });
+    try {
+      const checkpoint = await reopened.exportTextCheckpoint({ sessionID });
+      expect(checkpoint.version).toBe(4);
+      expect(checkpoint.messages.find((message) => message.info.role === "assistant")?.info)
+        .toMatchObject({ error: { data: { turnResult: "cancelled" } } });
+      await destination.store.importTextCheckpoint({ checkpoint, target: destination.target });
+      expect(await destination.store.exportTextCheckpoint({ sessionID })).toEqual(checkpoint);
+      for (const data of [
+        { turnResult: "completed" },
+        { turnResult: { result: "cancelled" } },
+        { turnResult: "cancelled", credential: "forbidden" },
+      ]) {
+        await reopened.saveMessage({ ...assistant.info, error: { name: "Error", data } });
+        await expect(reopened.exportTextCheckpoint({ sessionID })).rejects.toMatchObject({
+          code: "unsupported_state",
+        });
+      }
+    } finally {
+      await reopened.close();
+      await destination.store.close();
+    }
+  });
+
   it("preserves native provider failure attribution through reopen and rejects undeclared error facts", async () => {
     const { store, target, dbPath } = await setup();
     const base = example();

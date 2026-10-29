@@ -1,4 +1,3 @@
-import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { memo } from "react";
 import {
   TID_V4_PANE_WORKSPACE_BADGE,
@@ -23,7 +22,6 @@ export interface PaneWorkspaceBadge {
 export interface ConversationHeaderProps {
   /** meta.title；仅作为测试/可观测投影，不渲染占位 header。 */
   title: string;
-  conversation?: { sessionId: string; workspacePath: string };
   /** 关闭本窗格（仅非 primary pane 下发；关 pane ≠ 停 session）。 */
   onClosePane?: () => void;
   /** 跨 workspace pane 的归属徽标（pane workspace ≠ shell 当前 workspace 时下发）。 */
@@ -38,15 +36,12 @@ function ConversationHeaderImpl({
   title,
   onClosePane,
   workspaceBadge,
-  conversation,
 }: ConversationHeaderProps) {
-  const peripherals = useApplicationPeripherals();
   const { intl } = useZCodeIntl();
   const hasFloatingActions = Boolean(workspaceBadge) || Boolean(onClosePane);
 
   return (
     <>
-      {conversation && peripherals?.renderConversationStatus?.(conversation)}
       <span data-testid={TID_V4_SESSION_TITLE} data-title={title} className="sr-only" />
       {hasFloatingActions ? (
         <div

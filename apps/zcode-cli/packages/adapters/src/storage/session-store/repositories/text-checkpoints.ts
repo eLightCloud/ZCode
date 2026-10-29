@@ -73,6 +73,7 @@ export function exportTextCheckpoint(
             "select content,status,priority,position,time_created as created,time_updated as updated from todo where session_id=? order by position",
           )
           .all(session.id),
+        log,
       );
       db.exec("commit");
     } catch (error) {

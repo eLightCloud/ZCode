@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
-import { createConversationSyncHost } from "#src/session/conversationSyncHost.js";
+import {
+  createConversationSyncHost,
+  resolveConversationSyncTarget,
+} from "#src/session/conversationSyncHost.js";
 import { createProjectService } from "#src/project/index.js";
 import { createFileService } from "#src/file/fileService.js";
 import { setDataBaseDir, getConversationWorkspaceDir } from "#src/paths.js";
@@ -12,6 +15,21 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "native-sync-host-"));
   setDataBaseDir(root);
   index = new TaskIndexRepo();
+});
+it("never chooses a default or arbitrary directory when the session mapping is ambiguous", async () => {
+  const listConversationSyncTargets = vi.fn(async () => [
+    { taskId: "same-session", workspacePath: "/draft-a" },
+    { taskId: "same-session", workspacePath: "/draft-b" },
+  ]);
+  await expect(
+    resolveConversationSyncTarget({ listConversationSyncTargets }, "same-session"),
+  ).rejects.toThrow("conversation_sync_ambiguous_index");
+  await expect(
+    resolveConversationSyncTarget({ listConversationSyncTargets }, "new-session"),
+  ).resolves.toEqual({
+    taskId: "new-session",
+    workspacePath: getConversationWorkspaceDir(),
+  });
 });
 afterEach(async () => {
   index.close();

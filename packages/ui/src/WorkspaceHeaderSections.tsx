@@ -1,4 +1,5 @@
 import { useOptionalProjectDirectory } from "@/project-sidebar/index.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { resolveWorkspaceRemoteSessionId } from "@/lib/workspaceServiceResolver.js";
 import { RemoteConnectionStateIcon } from "@/remote-connection/RemoteConnectionStateIcon.js";
 import { useRemoteProjectPresentationFacts } from "@/hooks/RemoteProjectPresentationContext.js";
@@ -120,6 +121,7 @@ export function WorkspaceHeaderTitleSection({
   simplifyForNarrowRemote = false,
   compact = false,
 }: WorkspaceHeaderTitleSectionProps) {
+  const application = useApplicationPeripherals();
   const { intl } = useZCodeIntl();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const confirmDialog = useConfirmDialog();
@@ -562,6 +564,14 @@ export function WorkspaceHeaderTitleSection({
           </>
         ) : null} */}
         </h1>
+      ) : null}
+      {!isDraftNewTask && activeSessionId ? (
+        <div className="shrink-0" data-conversation-title-status="true">
+          {application?.renderConversationStatus?.({
+            sessionId: activeSessionId,
+            workspacePath: workspaceAbsPath,
+          })}
+        </div>
       ) : null}
       <div className="flex min-w-0 shrink-0 items-center gap-1">
         {!isDraftNewTask ? (

@@ -8,6 +8,13 @@ export interface ApplicationShareCandidate {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
+export interface ApplicationConversationContext {
+  sessionId: string;
+  workspacePath: string;
+  workspaceIdentity?: string;
+  fileChangeQueries?: readonly import("@zcode/shared/zcode-protocol-v4").V4ConversationFileChangesParams[];
+}
+
 /** Trusted optional assembly; owns no session, credential or publication facts. */
 export interface ApplicationPeripherals {
   nativeCloudEnabled: boolean;
@@ -19,6 +26,13 @@ export interface ApplicationPeripherals {
   /** Compact decoration in the task title row; never a second text row or navigation. */
   renderConversationListStatus?: (sessionId: string) => ReactNode;
   renderConversationStatus?: (context: { sessionId: string; workspacePath: string }) => ReactNode;
+  /** One scope around timeline content; observes facts without owning native session state. */
+  wrapConversationContent?: (context: ApplicationConversationContext, content: ReactNode) => ReactNode;
+  /** Native product-turn identity and terminal state; rendered before that turn's actions. */
+  renderTurnDeliverables?: (context: Omit<ApplicationConversationContext, "fileChangeQueries"> & {
+    turn: Pick<import("@zcode/shared/zcode-protocol-v4").TurnHeaderRow,
+      "rowId" | "entityId" | "productTurnId" | "state">;
+  }) => ReactNode;
   renderDeliverables?: (files: readonly NativeDeliverable[], workspacePath: string) => ReactNode;
   openHelp: () => void;
   openFeedback: () => void;
@@ -52,6 +66,15 @@ export function ApplicationPeripheralsProvider({
 }
 export function useApplicationPeripherals() {
   return useContext(Context);
+}
+
+export function ApplicationConversationContent({
+  context, children,
+}: { context: ApplicationConversationContext; children: ReactNode }) {
+  const application = useApplicationPeripherals();
+  return context.sessionId && application?.wrapConversationContent
+    ? application.wrapConversationContent(context, children)
+    : children;
 }
 
 export function applicationShareCandidate(

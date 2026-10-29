@@ -1,4 +1,5 @@
 import { BotTopicPreparation } from "@/v4/BotTopicPreparation.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { useBotTopicInterruption } from "@/v4/botGroupDeliveryContext.js";
 import { ConnectedBotGroupDeliveryAction } from "@/v4/BotGroupDeliveryAction.js";
 /* eslint-disable max-lines -- turn group 需要在同一处维护普通 assistant 与后台结果的严格行序，拆分会重复 actions/preview/tail 协议。 */
@@ -1244,6 +1245,7 @@ function ConversationTurnGroupImpl({
   onFeedbackChange,
   onEdit,
 }: ConversationTurnGroupProps) {
+  const application = useApplicationPeripherals();
   const isOfficeMode = useIsOfficeMode();
   const { intl } = useZCodeIntl();
   const visibleUserRows = useMemo(() => unit.visibleUserInputs, [unit.visibleUserInputs]);
@@ -1568,6 +1570,14 @@ function ConversationTurnGroupImpl({
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
             />
           ) : null}
+          {unit.header && context.sessionId
+            ? application?.renderTurnDeliverables?.({
+                sessionId: context.sessionId,
+                workspacePath: context.workspacePath,
+                workspaceIdentity: context.workspaceIdentity ?? undefined,
+                turn: unit.header,
+              })
+            : null}
           {canRenderAssistantActions && latestAssistantTextRow ? (
             // 文件 summary 是整轮完成后的聚合结果；轮尾工具栏如果跟着
             // assistant text 内联渲染，会插到 summary 前面，读起来像 summary 不是本轮收尾。

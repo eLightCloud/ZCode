@@ -1,8 +1,11 @@
-import { conversationArtifactUriSchema } from "@zcode/shared";
+import { conversationArtifactUriSchema, executionStateSchema } from "@zcode/shared";
 import { z } from "zod";
 import {
   SESSION_ENTRY_EXECUTION_STATE,
   SESSION_ENTRY_MODEL_SELECTION,
+  SESSION_ENTRY_BASH_SHELL_SELECTION,
+  SESSION_ENTRY_WORKSPACE_CHECKPOINT,
+  PERMISSION_FULL_ACCESS_ENTRY,
   TextCheckpointError,
   textCheckpointSchema,
   type MessageWithParts,
@@ -10,6 +13,7 @@ import {
   type SessionInfo,
   type SessionInputRecord,
   type TextCheckpoint,
+  type Logger,
 } from "@zcode/contracts";
 
 export const checkpointOriginSchema = z
@@ -56,6 +60,7 @@ export function projectTextCheckpoint(
   entries: SessionEntryInfo[],
   inputs: SessionInputRecord[],
   todos?: unknown[],
+  logger?: Logger,
 ): TextCheckpoint {
   if (
     !["interactive", "fork"].includes(session.taskType) ||
@@ -73,8 +78,21 @@ export function projectTextCheckpoint(
   let execution: unknown;
   let branchEffects: unknown;
   const commandFacts: unknown[] = [];
+  let localOnlyEntryCount = 0;
+  let localReadStateCount = 0;
+  let permissionReset = false;
   for (const entry of entries) {
     if (entry.type === SESSION_ENTRY_MODEL_SELECTION) continue;
+    // 这三类事实只属于来源的执行环境、授权与本地文件回滚。同步不能搬运授权，
+    // 也不能把缺少本地快照的回滚记录装成目标可用；源存储仍保留全部记录。
+    if (
+      entry.type === SESSION_ENTRY_BASH_SHELL_SELECTION ||
+      entry.type === PERMISSION_FULL_ACCESS_ENTRY ||
+      entry.type === SESSION_ENTRY_WORKSPACE_CHECKPOINT
+    ) {
+      ++localOnlyEntryCount;
+      continue;
+    }
     if (entry.type === "v4/command_fact") {
       commandFacts.push({ id: entry.id, time: entry.time, data: entry.data });
       continue;
@@ -93,15 +111,12 @@ export function projectTextCheckpoint(
       continue;
     }
     if (entry.type !== SESSION_ENTRY_EXECUTION_STATE) unsupported();
-    const state = entry.data as { mode?: unknown; planEnabled?: unknown } | null;
-    if (
-      !state ||
-      !["build", "guarded"].includes(String(state.mode)) ||
-      typeof state.planEnabled !== "boolean" ||
-      Object.keys(state).some((key) => !["mode", "planEnabled"].includes(key))
-    )
-      unsupported();
-    execution = { id: entry.id, time: entry.time, data: entry.data };
+    const state = executionStateSchema.strict().safeParse(entry.data);
+    if (!state.success) unsupported();
+    // 历史完整访问不能成为目标的执行授权；仅收紧可执行投影，保留原历史与 Plan。
+    const mode = state.data.mode === "guarded" ? "guarded" : "build";
+    permissionReset ||= mode !== state.data.mode;
+    execution = { id: entry.id, time: entry.time, data: { ...state.data, mode } };
   }
   const omitted = new Set(messages.filter(regenerable).map((message) => String(message.info.id)));
   const portableMessages = messages
@@ -145,6 +160,12 @@ export function projectTextCheckpoint(
             if (item.type === "tool") {
               if (item.state.status !== "completed" && item.state.status !== "error") unsupported();
               const state = { ...item.state };
+              // readFileState 是来源文件的读取/编辑前置缓存，目标必须重新读取，不能跨端沿用。
+              if (state.metadata && "readFileState" in state.metadata) {
+                const { readFileState: _localRead, ...metadata } = state.metadata;
+                state.metadata = metadata;
+                ++localReadStateCount;
+              }
               const display = state.metadata?.display;
               if (
                 display &&
@@ -180,7 +201,14 @@ export function projectTextCheckpoint(
                   if (owner !== session.id || message !== info.id) unsupported();
                   return portable as typeof file;
                 });
-              return { ...rest, state };
+              // 原生落库允许空 part metadata；它不包含已完成工具元数据的 schemaVersion。
+              const {
+                sessionID: _toolSession,
+                messageID: _toolMessage,
+                metadata,
+                ...toolPart
+              } = item;
+              return { ...toolPart, ...(empty(metadata) ? {} : { metadata }), state };
             }
             return rest;
           }),
@@ -278,5 +306,15 @@ export function projectTextCheckpoint(
     ...(todos?.length ? { todos } : {}),
   });
   if (!parsed.success) unsupported(parsed.error);
+  if (localOnlyEntryCount || localReadStateCount || permissionReset)
+    logger?.info("Text checkpoint source-local state excluded", {
+      event: "session.text_checkpoint",
+      phase: "projection",
+      status: "completed",
+      sessionId: session.id,
+      localOnlyEntryCount,
+      localReadStateCount,
+      permissionReset,
+    });
   return parsed.data;
 }

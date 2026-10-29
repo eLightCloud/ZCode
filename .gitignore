@@ -77,3 +77,6 @@ packages/desktop/resources/macos-window-bounds/
 __pycache__/
 *.pyc
 .zcode-runtime
+
+# 本地验证会在仓库内建立隔离 HOME；数据库、证书与私钥仅留本机。
+/.local/

@@ -2,13 +2,13 @@
 
 仓库现在通过 Husky 接管 Git 的 `pre-push`。
 
-组织推送策略要求每次实际执行完整的隔离单元 / 组件套件 `pnpm test:unit`。用户于 2026-10-26 明确授权将真实 IO、数据库、网络、子进程和构建集成从 push 中拆出；原来“完整根测试全部进入 push”的规则由本分层取代。静态检查与单测失败仍阻止 push，affected 只校验和预览单测范围，不能免除完整单测。
+组织推送策略要求每个准确源码和工具链组合先实际执行完整的隔离单元 / 组件套件 `pnpm test:unit`。用户于 2026-10-30 授权验证前置与成功凭证复用，取代每次传输重试都重复全量的旧规则。用户于 2026-10-26 明确授权将真实 IO、数据库、网络、子进程和构建集成从 push 中拆出；原来“完整根测试全部进入 push”的规则由本分层取代。静态检查与单测失败仍阻止 push，affected 保留独立开发命令，不再进入推送链；成功凭证不能由 affected 产生。
 
 ## 测试分层合同
 
 | 入口 | 范围 | 自动进入 push |
 | --- | --- | --- |
-| `pnpm test:unit` / `pnpm test` | 隔离单元、内存组件和只读源码守卫；所有业务 IO 由替身提供 | 是 |
+| `pnpm test:unit` / `pnpm test` | 隔离单元、内存组件和只读源码守卫；所有业务 IO 由替身提供 | 新输入签发凭证前 |
 | `pnpm test:integration` | 真实临时文件 / SQLite、HTTP / WS、子进程及构建 / 打包 | 否 |
 | `pnpm test:all` | 两套根测试及 schema / 工程门禁自身回归，任一失败非零退出 | 否，显式完整回归 |
 | `pnpm test:e2e` | 原有桌面 E2E 入口 | 否 |
@@ -20,32 +20,29 @@
 所有根 Vitest 测试入口继续通过现有 HOME / XDG 隔离 runner，scope 与实际 project 选择写入低敏事件；不得用直接 Vitest 绕开隔离。集成缺少依赖或失败必须非零退出，不能改成 skip；原有平台适用性跳过保持。该分层不新增或修改远端 CI 配置，可由 CI 显式调用 `pnpm test:all`。
 
 - 安装依赖后会执行根脚本 `pnpm prepare`，自动完成 Husky 安装。
-- `pre-push` 会执行 `pnpm run verify:pre-push`。
+- `pnpm push -- [remote] [HEAD:branch]` 先验证再调用 Git；`pre-push` 只快速核验匹配凭证。
 - 根 `pnpm test` 现在只跑单测，不再误把桌面端 `packages/desktop/test/e2e` 当成 Vitest 用例。
 - Bugfix：单测脚本里的 E2E exclude glob 必须加引号；否则 shell 会先把 `packages/desktop/test/e2e/**/*.test.ts` 展开成真实文件列表，导致 Vitest 把多余文件当成 filters，同时又被 exclude 排除，最终报 `No test files found` 并阻止 push。
-- `verify:pre-push` 依次执行 lint、架构静态检查、收集守恒检查、push 单测范围预览、完整隔离单测；任何失败阻止 push。
+- `verify:pre-push` 依次执行 lint、完整架构静态检查、收集守恒检查、完整隔离单测；任何失败阻止 push。完整架构检查使凭证不依赖某个远端基线。
 
 这样可以在代码推到远端前，先用更快的静态检查拦住明显问题，再把单测问题拦在本地，同时保留 `pnpm test:e2e` 作为桌面端 E2E 的独立入口。
 
-## 开发环境与版本管理工具
+## 验证前置与成功凭证
 
-pre-push 直接使用当前 `PATH` 中的 pnpm / Node，不强制依赖 mise。此前 hook 外层的
-`mise exec` 虽能选择指定版本，却使已用 nvm 等方式准备好环境的开发者也必须安装 mise，
-否则检查尚未开始就会失败。
+唯一编排为 `scripts/verified-push.mjs`，唯一仓库策略为 `.push-verification.json`。入口 `pnpm push -- [remote] [HEAD:branch]` 在任何 push 连接前完成验证；`--force-verify` 放在 remote 前可强制重新验证。直接 `git push` 缺少有效凭证时立即拒绝并提示入口，已有凭证则快速放行，不在连接后启动长测试。单独运行 `pnpm verify:pre-push` 保持显式质量门，不签发凭证。
+
+凭证只保存在当前仓库的 Git 元数据 `verified-push/`，不提交或跨机器共享。指纹包含干净已提交源码树、递归子模块及 gitlink 一致性、平台 / 架构、实际 Node 路径与版本、策略声明的工具版本、依赖安装元数据、相关环境及编排实现。任何输入改变必须重新验证；dirty / 未跟踪源码、缺失或错位子模块、工具不可用都阻断。推送只放行当前 HEAD（允许删除 ref），不支持批量其它分支或注解 tag。远端、分支名、SSH 连接配置不属于与目标无关的质量门输入；服务端拒绝、断网或 SIGPIPE 后，同输入重试复用成功凭证。
+
+验证开始前获取本机目录锁，防止并发签发；全部检查成功且前后输入相同才原子写入凭证。失败、中断或输入变化不签发；强制重验先撤销旧凭证，失败后不得沿用。异常杀进程留下锁时，先确认没有该仓验证进程，再删除 `git rev-parse --git-path verified-push/lock` 指向的锁目录并重试，不自动抢占活跃验证。
+
+hook 复核有效 hooksPath、成功凭证、当前指纹与待推 HEAD；入口禁止 `--no-verify` / `-n`、关闭 Husky 及批量推送选项。hook 是本机工程保护，不能代替远端分支保护。日志 `engineering.git.push` 以关联 ID 区分验证开始 / 失败 / 通过 / 复用、hook 准入与传输结果；指纹和退出码可记录，不输出配置秘密或工具异常正文。
 
 ```text
-开发者准备 Node / pnpm（mise、nvm 或其他方式）
-    → Git hook 保留 push ref 信息并清理 Git local env
-    → pnpm run verify:pre-push
-    → lint / 架构静态检查 / 收集守恒 / affected 单测预览 / 隔离完整单测
+pnpm push → 指纹 / 成功凭证 → 必要时完整验证 → 原子凭证
+         → git push 建立连接 → pre-push 快速复核 → 传输结果
 ```
 
-- 仓库负责声明工具版本和执行检查；个人环境负责让合适的 Node / pnpm 可被 Git 找到。
-- mise 仍是可选的开发入口；`mise.toml`、`mise-run.mjs` 和现有子进程 PATH 保护保持不变。
-- GUI Git 客户端若找不到 Node / pnpm，可在个人 `~/.config/husky/init.sh` 中初始化自己的
-  版本管理环境，参见 [Husky 官方说明](https://typicode.github.io/husky/how-to.html#node-version-managers-and-guis)。
-- 缺少命令或检查失败仍然阻止 push；hook 不自动安装工具，不静默跳过检查。
-- 本次只解除 hook 对 mise 的依赖，不新增版本检查，也不修改现有开发、CLI/SEA 或 CI 的版本要求。
+入口与 hook 使用当前 PATH 中的 Node / pnpm，验证和版本查询复用现有跨平台 pnpm runner，不强制原生独立仓库使用 mise；工具版本变化使凭证失效。Vantage 外层入口通过既有 mise 固定工具。GUI 应先在终端用受控入口验证，之后同输入的普通推送可以复用；无法取得 Node / pnpm 时明确失败，不能静默跳过。mise、隔离 runner 和测试失败规则继续保留。
 
 ## Affected Unit Tests
 
@@ -65,7 +62,7 @@ pre-push 直接使用当前 `PATH` 中的 pnpm / Node，不强制依赖 mise。�
 
 Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽略的文件）。不干净时非零退出，不自动 stash 或创建 checkout，保证执行内容就是推送版本。hook 非删除 ref 必须指向当前 HEAD；多个 ref 通过各自基线调用官方选择，再合并精确测试规格。删除 ref 无需测试。手动 push 模式没有 hook 输入时使用 upstream；没有有效 upstream 时使用 origin/main 的 merge-base。不存在可用基线、需要使用的 remote SHA 无效、目标不是 HEAD 均非零退出。显式基线优先于 hook remote SHA；未提供显式基线时，新分支基线只使用 origin/main，不猜测其他分支。
 
-所有模式的基线优先级均为 `--base` → `ZCODE_AFFECTED_TEST_BASE` → `ZCODE_PRE_PUSH_BASE` → 场景默认基线。`ZCODE_AFFECTED_TEST_BASE=<ref> git push` 使用指定分支、tag 或 commit 的已解析 SHA 交给 Vitest changed；不把 staging 等分支名写死。即使指定基线，Push 仍须工作区干净且非删除目标是 HEAD。显式基线无效时报错，不回退到 remote SHA。
+所有模式的基线优先级均为 `--base` → `ZCODE_AFFECTED_TEST_BASE` → `ZCODE_PRE_PUSH_BASE` → 场景默认基线。`ZCODE_AFFECTED_TEST_BASE=<ref> pnpm test:unit:affected --scope push` 使用指定分支、tag 或 commit 的已解析 SHA 交给 Vitest changed；不把 staging 等分支名写死。即使指定基线，Push 仍须工作区干净且非删除目标是 HEAD。显式基线无效时报错，不回退到 remote SHA。
 
 默认工作区没有显式基线时不读取 upstream。--files / --files-manifest 使用官方 related，不与 --base 或 push 混用。
 
@@ -88,9 +85,11 @@ Push 要求已暂存、未暂存、未跟踪改动均为空（忽略 Git 已忽�
 - 输出选中数量与基线；跳过全量时说明官方选中整个套件，列出官方 related 改动文件。dry-run 列精确规格，JSON 包含 runner/project/pool/path，不伪造逐文件关联原因。
 - Git/文件操作异步；保留 hook local env 清理和 lint-staged JSON manifest，Windows 不经 shell 展开文件名。不修改工作区和 index。
 
-全量跳过适用于工作区、任务结束、Push 和显式文件入口。Push 的 lint、架构、脏工作区、基线及实际局部测试失败仍会阻止推送；跳过全量只放行 affected UT 这一项，不代表测试已通过。
+全量跳过适用于工作区、任务结束、Push 和显式文件入口。独立 affected push 范围的脏工作区、基线及实际局部测试失败仍会非零退出；跳过全量只表示该独立命令未执行 UT，不签发推送凭证。
 
 ### 回归验收
+
+以下是独立 affected 命令及其合成 hook 夹具的回归，不代表当前受控推送入口或成功凭证的行为。
 
 使用临时 Git 仓库、真实 Vitest 和命令入口验证：局部选择与预览/执行一致、未选择文件不执行、任务跨 commit 与旧 WIP、新增测试、配置与公共 setup 全量跳过、共同依赖全量跳过、真实 git push 在全量跳过后成功推送、无关联成功退出、测试失败、无效基线、首次/已有分支 Push、脏工作区和非 HEAD 推送阻止、多个 ref 与删除 ref、集成合并正常参与选择、lint-staged manifest 和 Git local env 隔离。夹具移除外层 push/基线环境后再注入本场景参数，避免真实仓库 SHA 污染临时仓库。
 

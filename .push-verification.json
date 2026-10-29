@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entry": "pnpm push -- [remote] [HEAD:branch]",
+  "hooksPath": ".husky/_",
+  "hookFiles": [".husky/pre-push", ".husky/_/pre-push", ".husky/_/h"],
+  "verify": ["node", "scripts/mise-run.mjs", "pnpm", "run", "verify:pre-push"],
+  "tools": [["node", "scripts/mise-run.mjs", "pnpm", "--version"]],
+  "localInputs": ["node_modules/.modules.yaml"],
+  "environment": [
+    "CI",
+    "NODE_OPTIONS",
+    "ZCODE_TEST_POOL",
+    "VITEST_MAX_WORKERS",
+    "TZ",
+    "LANG",
+    "LC_ALL",
+    "NODE_ENV"
+  ]
+}

@@ -18,13 +18,14 @@
 | 格式检查         | `pnpm fmt:check`                                       |
 | 桌面开发         | `pnpm dev:desktop`                                     |
 | Web 开发         | `pnpm dev:web`                                         |
+| 推送入口         | `pnpm push`（先验证，再连接；同输入复用） |
 | 提交前检查       | `pnpm verify:pre-push`（Lint、架构检查与隔离全量单测） |
 | 架构检查         | `pnpm architecture:check --changed`                    |
 | 模块阅读包       | `pnpm architecture:context <module-id>`                |
 | 未使用依赖与导出 | `pnpm knip`                                            |
 | 导出引用查询     | `pnpm dep:refs --list-exports <file>`                  |
 
-组织 push 每次必须经 pnpm test:unit 实际执行完整隔离单元 / 组件套件，失败阻断；真实 IO / 数据库 / 网络 / 子进程 / 构建测试经 test:integration 或 test:all 独立执行，不进入 push。affected 在 push 链中只校验范围 / 预览；无关联或全套选择不能免测。独立 affected 命令保留原选择语义，不替代 CLI 或桌面 E2E；门禁与个人数据隔离合同见 [pre-push 说明](docs/testing/pre-push-hook.md)。
+组织推送使用 `pnpm push -- [remote] [HEAD:branch]`，验证与本机成功凭证合同见 [pre-push 说明](docs/testing/pre-push-hook.md)。用户已授权相同源码和工具链的成功结果用于传输失败重试；不得恢复 hook 内长验证或跳过失败检查。独立 affected 命令不签发推送凭证，不替代 CLI / E2E。
 
 测试入口以目标包当前的 `package.json` 和实际测试文件为准，不假定存在统一的单测或 E2E 命令。
 

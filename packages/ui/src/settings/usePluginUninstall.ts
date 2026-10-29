@@ -1,4 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
+import { useApplicationPluginStoreSection } from "@/root/ApplicationPluginStoreSection.js";
+import { useZCodeIntl } from "@/i18n/index.js";
+import { toast } from "@/components/ui/toast.js";
+import { logger } from "@/logger.js";
 import type { ZCodeInstalledPluginSummary, ZCodePluginInfo } from "@zcode/shared";
 import type { IPluginManagementService } from "@zcode/services";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
@@ -33,6 +37,8 @@ export function usePluginUninstall({
   activeOperations,
   onAfterUninstall,
 }: UsePluginUninstallInput): PluginUninstallController {
+  const application = useApplicationPluginStoreSection();
+  const { intl } = useZCodeIntl();
   const uninstallPlugin = store((state) => state.uninstallPlugin);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
@@ -59,11 +65,20 @@ export function usePluginUninstall({
 
   const confirmUninstall = useCallback(async () => {
     if (!pendingId) return;
+    try {
+      await application?.beforeUninstall?.(pendingId);
+    } catch {
+      logger.warn("[PluginUninstall] application intent not cancelled", { pluginId: pendingId });
+      toast(intl.formatMessage({ id: "settings.plugins.uninstall.syncFailed" }), {
+        variant: "warning",
+      });
+      return;
+    }
     await uninstallPlugin(pendingId, pluginService);
     if (store.getState().error) return;
     await onAfterUninstall();
     setPendingId(null);
-  }, [pluginService, onAfterUninstall, pendingId, store, uninstallPlugin]);
+  }, [application, intl, pluginService, onAfterUninstall, pendingId, store, uninstallPlugin]);
 
   return { pendingPlugin, uninstalling, requestUninstall, cancelUninstall, confirmUninstall };
 }

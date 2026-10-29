@@ -99,11 +99,13 @@ export interface ZCodeAgentValidatePluginParams extends ZCodeAgentWorkspaceTarge
   marketplace?: string;
   pluginName?: string;
   source?: string;
+  path?: string;
 }
 
 export interface ZCodeAgentDescribePluginParams extends ZCodeAgentWorkspaceTarget {
   marketplace: string;
   pluginName: string;
+  source?: "marketplace";
 }
 
 export interface ZCodeAgentSetPluginEnabledParams extends ZCodeAgentPluginMutationTarget {

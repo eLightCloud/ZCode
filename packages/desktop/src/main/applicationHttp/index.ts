@@ -1,4 +1,10 @@
-import { app, BrowserWindow, ipcMain, session, type IpcMainInvokeEvent } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  session,
+  type IpcMainInvokeEvent,
+} from "electron";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,8 +14,57 @@ import {
   applicationHttpRequestSchema,
 } from "@zcode/shared";
 import type { ApplicationHttpRegistrationOptions } from "./contract.js";
-import { readApplicationHttpConfiguration } from "./configuration.js";
+import {
+  applicationPluginHttpSources,
+  readApplicationHttpConfiguration,
+} from "./configuration.js";
 import { applicationHttpFailure, performApplicationHttp } from "./transport.js";
+import { createPluginHttpBroker } from "./sourceBroker.js";
+
+/** Await before window/Host creation so native acquisition sees the ready capability file. */
+export async function initializeApplicationPluginHttp({
+  logger,
+}: ApplicationHttpRegistrationOptions) {
+  try {
+    const configuration = readApplicationHttpConfiguration(
+      process.env,
+      app.isPackaged,
+    );
+    if (!configuration) return;
+    const sources = applicationPluginHttpSources(
+      configuration,
+      process.env,
+      app.isPackaged,
+    );
+    if (!sources.length) return;
+    if (!configuration.sessionCookies?.length)
+      throw new Error("application_plugin_http_session_configuration_required");
+    if (process.env.ZCODE_PLUGIN_SOURCE_CREDENTIALS_FILE)
+      throw new Error("application_plugin_http_configuration_conflict");
+    const broker = await createPluginHttpBroker({
+      configuration,
+      sources,
+      directory: app.getPath("userData"),
+      logger,
+      transport: {
+        cookies: session.defaultSession.cookies,
+        // Electron net.fetch 拒绝应用显式 Origin；Cookie 已由同一 Main owner 按白名单提供。
+        fetch: (url, init) => globalThis.fetch(url, init),
+      },
+    });
+    process.env.ZCODE_PLUGIN_SOURCE_CREDENTIALS_FILE = broker.credentialFile;
+    app.once("before-quit", () => {
+      void broker.dispose();
+    });
+    logger.info("application.http.plugin_configuration", {
+      outcome: "configured",
+    });
+  } catch {
+    logger.warn("application.http.plugin_configuration", {
+      outcome: "unavailable",
+    });
+  }
+}
 
 function trustedSender(event: IpcMainInvokeEvent): boolean {
   if (
@@ -24,7 +79,8 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
     if (app.isPackaged)
       return (
         value.protocol === "file:" &&
-        fileURLToPath(value) === join(app.getAppPath(), "out/renderer/index.html")
+        fileURLToPath(value) ===
+          join(app.getAppPath(), "out/renderer/index.html")
       );
     const development = process.env.ELECTRON_RENDERER_URL;
     if (!development) return false;
@@ -36,18 +92,27 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
       return false;
     return (
       value.origin === target.origin &&
-      [target.pathname, target.pathname.replace(/\/$/, "") + "/index.html"].includes(value.pathname)
+      [
+        target.pathname,
+        target.pathname.replace(/\/$/, "") + "/index.html",
+      ].includes(value.pathname)
     );
   } catch {
     return false;
   }
 }
 
-export function registerApplicationHttpIpc({ logger }: ApplicationHttpRegistrationOptions): void {
-  let configuration: ReturnType<typeof readApplicationHttpConfiguration> = undefined;
+export function registerApplicationHttpIpc({
+  logger,
+}: ApplicationHttpRegistrationOptions): void {
+  let configuration: ReturnType<typeof readApplicationHttpConfiguration> =
+    undefined;
   let configurationInvalid = false;
   try {
-    configuration = readApplicationHttpConfiguration(process.env, app.isPackaged);
+    configuration = readApplicationHttpConfiguration(
+      process.env,
+      app.isPackaged,
+    );
   } catch {
     configurationInvalid = true;
   }
@@ -60,10 +125,13 @@ export function registerApplicationHttpIpc({ logger }: ApplicationHttpRegistrati
         : "not_configured",
   });
   const active = new Map<number, Map<string, AbortController>>();
-  ipcMain.handle(APPLICATION_HTTP_CANCEL_CHANNEL, (event, requestId: unknown) => {
-    if (!trustedSender(event) || typeof requestId !== "string") return;
-    active.get(event.sender.id)?.get(requestId)?.abort();
-  });
+  ipcMain.handle(
+    APPLICATION_HTTP_CANCEL_CHANNEL,
+    (event, requestId: unknown) => {
+      if (!trustedSender(event) || typeof requestId !== "string") return;
+      active.get(event.sender.id)?.get(requestId)?.abort();
+    },
+  );
   ipcMain.handle(APPLICATION_HTTP_CHANNEL, async (event, raw: unknown) => {
     const correlationId = randomUUID();
     const reject = (status: number, reasonCode: string) => {
@@ -84,7 +152,8 @@ export function registerApplicationHttpIpc({ logger }: ApplicationHttpRegistrati
       return applicationHttpFailure(403, "application_http_sender_rejected");
     }
     const decoded = applicationHttpRequestSchema.safeParse(raw);
-    if (!decoded.success) return reject(400, "application_http_request_invalid");
+    if (!decoded.success)
+      return reject(400, "application_http_request_invalid");
     if (!configuration) return reject(503, "application_http_not_configured");
     const input = decoded.data;
     const senderId = event.sender.id;
@@ -95,7 +164,12 @@ export function registerApplicationHttpIpc({ logger }: ApplicationHttpRegistrati
     requests.set(input.requestId, controller);
     active.set(senderId, requests);
     const abort = () => controller.abort();
-    const navigation = (_event: unknown, _url: string, _inPlace: boolean, main: boolean) => {
+    const navigation = (
+      _event: unknown,
+      _url: string,
+      _inPlace: boolean,
+      main: boolean,
+    ) => {
       if (main) abort();
     };
     event.sender.once("destroyed", abort);
@@ -120,13 +194,25 @@ export function registerApplicationHttpIpc({ logger }: ApplicationHttpRegistrati
       });
       return result;
     } catch (error) {
-      const rejected = error instanceof Error && error.message === "application_http_path_rejected";
-      const status = rejected ? 400 : controller.signal.aborted ? 499 : timeout.aborted ? 504 : 503;
+      const rejected =
+        error instanceof Error &&
+        error.message === "application_http_path_rejected";
+      const status = rejected
+        ? 400
+        : controller.signal.aborted
+          ? 499
+          : timeout.aborted
+            ? 504
+            : 503;
       logger.warn("application.http.request", {
         correlationId,
         senderId,
         status,
-        outcome: rejected ? "rejected" : controller.signal.aborted ? "cancelled" : "failed",
+        outcome: rejected
+          ? "rejected"
+          : controller.signal.aborted
+            ? "cancelled"
+            : "failed",
         reasonCode: rejected
           ? "path_rejected"
           : controller.signal.aborted

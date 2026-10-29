@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   collectBareModuleSpecifiers,
   isNodePtyRuntimePath,
@@ -30,6 +30,7 @@ async function makeTempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })),
   );
@@ -503,6 +504,47 @@ describe("stageRelease", () => {
       ).rejects.toThrow(/bundled skill/i);
     },
   );
+
+  it("stages only the application Creator source under the original native identity", async () => {
+    const fixture = await makeStageFixture();
+    const officialPluginsDir = join(await makeTempDir(), "upstream");
+    const applicationPlugins = join(await makeTempDir(), "application");
+    await writeOfficialPluginFixture(officialPluginsDir, "plugin-creator-plugin");
+    await writeOfficialPluginFixture(applicationPlugins, "plugin-creator-plugin");
+    const chosen = join(applicationPlugins, "plugin-creator-plugin");
+    await writeFile(join(chosen, "README.md"), "application source bytes");
+    vi.stubEnv("ZCODE_APPLICATION_PLUGIN_SOURCES", JSON.stringify({ "plugin-creator": chosen }));
+    const staged = await stageRelease({
+      ...fixture,
+      officialPluginsDir,
+      target: "linux-x64",
+      appVersion: "test",
+      archive: false,
+      componentArchives: false,
+    });
+    expect(
+      await readFile(
+        join(staged.releaseDir, "runtime/packages/plugin-creator-plugin/README.md"),
+        "utf8",
+      ),
+    ).toBe("application source bytes");
+    const manifest = JSON.parse(await readFile(join(staged.releaseDir, "manifest.json"), "utf8"));
+    expect(manifest.plugins.filter((name: string) => name === "plugin-creator")).toHaveLength(1);
+    await writeFile(
+      join(chosen, ".zcode-plugin/plugin.json"),
+      JSON.stringify({ name: "impostor", version: "0.1.0" }),
+    );
+    await expect(
+      stageRelease({
+        ...fixture,
+        officialPluginsDir,
+        target: "linux-x64",
+        appVersion: "test",
+        archive: false,
+        componentArchives: false,
+      }),
+    ).rejects.toThrow("application.plugin_source_identity_mismatch");
+  });
 
   async function writeOfficialPluginFixture(
     officialPluginsDir: string,

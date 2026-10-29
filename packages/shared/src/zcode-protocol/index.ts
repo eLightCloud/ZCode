@@ -3819,8 +3819,12 @@ export const zcodePluginsValidateParamsSchema = z
     pluginName: nonEmptyString.optional(),
     marketplace: nonEmptyString.optional(),
     source: nonEmptyString.optional(),
+    path: nonEmptyString.optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => !value.path || (!value.source && !value.marketplace && !value.pluginName), {
+    message: "path cannot be combined with marketplace selectors",
+  });
 export const zcodePluginsValidateResultSchema = z
   .object({
     ok: z.boolean(),
@@ -3843,6 +3847,8 @@ export const zcodePluginsDescribeParamsSchema = z
     workspace: zcodeWorkspaceRefSchema,
     pluginName: nonEmptyString,
     marketplace: nonEmptyString,
+    /** 更新预检读取市场源码，避免默认已安装优先返回旧包。 */
+    source: z.literal("marketplace").optional(),
   })
   .strict();
 export const zcodePluginsDescribeResultSchema = z

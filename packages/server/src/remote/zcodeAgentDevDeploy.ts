@@ -14,7 +14,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { IRemoteBackend } from "@zcode/server/remote/backend.js";
 import {
   buildRemoteExecutableReplaceCommand,
@@ -286,7 +286,24 @@ async function stageDevelopmentOfficialPluginPackages(params: {
 }): Promise<void> {
   await mkdir(params.packagesDir, { recursive: true });
   for (const packageName of REMOTE_AGENT_OFFICIAL_PLUGIN_PACKAGE_NAMES) {
-    const sourceRoot = join(params.repoRoot, "apps", "zcode-cli", "packages", packageName);
+    const configured = JSON.parse(process.env["ZCODE_APPLICATION_PLUGIN_SOURCES"] || "{}");
+    if (!configured || typeof configured !== "object" || Array.isArray(configured))
+      throw new Error("application.plugin_sources_invalid");
+    const selected: unknown = configured[packageName.replace(/-plugin$/u, "")];
+    if (selected !== undefined && (typeof selected !== "string" || !isAbsolute(selected)))
+      throw new Error("application.plugin_source_invalid");
+    const baselineRoot = join(params.repoRoot, "apps", "zcode-cli", "packages", packageName);
+    const sourceRoot = typeof selected === "string" ? selected : baselineRoot;
+    if (selected !== undefined) {
+      const chosen = JSON.parse(
+        await readFile(join(sourceRoot, ".zcode-plugin/plugin.json"), "utf8"),
+      );
+      const baseline = JSON.parse(
+        await readFile(join(baselineRoot, ".zcode-plugin/plugin.json"), "utf8"),
+      );
+      if (chosen.name !== baseline.name || chosen.version !== baseline.version)
+        throw new Error("application.plugin_source_identity_mismatch");
+    }
     const manifestPath = join(sourceRoot, ".zcode-plugin", "plugin.json");
     if (!existsSync(manifestPath)) {
       throw new Error(`[zcode-agent-deploy] missing official plugin manifest: ${manifestPath}`);

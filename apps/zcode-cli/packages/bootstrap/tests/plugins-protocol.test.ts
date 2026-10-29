@@ -47,6 +47,7 @@ import {
   normalizePluginRootForComparison,
   restoreBuiltinPlugin,
   updatePlugin,
+  validatePlugin,
 } from "../src/zcode-protocol/plugins.js";
 import { withPluginStorageLock } from "../src/lib/plugin-storage-lock.js";
 import type { ZCodeProtocolAgentServerContext } from "../src/zcode-protocol/server-types.js";
@@ -179,6 +180,7 @@ describe("plugins protocol contracts", () => {
           workspace: { workspacePath: root, workspaceKey: root },
           marketplace: "e2e-describe",
           pluginName: "local",
+          source: "marketplace",
         }),
         new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 1000)),
       ]);
@@ -780,4 +782,33 @@ describe("restoreBuiltinPlugin handler", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+});
+
+it("validates a local plugin root through the actual protocol without a marketplace", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plugin-local-protocol-"));
+  try {
+    await writeTestFile(
+      join(root, ".zcode-plugin/plugin.json"),
+      JSON.stringify({ name: "synthetic", version: "1.0.0", skills: "skills" }),
+    );
+    await writeTestFile(
+      join(root, "skills/daily/SKILL.md"),
+      "---\nname: daily\ndescription: synthetic\n---\nSynthetic",
+    );
+    const result = await validatePlugin({} as ZCodeProtocolAgentServerContext, {
+      workspace: { workspacePath: root, workspaceKey: root },
+      path: root,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+    await expect(
+      validatePlugin({} as ZCodeProtocolAgentServerContext, {
+        workspace: { workspacePath: root, workspaceKey: root },
+        path: root,
+        source: root,
+      }),
+    ).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -1785,6 +1785,10 @@ exceptions:
     rule: unmanaged-new-file
     paths: [ apps/zcode-cli/packages/core/src/runtime/methods/turn-execution-fallback.ts ]
     reason: 合并已存在于 staging 的加速卡回退模块，仅将可变 Session 读取替换为本轮固定候选；保持现有 Core 模块边界，不在同步分支时机械拆分整个 runtime。
+  - id: plugin-creator-existing-prefill-identity
+    rule: unmanaged-new-file
+    paths: [ packages/ui/src/settings/pluginCreatorPrefill.ts ]
+    reason: Existing tracked Creator entry only uses the shared bundled marketplace identity instead of a literal; its owner, public methods and skill trust checks remain unchanged. This is not a new UI source file or a settings-module adoption.
   - id: shortcut-settings-existing-ui-edit
     rule: unmanaged-new-file
     paths:

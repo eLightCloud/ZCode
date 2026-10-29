@@ -94,6 +94,7 @@ export async function describeZCodePlugin(
   return describeMarketplacePlugin({
     marketplace: options.marketplace,
     name: options.pluginName,
+    source: options.source,
     storageRoot: pluginStorageRoot,
     ...(options.withWriteLock ? { withWriteLock: options.withWriteLock } : {}),
   });

@@ -40,6 +40,7 @@ export interface ApplicationPluginStoreSection {
   renderPersonal?: ApplicationPluginStoreRender;
   /** Published discovery only; installed state and runtime remain native. */
   catalog?: ApplicationPluginDiscoveryCatalog;
+  beforeUninstall?: (pluginId: string) => Promise<void>;
   beforeAcquire?: (pluginId: string) => Promise<void>;
   count?: (segment: "public" | "community" | "personal", query: string) => number;
   /** Trusted, optional effect at the resolved active location; owns no native state. */

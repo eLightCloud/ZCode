@@ -114,3 +114,11 @@ UI/草稿 owner：管理和商店组件负责展示/入口，Root 负责新任�
 回调可返回 `{promptSuffix?: string}`，只向新建的未发送草稿追加说明；回调等待期间切换工作区、Host attachment 或卸载会使原结果失效，不新建草稿。源码是否可交付由原生校验和连续稳定快照核对；资产接合不推断建设会话完成、不阻塞无关会话，也不改变执行记录和成果 owner。
 
 `snapshotDirectory` 沿现有文件服务的已认证 Host RPC 信任边界公开，不新授予第三方插件或匿名连接文件权限；路径资格沿该 Host 原文件服务合同，不假定源码必在当前工作区。快照最多 5000 项、单文件 20 MiB、展开 100 MiB；目录身份在枚举前记录并在结束时复验，文件按打开描述符和身份复验。调用方只读取本人有权的准确资产根，并通过 `excludeNames` 排除无需读取的目录。
+
+## Trusted host authoring handoff
+
+An optional application conversation action slot may render authoring receipts in their original session without parsing assistant text. The application owns save/confirmation facts; native UI only supplies session/workspace context and renders the optional slot. Unconfigured native clients keep their manual authoring handoff.
+
+The slot may also receive bounded native file-change query references (session, row/entity, revision and log epoch). These are metadata, not transcript text or browser-supplied paths. An application Host can re-query the native read-only service to attribute an authored manifest in a shared workspace. Native files remain authoritative; no matching evidence grants no conversation association.
+
+An optional application store `beforeUninstall(pluginId)` callback cancels the application synchronization expectation before native uninstall. A failed callback preserves the package and surfaces a retry; native continues to own uninstall, enabled state and user configuration.

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const seaOfficialPluginAssetPrefix = "zcode-official-plugins/";
 export const seaOfficialPluginManifestAssetKey = `${seaOfficialPluginAssetPrefix}manifest.json`;
@@ -228,8 +228,21 @@ export const collectSeaOfficialPluginAssets = async ({
   });
 
   for (const plugin of officialSeaPlugins) {
-    const pluginRoot = resolve(root, plugin.rootPath);
+    const configured = JSON.parse(process.env.ZCODE_APPLICATION_PLUGIN_SOURCES || "{}");
+    if (!configured || typeof configured !== "object" || Array.isArray(configured))
+      throw new Error("application.plugin_sources_invalid");
+    const selected = configured[plugin.name];
+    if (selected !== undefined && (typeof selected !== "string" || !isAbsolute(selected)))
+      throw new Error("application.plugin_source_invalid");
+    const pluginRoot = selected ?? resolve(root, plugin.rootPath);
     assertPluginRoot(pluginRoot, plugin);
+    if (selected !== undefined) {
+      const manifest = JSON.parse(
+        await readFile(join(pluginRoot, ".zcode-plugin/plugin.json"), "utf8"),
+      );
+      if (manifest.name !== plugin.name || manifest.version !== plugin.version)
+        throw new Error("application.plugin_source_identity_mismatch");
+    }
     assertPluginRequiredSeedAssets(pluginRoot, plugin);
     // 只提供 skills 的内容型插件没有 MCP server，用 requiresRuntime:false 跳过校验；
     // 其余运行时插件仍要在此校验，避免发布缺失可执行入口的产物。
@@ -355,6 +368,7 @@ const includedTopLevelPaths = new Set([
   ".mcp.json",
   ".zcode-plugin",
   "README.md",
+  "LICENSE",
   // SEA 资源采集曾只允许 skills/commands，导致 document-skills 的 judge 子代理未进入可执行文件。
   "agents",
   "commands",

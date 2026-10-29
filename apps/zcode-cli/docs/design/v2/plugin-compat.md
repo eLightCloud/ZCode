@@ -595,3 +595,11 @@ Minimum P0 coverage:
 ## Plugin Creator local development marketplace
 
 The bundled plugin-creator follows the local development lifecycle in [the creator spec](../../../../../docs/plugin-creator.md#本地-dev-市场闭环). It prepares source files and a dev marketplace catalog in the selected workspace, then guides the user to add the market, install/update the plugin and try it through the existing UI. A global CLI or Node installation is not a prerequisite. Registration and installation remain owned by the existing plugin services and Host User inventory; project scope is not a separate installation namespace. No new plugin tool, protocol or installation registry is introduced.
+
+## Local path validation for authoring hosts
+
+`plugins/validate` accepts optional `path` for a local plugin or marketplace directory on the target Host. It uses the existing read-only local-path validator; `source` retains marketplace-source semantics. A path cannot be combined with source or marketplace selection. Services forward this discriminator unchanged. No registration, installation or user inventory write is implied. Regression covers a plugin root containing only its plugin manifest and a separate marketplace root.
+
+## Trusted bundled asset source selection
+
+`ZCODE_APPLICATION_PLUGIN_SOURCES` is an optional startup/build-only JSON object mapping bundled plugin names to absolute source directories. It is supplied by trusted application assembly, contains no credentials and is not a tenant/skill configuration channel. An explicitly mapped source must exist with matching name and declared bundled version; errors block that asset instead of falling back. Unmapped builtins retain upstream source resolution. Desktop staging and SEA collection consume the same map before producing the existing package layout; packaged runtimes need no developer source paths. Native filesystem development seeding consumes the map at startup. Source content does not grant host privileges, installed/enabled remain native. No setting UI or database mirror is introduced for immutable build inputs.

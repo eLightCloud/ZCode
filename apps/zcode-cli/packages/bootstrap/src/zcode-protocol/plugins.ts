@@ -43,6 +43,7 @@ import {
   uninstallZCodeMarketplacePlugin,
   updateZCodePluginMarketplace,
   validateZCodePlugin,
+  validateZCodePluginPath,
 } from "../plugins.js";
 
 import { listInstalledPluginRecords } from "@zcode/adapters/plugins";
@@ -335,15 +336,22 @@ export async function validatePlugin(
 ): Promise<ZCodePluginsValidateResult> {
   const params = parseParams(zcodePluginsValidateParamsSchema, rawParams);
   const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const diagnostics = await withPluginStorageLock(pluginStorageRoot, async () =>
-    validateZCodePlugin({
-      logger: context.logger,
-      marketplace: params.marketplace,
-      pluginName: params.pluginName,
-      source: params.source,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  // 插件目录不是市场 source；建设接合复用原生只读路径校验，避免误报缺市场清单。
+  const diagnostics = params.path
+    ? await validateZCodePluginPath({
+        logger: context.logger,
+        path: params.path,
+        workingDirectory: params.workspace.workspacePath,
+      })
+    : await withPluginStorageLock(pluginStorageRoot, async () =>
+        validateZCodePlugin({
+          logger: context.logger,
+          marketplace: params.marketplace,
+          pluginName: params.pluginName,
+          source: params.source,
+          workingDirectory: params.workspace.workspacePath,
+        }),
+      );
   return {
     ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
     diagnostics: diagnostics.map(toPluginDiagnostic),
@@ -366,6 +374,7 @@ export async function describePlugin(
     logger: context.logger,
     marketplace: params.marketplace,
     pluginName: params.pluginName,
+    source: params.source,
     withWriteLock: (write) => withPluginStorageLock(pluginStorageRoot, write),
     workingDirectory: params.workspace.workspacePath,
   });
@@ -377,6 +386,13 @@ export async function describePlugin(
     })),
   }));
   const diagnostics = result.diagnostics.map(toPluginDiagnostic);
+  if (params.source === "marketplace") {
+    context.logger?.info("Plugin source inspection completed", {
+      event: "plugin.source.inspected",
+      pluginId: `${params.pluginName}@${params.marketplace}`,
+      outcome: diagnostics.some((item) => item.severity === "error") ? "failed" : "succeeded",
+    });
+  }
   return {
     components,
     ...(diagnostics.length > 0 ? { diagnostics } : {}),

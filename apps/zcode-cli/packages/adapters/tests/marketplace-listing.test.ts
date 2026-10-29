@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -126,7 +126,7 @@ describe("marketplace store listing", () => {
     expect(parseEntryStoreListing({ publisherType: true })).toBeUndefined();
   });
 
-  it("returns manifest display metadata from describeMarketplacePlugin for installed plugins", async () => {
+  it("keeps installed metadata by default and inspects newer source without changing the install", async () => {
     const storageRoot = await makeStorageRoot("zcode-describe-metadata-");
     const pluginRoot = join(storageRoot, "cache", "hello-market", "hello", "1.2.3");
     await mkdir(join(pluginRoot, ".zcode-plugin"), { recursive: true });
@@ -171,5 +171,24 @@ describe("marketplace store listing", () => {
       homepage: "https://acme.dev/hello",
       version: "1.2.3",
     });
+    const installedBefore = await readFile(join(storageRoot, "installed_plugins.json"), "utf8");
+    const marketRoot = join(storageRoot, "marketplaces", "hello-market");
+    const fresh = join(marketRoot, "fresh");
+    await mkdir(join(fresh, ".zcode-plugin"), { recursive: true });
+    await mkdir(join(fresh, "skills", "daily-v2"), { recursive: true });
+    await writeFile(join(marketRoot, "marketplace.json"), JSON.stringify({
+      name: "hello-market", plugins: [{ name: "hello", source: "./fresh" }],
+    }));
+    await writeFile(join(fresh, ".zcode-plugin", "plugin.json"), JSON.stringify({
+      name: "hello", version: "2.0.0", entrySkill: "daily-v2", skills: "./skills",
+    }));
+    await writeFile(join(fresh, "skills", "daily-v2", "SKILL.md"), "---\nname: daily-v2\ndescription: New source\n---\n");
+    const inspected = await describeMarketplacePlugin({
+      marketplace: "hello-market", name: "hello", storageRoot, source: "marketplace",
+    });
+    expect(inspected.metadata).toMatchObject({ version: "2.0.0", entrySkill: "daily-v2" });
+    expect(inspected.components.some(group => group.kind === "skill" && group.items.some(item => item.name === "daily-v2"))).toBe(true);
+    expect(await readFile(join(storageRoot, "installed_plugins.json"), "utf8")).toBe(installedBefore);
+    expect((await describeMarketplacePlugin({marketplace: "hello-market", name: "hello", storageRoot})).metadata?.version).toBe("1.2.3");
   });
 });

@@ -1,5 +1,5 @@
 import { access, chmod, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createRuntimeManifest, type ServerTarget } from "../runtime/manifest.js";
 import {
   collectBareModuleSpecifiers,
@@ -94,7 +94,22 @@ async function copyDirectoryIfPresent(
   }
   for (const name of names) {
     const stagedDir = join(targetDir, name);
-    await copyPackageDir(join(sourceDir, name), stagedDir);
+    const configured = JSON.parse(process.env["ZCODE_APPLICATION_PLUGIN_SOURCES"] || "{}");
+    if (!configured || typeof configured !== "object" || Array.isArray(configured))
+      throw new Error("application.plugin_sources_invalid");
+    const selected: unknown = configured[name.replace(/-plugin$/u, "")];
+    if (selected !== undefined && (typeof selected !== "string" || !isAbsolute(selected)))
+      throw new Error("application.plugin_source_invalid");
+    const source = typeof selected === "string" ? selected : join(sourceDir, name);
+    if (selected !== undefined) {
+      const chosen = JSON.parse(await readFile(join(source, ".zcode-plugin/plugin.json"), "utf8"));
+      const baseline = JSON.parse(
+        await readFile(join(sourceDir, name, ".zcode-plugin/plugin.json"), "utf8"),
+      );
+      if (chosen.name !== baseline.name || chosen.version !== baseline.version)
+        throw new Error("application.plugin_source_identity_mismatch");
+    }
+    await copyPackageDir(source, stagedDir);
     await assertOfficialPluginRuntime(stagedDir, name);
   }
   return names.map((name) => name.replace(/-plugin$/u, ""));

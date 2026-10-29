@@ -12,8 +12,8 @@
 // 远端（SSH/WSL/Docker）没有 Electron，由 Source Server archive 自带目标 Node，互不影响。
 
 // 修复原因：bootstrap 清理旧插件 dist 时使用 rmSync，漏导入会在构建前抛出 ReferenceError。
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "../../../scripts/spawn-command.mjs";
@@ -385,12 +385,30 @@ function stageBundle() {
 
 function stageOfficialPlugins() {
   for (const plugin of officialPluginPackages) {
-    const sourceRoot = resolve(repoRoot, plugin.relativePath);
+    const configured = JSON.parse(process.env.ZCODE_APPLICATION_PLUGIN_SOURCES || "{}");
+    const name = plugin.stagedPath
+      .split("/")
+      .at(-1)
+      .replace(/-plugin$/, "");
+    if (!configured || typeof configured !== "object" || Array.isArray(configured))
+      throw new Error("application.plugin_sources_invalid");
+    const selected = configured[name];
+    if (selected !== undefined && (typeof selected !== "string" || !isAbsolute(selected)))
+      throw new Error("application.plugin_source_invalid");
+    const sourceRoot = selected ?? resolve(repoRoot, plugin.relativePath);
     const manifestPath = resolve(sourceRoot, ".zcode-plugin", "plugin.json");
     if (!existsSync(manifestPath)) {
       throw new Error(`[prepare:agent-bundle] missing official plugin manifest: ${manifestPath}`);
     }
 
+    if (selected !== undefined) {
+      const chosen = JSON.parse(readFileSync(manifestPath, "utf8"));
+      const baseline = JSON.parse(
+        readFileSync(resolve(repoRoot, plugin.relativePath, ".zcode-plugin/plugin.json"), "utf8"),
+      );
+      if (chosen.name !== baseline.name || chosen.version !== baseline.version)
+        throw new Error("application.plugin_source_identity_mismatch");
+    }
     const targetRoot = resolve(glmDir, plugin.stagedPath);
     mkdirSync(targetRoot, { recursive: true });
     for (const entryName of includedOfficialPluginTopLevelPaths) {

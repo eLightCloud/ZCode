@@ -108,6 +108,7 @@ export async function describeMarketplacePlugin(input: {
   marketplace: string;
   name: string;
   storageRoot: string;
+  source?: "marketplace";
   /** 只包住会写 known/manifest 的懒加载分支；其余只读路径不进锁。 */
   withWriteLock?: <T>(write: () => Promise<T>) => Promise<T>;
 }): Promise<DescribeMarketplacePluginResult> {
@@ -118,7 +119,8 @@ export async function describeMarketplacePlugin(input: {
   const installedRecord = loadInstalledPluginsSync(input.storageRoot).plugins.find(
     (record) => record.marketplace === input.marketplace && record.name === input.name,
   );
-  if (installedRecord) {
+  // 更新预检必须读新来源；默认详情仍优先读取已安装缓存，保持离线可用。
+  if (installedRecord && input.source !== "marketplace") {
     const rootPath = resolveInstalledPluginRoot(input.storageRoot, installedRecord);
     if (directoryExists(rootPath)) {
       const read = readComponentsAtRoot({

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import { BUNDLED_PLUGIN_MARKETPLACE_ID as ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
 
@@ -21,6 +21,7 @@ export const includedTopLevelPaths = new Set([
   ".mcp.json",
   ".zcode-plugin",
   "README.md",
+  "LICENSE",
   // 官方内容插件新增 agents 后，filesystem seed 的顶层白名单未同步，目录被静默裁掉。
   "agents",
   "commands",
@@ -160,6 +161,21 @@ export function readSeaManifest(sea: SeaModule): SeaOfficialPluginManifest | und
 export function resolveFilesystemPluginRoot(
   definition: OfficialPluginDefinition,
 ): string | undefined {
+  const configured = process.env["ZCODE_APPLICATION_PLUGIN_SOURCES"];
+  if (configured) {
+    const sources: unknown = JSON.parse(configured);
+    if (!sources || typeof sources !== "object" || Array.isArray(sources))
+      throw new Error("application.plugin_sources_invalid");
+    const path = (sources as Record<string, unknown>)[definition.name];
+    if (path !== undefined) {
+      if (typeof path !== "string" || !isAbsolute(path))
+        throw new Error("application.plugin_source_invalid");
+      const manifest = JSON.parse(readFileSync(join(path, ".zcode-plugin/plugin.json"), "utf8"));
+      if (manifest.name !== definition.name || manifest.version !== definition.version)
+        throw new Error("application.plugin_source_identity_mismatch");
+      return path;
+    }
+  }
   for (const baseDir of candidateBaseDirs()) {
     for (const relativePath of definition.rootCandidates) {
       const rootPath = resolve(baseDir, relativePath);

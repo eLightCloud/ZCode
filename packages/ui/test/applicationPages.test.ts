@@ -58,6 +58,30 @@ function element(pages: ApplicationPage[], headerPageId?: string) {
   });
 }
 describe("trusted application page lifecycle", () => {
+  it("opens a compact application dialog without full-page controls and restores draft and focus", async () => {
+    const pages: ApplicationPage[] = [{
+      id: "compact", label: "Compact", standalone: true, presentation: "dialog",
+      render: () => createElement("p", null, "compact content"),
+    }];
+    render(createElement("div", null,
+      createElement("input", { "aria-label": "draft", defaultValue: "unsent" }),
+      element(pages, "compact"),
+    ));
+    const trigger = screen.getByRole("button", { name: "Compact" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Compact" })).toBeTruthy();
+    expect(screen.getByText("compact content")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "刷新页面" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "返回工作台" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" });
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent");
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
   it("opens a local continuation through the base Host even when a remote workspace is active", async () => {
     navigation.local.mockClear();
     navigation.remote.mockClear();

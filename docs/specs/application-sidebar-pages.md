@@ -1,6 +1,6 @@
 # 应用侧栏主区页面导航合同
 
-可信装配通过 `ApplicationPage.sidebarOrder` 把业务页面注册为侧栏挂载、主区呈现的导航目标。原生壳拥有稳定页面 ID、导航状态、选中态、打开 / 返回与生命周期；装配只提供标签、图标、顺序意图和 render。没有 `sidebarOrder` 的页面继续走工具栏 + 全屏 Dialog；普通 ZCode 无装配时导航完全保持原状。
+可信装配通过 `ApplicationPage.sidebarOrder` 把业务页面注册为侧栏挂载、主区呈现的导航目标。原生壳拥有稳定页面 ID、导航状态、选中态、打开 / 返回与生命周期；装配只提供标签、图标、顺序意图和 render。没有 `sidebarOrder` 的页面默认走工具栏 + 全屏 Dialog；可显式设置 `presentation: "dialog"`，复用 `ApplicationDialog` 的居中浮层、关闭、Escape 与焦点返回，内容标题、刷新和分区由装配提供，不叠加全屏导航工具栏。普通 ZCode 无装配时导航完全保持原状。
 
 ## 状态与事件
 

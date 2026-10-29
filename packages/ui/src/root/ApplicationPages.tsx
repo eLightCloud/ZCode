@@ -31,12 +31,15 @@ import type { ZCodeAgentWorkspaceTarget } from "@zcode/services";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { logger } from "@/logger.js";
 import { useApplicationSettings } from "@/root/ApplicationSettings.js";
+import { ApplicationDialog } from "@/root/ApplicationDialog.js";
 
 export interface ApplicationPage {
   id: string;
   label: string;
   Icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   standalone?: boolean;
+  /** Compact modal using the shared application dialog; content owns its toolbar. */
+  presentation?: "dialog";
   /** Trusted-build registration for a sidebar-mounted main-area target; ties keep registration order. */
   sidebarOrder?: number;
   render: (context: ApplicationPageContext) => ReactNode;
@@ -230,13 +233,28 @@ function ApplicationPagesSurface({
       <ApplicationPageActionContext value={action}>
         {children}
 
+        {page?.presentation === "dialog" && (
+          <ApplicationDialog
+            title={page.label}
+            onClose={close}
+            className="flex max-h-[min(42rem,calc(100dvh-2rem))] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden max-sm:max-h-[calc(100dvh-1rem)] max-sm:w-[calc(100vw-1rem)]"
+          >
+            <ScopedErrorBoundary scope={`application-page:${page.id}`}>
+              <ApplicationPageContent
+                render={page.render}
+                standalone={page.standalone}
+                onNavigate={close}
+              />
+            </ScopedErrorBoundary>
+          </ApplicationDialog>
+        )}
         <Dialog
-          open={Boolean(page)}
+          open={Boolean(page && page.presentation !== "dialog")}
           onOpenChange={(open) => {
             if (!open) close();
           }}
         >
-          {page && (
+          {page && page.presentation !== "dialog" && (
             <DialogContent
               showCloseButton={false}
               aria-describedby={undefined}

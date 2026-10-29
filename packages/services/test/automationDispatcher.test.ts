@@ -334,3 +334,29 @@ it("passes admitted context through native attachments without changing the fixe
     }),
   );
 });
+
+it.each([false, true])(
+  "admits application automation using an explicitly supported user transport (fixed=%s)",
+  async (fixed) => {
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_TOKEN", "synthetic-user-instance-proof-only");
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_BASE_URL", "http://127.0.0.1:1/v1");
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_AUTOMATION", "user");
+    const f = await fixture(false, "application:fixture");
+    if (fixed) await f.repo.fixRunModelSelection(f.request.runId, f.selection);
+    await f.dispatcher.dispatch(f.request);
+    expect(f.service.createTask).toHaveBeenCalledOnce();
+    expect(f.service.sendPrompt).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(["true", "service", " user", ""])(
+  "rejects an unknown application automation capability %s",
+  async (capability) => {
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_TOKEN", "synthetic-user-instance-proof-only");
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_BASE_URL", "http://127.0.0.1:1/v1");
+    vi.stubEnv("ZCODE_APPLICATION_MODEL_AUTOMATION", capability);
+    const f = await fixture(false, "application:fixture");
+    await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("Automation");
+    expect(f.service.sendPrompt).not.toHaveBeenCalled();
+  },
+);

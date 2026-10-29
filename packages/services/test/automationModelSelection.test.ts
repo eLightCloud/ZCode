@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveAutomationSubmissionModelSelection } from "../src/session/automationModelSelection.js";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("resolveAutomationSubmissionModelSelection", () => {
   it("首次派发重读导入后的配置；读取失败不能落入 Workspace 默认，同 run 不重读", async () => {
@@ -119,4 +121,18 @@ describe("resolveAutomationSubmissionModelSelection", () => {
       }),
     ).rejects.toThrow("Automation 模型选择不可用");
   });
+});
+
+it("does not attach an old unbound rule to the current application account", async () => {
+  vi.stubEnv("ZCODE_APPLICATION_MODEL_AUTOMATION", "user");
+  const preferredSelection = {
+    providerId: "application:current-person",
+    modelId: "model",
+    options: { reasoningLevel: "disabled" },
+  };
+  await expect(
+    resolveAutomationSubmissionModelSelection({
+      modelSelectionService: { getView: async () => ({ preferredSelection }) as never },
+    }),
+  ).rejects.toMatchObject({ reason: "model_selection_unavailable" });
 });

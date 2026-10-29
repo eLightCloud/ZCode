@@ -8,22 +8,38 @@ import type { ModelSelection } from "./model-selection.js";
 
 /** 单个本地任务索引允许保留的定时任务定义总数；所有生命周期状态都计入。 */
 export const AUTOMATION_CREATE_LIMIT = 20;
-export const AUTOMATION_CREATE_LIMIT_ERROR_CODE = "AUTOMATION_CREATE_LIMIT_REACHED";
+export const AUTOMATION_CREATE_LIMIT_ERROR_CODE =
+  "AUTOMATION_CREATE_LIMIT_REACHED";
+export const AUTOMATION_APPLICATION_ACCOUNT_FIXED_ERROR_CODE =
+  "AUTOMATION_APPLICATION_ACCOUNT_FIXED";
 
 export function isAutomationCreateLimitError(error: unknown): boolean {
-  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "";
   return message.includes(AUTOMATION_CREATE_LIMIT_ERROR_CODE);
 }
 
 /** Native identity of a caller-keyed paused definition; shared by creation and read-only recovery. */
 export function automationIdForCreationId(creationId: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creationId))
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      creationId,
+    )
+  )
     throw new Error("automation_creation_id_invalid");
   return `automation-${creationId.toLowerCase()}`;
 }
 
 /** 整条 automation 的生命周期。 */
-export type ZCodeAutomationLifecycleStatus = "active" | "completed" | "failed" | "paused";
+export type ZCodeAutomationLifecycleStatus =
+  | "active"
+  | "completed"
+  | "failed"
+  | "paused";
 
 /** 单条 automation 当前一轮的派发信息态（供 UI/诊断）。 */
 export type ZCodeAutomationDispatchStatus =
@@ -66,7 +82,11 @@ export type ZCodeAutomationRunDispatchStatus =
   | "skipped";
 
 /** 单次 run 产出 session 后的运行结果（由 session runtime 回写，仅用于展示）。 */
-export type ZCodeAutomationRunOutcome = "running" | "succeeded" | "failed" | "stopped";
+export type ZCodeAutomationRunOutcome =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "stopped";
 
 /** 一条定时任务定义 + 调度状态。 */
 export interface ZCodeAutomation {
@@ -124,7 +144,9 @@ export interface ZCodeAutomationRunIdParts {
  * runId 契约（见 ZCodeAutomationRun.runId）的唯一解析入口；desktop host/scheduler 与
  * CLI telemetry 不各自按字符串猜格式。不符合两种声明格式的输入一律返回 null。
  */
-export function parseAutomationRunId(runId: string): ZCodeAutomationRunIdParts | null {
+export function parseAutomationRunId(
+  runId: string,
+): ZCodeAutomationRunIdParts | null {
   const separatorIndex = runId.indexOf(":");
   if (separatorIndex <= 0) return null;
   const automationId = runId.slice(0, separatorIndex);

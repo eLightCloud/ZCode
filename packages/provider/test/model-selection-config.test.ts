@@ -82,6 +82,45 @@ describe("resolveInitialModelSelection", () => {
     });
   });
 
+  it("completes only a new application default using that model's native reasoning levels", () => {
+    const original = registryView();
+    const registry = {
+      ...original,
+      providers: original.providers.map((provider, index) => ({
+        ...provider,
+        providerId: index === 1 ? "application:provider-b" : provider.providerId,
+      })),
+    };
+    const selection = {
+      providerId: "application:provider-b",
+      modelId: "model-b",
+      options: { reasoningLevel: "disabled" },
+    };
+    expect(resolveInitialModelSelection({ configuredDefault: selection, registry })).toEqual({
+      source: "configured-default",
+      selection: { ...selection, options: { reasoningLevel: "high" } },
+    });
+    expect(selection.options.reasoningLevel).toBe("disabled");
+    expect(
+      resolveInitialModelSelection({
+        configuredDefault: { ...selection, modelId: "removed-model" },
+        registry,
+      }),
+    ).toEqual({ source: "none" });
+    expect(
+      resolveInitialModelSelection({
+        configuredDefault: selection,
+        registry: {
+          ...registry,
+          providers: registry.providers.map((provider) => ({
+            ...provider,
+            config: { ...provider.config, visibility: "hidden" as const },
+          })),
+        },
+      }),
+    ).toEqual({ source: "none" });
+  });
+
   it("reports an empty registry without inventing a model", () => {
     expect(
       resolveInitialModelSelection({

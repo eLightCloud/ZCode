@@ -29,43 +29,79 @@ describe("canRestartAutomation", () => {
   });
 
   it("重复立即运行会映射到正在运行提示", () => {
-    expect(getAutomationRunNowToastId("queued")).toBe("automations.runNowQueued");
-    expect(getAutomationRunNowToastId("duplicate")).toBe("automations.runNowAlreadyRunning");
-    expect(getAutomationRunNowToastId("failed")).toBe("automations.runNowFailed");
+    expect(getAutomationRunNowToastId("queued")).toBe(
+      "automations.runNowQueued",
+    );
+    expect(getAutomationRunNowToastId("duplicate")).toBe(
+      "automations.runNowAlreadyRunning",
+    );
+    expect(getAutomationRunNowToastId("failed")).toBe(
+      "automations.runNowFailed",
+    );
   });
 
   it("管理操作失败映射为产品文案，不直接展示 RPC 原文", () => {
-    expect(getAutomationActionErrorToastId("create")).toBe("automations.error.create");
-    expect(getAutomationActionErrorToastId("update")).toBe("automations.error.update");
-    expect(getAutomationActionErrorToastId("toggle")).toBe("automations.error.toggle");
-    expect(getAutomationActionErrorToastId("restart")).toBe("automations.error.restart");
-    expect(getAutomationActionErrorToastId("delete")).toBe("automations.error.delete");
+    expect(getAutomationActionErrorToastId("create")).toBe(
+      "automations.error.create",
+    );
+    expect(getAutomationActionErrorToastId("update")).toBe(
+      "automations.error.update",
+    );
     expect(
-      getAutomationCreateErrorToastId("[AUTOMATION_CREATE_LIMIT_REACHED] automation limit reached"),
+      getAutomationActionErrorToastId(
+        "update",
+        "[AUTOMATION_APPLICATION_ACCOUNT_FIXED] fixed",
+      ),
+    ).toBe("automations.error.accountFixed");
+    expect(getAutomationActionErrorToastId("toggle")).toBe(
+      "automations.error.toggle",
+    );
+    expect(getAutomationActionErrorToastId("restart")).toBe(
+      "automations.error.restart",
+    );
+    expect(getAutomationActionErrorToastId("delete")).toBe(
+      "automations.error.delete",
+    );
+    expect(
+      getAutomationCreateErrorToastId(
+        "[AUTOMATION_CREATE_LIMIT_REACHED] automation limit reached",
+      ),
     ).toBe("automations.error.createLimit");
-    expect(getAutomationCreateErrorToastId("rpc unavailable")).toBe("automations.error.create");
+    expect(getAutomationCreateErrorToastId("rpc unavailable")).toBe(
+      "automations.error.create",
+    );
   });
 
   it("会话创建卡片按 automationId 定位对应详情", () => {
     const target = { automationId: "automation-target" } as never;
     const other = { automationId: "automation-other" } as never;
 
-    expect(resolveAutomationDetailTarget([other, target], " automation-target ")).toBe(target);
-    expect(resolveAutomationDetailTarget([other], "automation-target")).toBeNull();
+    expect(
+      resolveAutomationDetailTarget([other, target], " automation-target "),
+    ).toBe(target);
+    expect(
+      resolveAutomationDetailTarget([other], "automation-target"),
+    ).toBeNull();
     expect(resolveAutomationDetailTarget([target], undefined)).toBeNull();
   });
 
   it("详情导航等待列表完成，并在目标不存在时进入可消费的失败终态", () => {
     const target = { automationId: "automation-target" } as never;
 
-    expect(resolveAutomationDetailNavigation([], "automation-target", false)).toEqual({
+    expect(
+      resolveAutomationDetailNavigation([], "automation-target", false),
+    ).toEqual({
       status: "pending",
     });
-    expect(resolveAutomationDetailNavigation([target], "automation-target", true)).toEqual({
+    expect(
+      resolveAutomationDetailNavigation([target], "automation-target", true),
+    ).toEqual({
       status: "found",
       target,
     });
-    expect(resolveAutomationDetailNavigation([], "automation-target", true)).toEqual({
+    expect(
+      resolveAutomationDetailNavigation([], "automation-target", true),
+    ).toEqual({
       status: "missing",
     });
   });
@@ -95,8 +131,12 @@ describe("canRestartAutomation", () => {
   });
 
   it("灰度关闭时将已选中的 Idle tab 收敛回 Scheduled", () => {
-    expect(resolveAutomationTabAfterOffPeakChange("idle", false)).toBe("scheduled");
-    expect(resolveAutomationTabAfterOffPeakChange("scheduled", false)).toBe("scheduled");
+    expect(resolveAutomationTabAfterOffPeakChange("idle", false)).toBe(
+      "scheduled",
+    );
+    expect(resolveAutomationTabAfterOffPeakChange("scheduled", false)).toBe(
+      "scheduled",
+    );
     expect(resolveAutomationTabAfterOffPeakChange("idle", true)).toBe("idle");
   });
 

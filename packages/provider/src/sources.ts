@@ -7,6 +7,13 @@ import {
 } from "./config/index.js";
 import type { AccountProviderStates } from "./account-provider-state.js";
 
+/** Trusted application transport capability; the application still authorizes every request. */
+export function applicationModelAutomationAllowed(
+  environment: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return environment["ZCODE_APPLICATION_MODEL_AUTOMATION"] === "user";
+}
+
 export interface ProviderSource<TSnapshot> {
   read(): Promise<TSnapshot>;
   onDidChange(listener: (reason: string) => void): () => void;

@@ -18,6 +18,9 @@ export function applicationModelBrokerEnvironment(logger?: {
   const configuration = process.env["ZCODE_APPLICATION_MODEL_REMOTE_CONFIG_URL"];
   if (!upstream && !configuration) return {};
   const origin = process.env["ZCODE_APPLICATION_PUBLIC_ORIGIN"];
+  const accountHeader = process.env["ZCODE_APPLICATION_MODEL_ACCOUNT_HEADER"];
+  if (accountHeader && !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(accountHeader))
+    throw new Error("application_model_account_header_invalid");
   const csrfCookie = process.env["ZCODE_APPLICATION_CSRF_COOKIE"];
   const csrfHeader = process.env["ZCODE_APPLICATION_CSRF_HEADER"];
   const cookieNames = process.env["ZCODE_APPLICATION_SESSION_COOKIES"]?.split(",");
@@ -116,6 +119,16 @@ export function applicationModelBrokerEnvironment(logger?: {
         [csrfHeader]: decodeURIComponent(csrf),
         "Content-Type": "application/json",
       };
+      // 固定 Provider 范围只缩小当前会话；最终匹配由应用后端在取 Key 前裁决。
+      if (model && accountHeader) {
+        const scope = request.headers[accountHeader.toLowerCase()];
+        if (typeof scope !== "string" || !scope || scope.length > 256) {
+          response.writeHead(403);
+          response.end();
+          return;
+        }
+        headers[accountHeader] = scope;
+      }
       if (request.headers["anthropic-version"])
         headers["anthropic-version"] = String(request.headers["anthropic-version"]);
       let body: Buffer | undefined;
@@ -210,6 +223,7 @@ export function applicationModelBrokerEnvironment(logger?: {
     ZCODE_APPLICATION_MODEL_CONFIG_URL: localBase + "/native/config",
     ZCODE_APPLICATION_MODEL_BASE_URL: localBase + "/v1",
     ZCODE_APPLICATION_MODEL_TOKEN: token,
+    ...(accountHeader ? { ZCODE_APPLICATION_MODEL_AUTOMATION: "user" } : {}),
   };
   return environment;
 }

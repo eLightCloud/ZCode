@@ -39,7 +39,21 @@ export function resolveInitialModelSelection(input: {
       };
     }
     // 应用默认已撤销时不能借普通 Registry fallback 自动切换系统模型或个人通道。
-    if (input.configuredDefault.providerId.startsWith("application:")) return { source: "none" };
+    if (input.configuredDefault.providerId.startsWith("application:")) {
+      const applicationDefault = input.configuredDefault;
+      const provider = input.registry.providers.find(
+        (candidate) => candidate.providerId === applicationDefault.providerId,
+      );
+      const completed =
+        provider?.config.visibility !== "hidden"
+          ? completeNewModelSelection(input.registry, applicationDefault)
+          : undefined;
+      // 应用只指定初始模型；新草稿沿原生可选档位补齐，不能改选另一模型。
+      if (completed && isSelectable(input.registry, completed)) {
+        return { source: "configured-default", selection: freezeSelection(completed) };
+      }
+      return { source: "none" };
+    }
   }
 
   // 仅用于全新草稿的 Host 初始推荐；历史未绑定状态不能进入这个初始化分支。

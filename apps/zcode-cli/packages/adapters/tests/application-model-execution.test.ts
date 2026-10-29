@@ -93,49 +93,66 @@ describe("application managed model boundary", () => {
       expect(transport).toHaveBeenCalledTimes(1);
     },
   );
-  it("keeps the private token out of config and sends it only through the native adapter", async () => {
-    const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer " + token);
-      return new Response(
-        JSON.stringify({
-          id: "synthetic",
-          object: "chat.completion",
-          created: 1,
-          model: "synthetic-model",
-          choices: [
-            { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        }),
-        { headers: { "content-type": "application/json" } },
+  it.each([undefined, "automation"] as const)(
+    "keeps the original private identity for an explicitly authorized %s call",
+    async (purpose) => {
+      const transport = vi.fn(async (url: unknown, init?: RequestInit) => {
+        expect(String(url)).toBe(baseURL + "/chat/completions");
+        expect(new Headers(init?.headers).get("authorization")).toBe("Bearer " + token);
+        return new Response(
+          JSON.stringify({
+            id: "synthetic",
+            object: "chat.completion",
+            created: 1,
+            model: "synthetic-model",
+            choices: [
+              { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      });
+      const provider = config("application-managed", "https://public.example.test/v1");
+      expect(JSON.stringify(serializeRegistryProviderConfig(provider))).not.toContain(token);
+      const execution = new AiSdkModelExecution(
+        {
+          env: {
+            ZCODE_APPLICATION_MODEL_TOKEN: token,
+            ZCODE_APPLICATION_MODEL_AUTOMATION: "user",
+            ZCODE_APPLICATION_MODEL_BASE_URL: baseURL,
+          },
+        },
+        { transport: transport as typeof fetch },
       );
-    });
-    const provider = config();
-    expect(JSON.stringify(serializeRegistryProviderConfig(provider))).not.toContain(token);
-    const execution = new AiSdkModelExecution(
-      { env: { ZCODE_APPLICATION_MODEL_TOKEN: token, ZCODE_APPLICATION_MODEL_BASE_URL: baseURL } },
-      { transport: transport as typeof fetch },
-    );
-    const bound = bind(execution, provider);
-    await expect(
-      generateText({
-        model: bound.resolveRequest({
-          options: { reasoningLevel: "disabled", maxOutputTokens: 16 },
-        }).model,
-        prompt: "synthetic",
-      }),
-    ).resolves.toMatchObject({ text: "ok" });
-    expect(JSON.stringify(serializeRegistryProviderConfig(provider))).not.toContain(token);
-  });
-  it("rejects a modified endpoint and missing private identity before any network call", () => {
+      const bound = bind(execution, provider);
+      await expect(
+        runWithModelInvocationContext({ modelRequestPurpose: purpose }, () =>
+          generateText({
+            model: bound.resolveRequest({
+              options: { reasoningLevel: "disabled", maxOutputTokens: 16 },
+            }).model,
+            prompt: "synthetic",
+          }),
+        ),
+      ).resolves.toMatchObject({ text: "ok" });
+      expect(JSON.stringify(serializeRegistryProviderConfig(provider))).not.toContain(token);
+    },
+  );
+  it("rejects missing identity and invalid trusted transport before any network call", () => {
     const transport = vi.fn();
-    const execution = new AiSdkModelExecution(
-      { env: { ZCODE_APPLICATION_MODEL_TOKEN: token, ZCODE_APPLICATION_MODEL_BASE_URL: baseURL } },
-      { transport },
-    );
-    expect(() => bind(execution, config("application-managed", "https://example.com/v1"))).toThrow(
-      "application_model_credentials_unavailable",
-    );
+    for (const base of [
+      undefined,
+      "file:///tmp/model",
+      "https://user:secret@example.test/v1",
+      "https://example.test/v1#fragment",
+    ]) {
+      const execution = new AiSdkModelExecution(
+        { env: { ZCODE_APPLICATION_MODEL_TOKEN: token, ZCODE_APPLICATION_MODEL_BASE_URL: base } },
+        { transport },
+      );
+      expect(() => bind(execution)).toThrow("application_model_credentials_unavailable");
+    }
     expect(() => bind(new AiSdkModelExecution({ env: {} }, { transport }))).toThrow(
       "application_model_credentials_unavailable",
     );

@@ -16,9 +16,11 @@ export function createNodeProviderRuntimePathEnv(
     [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: paths.zcodeBuiltinFilePath,
     [ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]: paths.personalFilePath,
     ...Object.fromEntries(
-      ["ZCODE_APPLICATION_MODEL_TOKEN", "ZCODE_APPLICATION_MODEL_BASE_URL"].flatMap((key) =>
-        process.env[key] ? [[key, process.env[key]!]] : [],
-      ),
+      [
+        "ZCODE_APPLICATION_MODEL_TOKEN",
+        "ZCODE_APPLICATION_MODEL_BASE_URL",
+        "ZCODE_APPLICATION_MODEL_AUTOMATION",
+      ].flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])),
     ),
   };
 }

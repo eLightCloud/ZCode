@@ -1,4 +1,5 @@
 import type { ModelSelection, TraceId } from "@zcode/shared";
+import { applicationModelAutomationAllowed } from "@zcode/provider";
 import type { IModelSelectionService } from "../model-provider/providerFacadeServices.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import { AutomationDispatchConfigurationError } from "./automationDispatchFailure.js";
@@ -29,18 +30,26 @@ export async function resolveAutomationSubmissionModelSelection(params: {
   }
 
   const preferredSelection = (await params.modelSelectionService.getView()).preferredSelection;
+  if (
+    applicationModelAutomationAllowed(process.env) &&
+    preferredSelection?.providerId.startsWith("application:")
+  ) {
+    // 旧未绑定规则不能在首次执行时接管当前人的应用账号。
+    throw new AutomationDispatchConfigurationError("model_selection_unavailable");
+  }
   if (!preferredSelection?.options?.reasoningLevel) {
     throw new AutomationDispatchConfigurationError("model_selection_unavailable");
   }
   return admitted(preferredSelection);
 }
 
-/** An interactive application's private credential is not a saved rule's service credential. */
+/** Background use requires the trusted application's explicit user-transport capability. */
 export function assertAutomationApplicationModelAccess(
   selection: ModelSelection,
   diagnostic?: { runId: string; automationId: string },
 ): void {
   if (
+    applicationModelAutomationAllowed(process.env) ||
     !process.env["ZCODE_APPLICATION_MODEL_TOKEN"] ||
     !process.env["ZCODE_APPLICATION_MODEL_BASE_URL"] ||
     !selection.providerId.startsWith("application:")

@@ -1,4 +1,7 @@
-import { createProviderBusinessErrorFetch, createProviderProxyFetch } from "./provider-business-transport.js";
+import {
+  createProviderBusinessErrorFetch,
+  createProviderProxyFetch,
+} from "./provider-business-transport.js";
 import type { EnvRecord, ProviderFetch } from "./provider-business-transport.js";
 import { ProviderBusinessError, type AiSdkProviderKind } from "./provider-business-error.js";
 import { withoutRequestVerificationHeaders } from "@zcode/shared";
@@ -6,9 +9,20 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
-import { compileModelOptionMaps, type CompiledModelOptionMaps, type ModelOptionValues } from "@zcode/model-option-map";
-import { getCurrentModelInvocationContext, type Logger, type ModelId, type ModelProviderId, type ModelRequestAuth, type ProviderEndpointRoutingPort } from "@zcode/contracts";
-import type { RegistryProviderConfig } from "@zcode/provider";
+import {
+  compileModelOptionMaps,
+  type CompiledModelOptionMaps,
+  type ModelOptionValues,
+} from "@zcode/model-option-map";
+import {
+  getCurrentModelInvocationContext,
+  type Logger,
+  type ModelId,
+  type ModelProviderId,
+  type ModelRequestAuth,
+  type ProviderEndpointRoutingPort,
+} from "@zcode/contracts";
+import { applicationModelAutomationAllowed, type RegistryProviderConfig } from "@zcode/provider";
 import { withOpenRouterAttributionHeaders } from "@zcode/shared";
 import { createAnthropicCompatFetch } from "./anthropic-stream-compat.js";
 import { createModelRequestSecurityState } from "./request-security-edition/index.js";
@@ -16,11 +30,21 @@ import type { ModelRequestSecurityState, ModelRequestSecurityPort } from "./requ
 import { createOpenAIResponsesJsonCompatFetch } from "./openai-responses-json-compat.js";
 import { createModelOptionMapFetch, type RawRequestBodyCapture } from "./model-option-map-fetch.js";
 import { createProviderEndpointRoutingFetch } from "./provider-endpoint-routing-fetch.js";
-import { mergeModelRequestHeaders, withoutModelAuthHeaders, withoutModelQuerySourceHeader } from "./model-request-headers.js";
+import {
+  mergeModelRequestHeaders,
+  withoutModelAuthHeaders,
+  withoutModelQuerySourceHeader,
+} from "./model-request-headers.js";
 
-export { createProviderBusinessErrorFetch, readProviderBusinessFailureFromBody } from "./provider-business-transport.js";
+export {
+  createProviderBusinessErrorFetch,
+  readProviderBusinessFailureFromBody,
+} from "./provider-business-transport.js";
 
-export type { EnvRecord, ProviderBusinessErrorFetchOptions } from "./provider-business-transport.js";
+export type {
+  EnvRecord,
+  ProviderBusinessErrorFetchOptions,
+} from "./provider-business-transport.js";
 
 export {
   ProviderBusinessError,
@@ -143,8 +167,24 @@ export class AiSdkModelExecution {
       // 托管 Key 不能经 Provider 快照到达 Renderer；仅在原生执行进程内装配私有身份。
       const baseURL = this.env["ZCODE_APPLICATION_MODEL_BASE_URL"];
       const token = this.env["ZCODE_APPLICATION_MODEL_TOKEN"];
-      if (!baseURL || configuredProvider.baseURL !== baseURL || !token || token.length < 32)
+      let endpoint: URL;
+      try {
+        endpoint = new URL(baseURL ?? "");
+      } catch {
         throw new Error("application_model_credentials_unavailable");
+      }
+      if (
+        !token ||
+        token.length < 32 ||
+        !["http:", "https:"].includes(endpoint.protocol) ||
+        endpoint.username ||
+        endpoint.password ||
+        endpoint.search ||
+        endpoint.hash
+      )
+        throw new Error("application_model_credentials_unavailable");
+      // 目录可发布公共地址；私有凭据只发给受信启动指定的执行地址。
+      configuredProvider.baseURL = endpoint.href.replace(/\/+$/u, "");
       configuredProvider.apiKey = token;
       configuredProvider.headers = withoutModelAuthHeaders(configuredProvider.headers);
     }
@@ -234,7 +274,10 @@ export class AiSdkModelExecution {
       transport: managed
         ? async (input, init) => {
             const context = getCurrentModelInvocationContext();
-            if (context?.modelRequestPurpose === "automation") {
+            if (
+              context?.modelRequestPurpose === "automation" &&
+              !applicationModelAutomationAllowed(this.env)
+            ) {
               this.logger?.warn("Application Automation credentials are unavailable", {
                 event: "model.admission",
                 outcome: "rejected",

@@ -37,15 +37,22 @@ it("binds each native call to the current Electron app cookie and rejects logout
     ZCODE_APPLICATION_CSRF_COOKIE: "synthetic-csrf",
     ZCODE_APPLICATION_CSRF_HEADER: "X-CSRF-Token",
     ZCODE_APPLICATION_SESSION_COOKIES: "synthetic-session,synthetic-csrf",
+    ZCODE_APPLICATION_MODEL_ACCOUNT_HEADER: "X-Synthetic-Account",
     ZCODE_APPLICATION_MODEL_BROKER_PORT: String(port),
   }))
     vi.stubEnv(key, value);
   const originalFetch = globalThis.fetch;
   const upstream = vi.fn(
     async (_url: unknown, init?: RequestInit) =>
-      new Response(JSON.stringify({ cookie: new Headers(init?.headers).get("Cookie") }), {
-        headers: { "content-type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({
+          cookie: new Headers(init?.headers).get("Cookie"),
+          scope: new Headers(init?.headers).get("X-Synthetic-Account"),
+        }),
+        {
+          headers: { "content-type": "application/json" },
+        },
+      ),
   );
   vi.stubGlobal("fetch", upstream);
   const { applicationModelBrokerEnvironment } =
@@ -55,7 +62,10 @@ it("binds each native call to the current Electron app cookie and rejects logout
   const call = () =>
     originalFetch(env.ZCODE_APPLICATION_MODEL_BASE_URL + "/chat/completions", {
       method: "POST",
-      headers: { Authorization: "Bearer " + env.ZCODE_APPLICATION_MODEL_TOKEN },
+      headers: {
+        Authorization: "Bearer " + env.ZCODE_APPLICATION_MODEL_TOKEN,
+        "X-Synthetic-Account": "fixed-original-person",
+      },
       body: "{}",
     });
   state.cookies = [
@@ -82,5 +92,20 @@ it("binds each native call to the current Electron app cookie and rejects logout
       })
     ).status,
   ).toBe(401);
+  expect(upstream).toHaveBeenCalledTimes(2);
+  expect(env.ZCODE_APPLICATION_MODEL_AUTOMATION).toBe("user");
+  expect(new Headers(upstream.mock.calls[0]?.[1]?.headers).get("X-Synthetic-Account")).toBe(
+    "fixed-original-person",
+  );
+  state.cookies = [
+    { name: "synthetic-session", value: "person-two" },
+    { name: "synthetic-csrf", value: "csrf-two" },
+  ];
+  const missing = await originalFetch(env.ZCODE_APPLICATION_MODEL_BASE_URL + "/chat/completions", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + env.ZCODE_APPLICATION_MODEL_TOKEN },
+    body: "{}",
+  });
+  expect(missing.status).toBe(403);
   expect(upstream).toHaveBeenCalledTimes(2);
 });

@@ -2,6 +2,7 @@ import { assertValidAutomationScheduleRule } from "#src/session/automationCronVa
 import { isDeepStrictEqual } from "node:util";
 export { InvalidAutomationScheduleRuleError } from "#src/session/automationCronValidation.js";
 import type {
+  ModelSelection,
   ProjectExecutionSnapshot,
   ZCodeAutomation,
   ZCodeAutomationCreateParams,
@@ -9,10 +10,12 @@ import type {
   ZCodeAutomationUpdateParams,
 } from "@zcode/shared";
 import {
+  AUTOMATION_APPLICATION_ACCOUNT_FIXED_ERROR_CODE,
   resolveWorkspaceKey,
   modelSelectionSchema,
   zcodeAutomationScheduleRuleSchema,
 } from "@zcode/shared";
+import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { AutomationRepo } from "#src/session/automationRepo.js";
 import {
   assertValidAutomationIntervalCarrier,
@@ -54,7 +57,9 @@ export class InvalidCronExprError extends Error {
 
 /** 非法的有限次数更新错误；用于阻止矛盾状态写入并误结束仍在运行的任务。 */
 export class InvalidAutomationMaxRunsUpdateError extends Error {
-  constructor(message = "清空 maxRuns 时必须在同一次更新中设置 recurring=true") {
+  constructor(
+    message = "清空 maxRuns 时必须在同一次更新中设置 recurring=true",
+  ) {
     super(message);
     this.name = "InvalidAutomationMaxRunsUpdateError";
   }
@@ -79,6 +84,9 @@ export class AutomationService {
     private readonly prepareProjectExecution?: (
       projectId: string,
     ) => Promise<ProjectExecutionSnapshot>,
+    private readonly resolveApplicationModelDefault?: () => Promise<
+      ModelSelection | undefined
+    >,
   ) {}
 
   async create(params: ZCodeAutomationCreateParams): Promise<ZCodeAutomation> {
@@ -87,16 +95,30 @@ export class AutomationService {
       const existing = await this.repo.getCreated(params.creationId);
       if (existing) return this.sameCreation(existing, params);
     }
-    const { createParams, nextRunAt, endedBeforeFirstRun, enabled, creationId } =
-      this.normalizeCreation(params, Date.now());
+    const {
+      createParams,
+      nextRunAt,
+      endedBeforeFirstRun,
+      enabled,
+      creationId,
+    } = this.normalizeCreation(params, Date.now());
     let execution: ProjectExecutionSnapshot | undefined;
     if (createParams.projectId) {
       if (createParams.targetTaskId) throw new Error("project.bound-task");
-      if (!this.prepareProjectExecution) throw new Error("project.creation-unavailable");
+      if (!this.prepareProjectExecution)
+        throw new Error("project.creation-unavailable");
       execution = await this.prepareProjectExecution(createParams.projectId);
     }
+    // 本人应用模型不能等到首次触发再跟随当前登录账号；创建时固定原 Provider。
+    const applicationModel = !createParams.modelSelection
+      ? await this.resolveApplicationModelDefault?.()
+      : undefined;
     const created = await this.repo.create(
-      { ...createParams, ...execution },
+      {
+        ...createParams,
+        ...(applicationModel ? { modelSelection: applicationModel } : {}),
+        ...execution,
+      },
       {
         nextRunAt: endedBeforeFirstRun || enabled === false ? null : nextRunAt,
         creationId,
@@ -110,7 +132,10 @@ export class AutomationService {
     return creationId ? this.sameCreation(created, params) : created;
   }
 
-  private normalizeCreation(params: ZCodeAutomationCreateParams, createdAt: number) {
+  private normalizeCreation(
+    params: ZCodeAutomationCreateParams,
+    createdAt: number,
+  ) {
     const relativeDelayMinutes = params.relativeDelayMinutes;
     if (
       relativeDelayMinutes !== undefined &&
@@ -118,16 +143,24 @@ export class AutomationService {
         relativeDelayMinutes < 1 ||
         relativeDelayMinutes > 525_600)
     ) {
-      throw new InvalidAutomationRelativeDelayError("delayMinutes 必须是 1-525600 的整数");
+      throw new InvalidAutomationRelativeDelayError(
+        "delayMinutes 必须是 1-525600 的整数",
+      );
     }
     if (relativeDelayMinutes !== undefined && params.recurring) {
-      throw new InvalidAutomationRelativeDelayError("相对延迟任务必须设置 recurring=false");
+      throw new InvalidAutomationRelativeDelayError(
+        "相对延迟任务必须设置 recurring=false",
+      );
     }
     if (relativeDelayMinutes !== undefined && params.maxRuns !== undefined) {
-      throw new InvalidAutomationRelativeDelayError("相对延迟任务固定只运行一次，不能设置 maxRuns");
+      throw new InvalidAutomationRelativeDelayError(
+        "相对延迟任务固定只运行一次，不能设置 maxRuns",
+      );
     }
     if (relativeDelayMinutes !== undefined && params.scheduleRule) {
-      throw new InvalidAutomationRelativeDelayError("不能同时提交 delayMinutes 和 scheduleRule");
+      throw new InvalidAutomationRelativeDelayError(
+        "不能同时提交 delayMinutes 和 scheduleRule",
+      );
     }
     const intervalUnit = params.intervalUnit;
     const interval = params.interval;
@@ -188,13 +221,25 @@ export class AutomationService {
     const scheduleRule = normalizedParams.scheduleRule
       ? { ...normalizedParams.scheduleRule, anchorAt: createdAt }
       : inferMinuteIntervalScheduleRule(normalizedParams.cronExpr, createdAt);
-    const createParams = scheduleRule ? { ...normalizedParams, scheduleRule } : normalizedParams;
+    const createParams = scheduleRule
+      ? { ...normalizedParams, scheduleRule }
+      : normalizedParams;
     // 五段 cron 不含年份；一次性固定月日任务若在创建过程中刚错过目标分钟，
     // 普通 nextRun 会滚到下一年。首次计算只补偿小于一分钟的跨分钟误差，陈旧目标在写库前拒绝。
-    const nextRunAt = computeInitialAutomationNextRunAt(createParams, createdAt);
+    const nextRunAt = computeInitialAutomationNextRunAt(
+      createParams,
+      createdAt,
+    );
     const endedBeforeFirstRun =
-      createParams.endAt !== undefined && (nextRunAt ?? Infinity) > createParams.endAt;
-    return { createParams, nextRunAt, endedBeforeFirstRun, enabled, creationId };
+      createParams.endAt !== undefined &&
+      (nextRunAt ?? Infinity) > createParams.endAt;
+    return {
+      createParams,
+      nextRunAt,
+      endedBeforeFirstRun,
+      enabled,
+      creationId,
+    };
   }
 
   preview(params: ZCodeAutomationCreateParams) {
@@ -238,7 +283,8 @@ export class AutomationService {
     params: ZCodeAutomationCreateParams,
   ): ZCodeAutomation {
     const desiredRule =
-      params.scheduleRule ?? inferMinuteIntervalScheduleRule(params.cronExpr, existing.createdAt);
+      params.scheduleRule ??
+      inferMinuteIntervalScheduleRule(params.cronExpr, existing.createdAt);
     if (
       existing.title !== params.title ||
       existing.cronExpr !== params.cronExpr ||
@@ -248,12 +294,22 @@ export class AutomationService {
       existing.endAt !== params.endAt ||
       existing.mode !== params.mode ||
       (existing.projectId ?? null) !== (params.projectId ?? null) ||
-      (!params.projectId && existing.workspaceKey !== resolveWorkspaceKey(params)) ||
-      !isDeepStrictEqual(existing.modelSelection, params.modelSelection) ||
-      (existing.scheduleRule ? scheduleRuleDefinition(existing.scheduleRule) : undefined) !==
+      (!params.projectId &&
+        existing.workspaceKey !== resolveWorkspaceKey(params)) ||
+      (!(
+        this.resolveApplicationModelDefault &&
+        params.modelSelection === undefined &&
+        existing.modelSelection?.providerId.startsWith("application:")
+      ) &&
+        !isDeepStrictEqual(existing.modelSelection, params.modelSelection)) ||
+      (existing.scheduleRule
+        ? scheduleRuleDefinition(existing.scheduleRule)
+        : undefined) !==
         (desiredRule ? scheduleRuleDefinition(desiredRule) : undefined)
     )
-      throw new Error("Automation creation identity conflicts with saved configuration");
+      throw new Error(
+        "Automation creation identity conflicts with saved configuration",
+      );
     return existing;
   }
 
@@ -288,10 +344,33 @@ export class AutomationService {
     const existing = await this.repo.get(automationId, workspaceKey);
     if (!existing) return null;
 
-    if (params.scheduleRule) assertValidAutomationScheduleRule(params.scheduleRule);
+    // 应用 Provider 是原账号绑定；编辑不能通过换 Provider 或清空选择接管旧规则。
+    if (
+      existing.modelSelection?.providerId.startsWith("application:") &&
+      params.modelSelection !== undefined &&
+      params.modelSelection?.providerId !== existing.modelSelection.providerId
+    ) {
+      createServiceLogger("automation").info(undefined, {
+        event: "automation.identity",
+        outcome: "blocked",
+        automationId,
+        reason: "application_account_fixed",
+      });
+      throw new Error(
+        `[${AUTOMATION_APPLICATION_ACCOUNT_FIXED_ERROR_CODE}] Application account is fixed`,
+      );
+    }
+
+    if (params.scheduleRule)
+      assertValidAutomationScheduleRule(params.scheduleRule);
 
     // 会话侧自定义重复 carrier 校验：intervalUnit+interval 必须配对且限定为 1–200，并与直传 scheduleRule 互斥。
-    const { intervalUnit, interval, scheduleRule: directScheduleRule, ...restParams } = params;
+    const {
+      intervalUnit,
+      interval,
+      scheduleRule: directScheduleRule,
+      ...restParams
+    } = params;
     // `undefined` 表示不修改，`null` 表示显式清除已有规则；两者不能在解构后混为一谈。
     // 用 `??` 合并会把 `scheduleRule: null` 当作未传，导致用户无法恢复普通 cron 调度。
     const hasDirectScheduleRule = directScheduleRule !== undefined;
@@ -302,17 +381,26 @@ export class AutomationService {
       recurring: restParams.recurring,
       maxRuns: restParams.maxRuns,
     });
-    const hasIntervalCarrier = intervalUnit !== undefined && interval !== undefined;
+    const hasIntervalCarrier =
+      intervalUnit !== undefined && interval !== undefined;
 
     // 把 maxRuns=null 转成 undefined 后又按一次性任务上限 1 计算，
     // 会将已运行过的有限次任务静默改成 completed。清空上限必须与切换无限循环原子提交。
-    if (!hasIntervalCarrier && restParams.maxRuns === null && restParams.recurring !== true) {
+    if (
+      !hasIntervalCarrier &&
+      restParams.maxRuns === null &&
+      restParams.recurring !== true
+    ) {
       throw new InvalidAutomationMaxRunsUpdateError();
     }
 
-    const nextRecurring = hasIntervalCarrier ? true : (restParams.recurring ?? existing.recurring);
+    const nextRecurring = hasIntervalCarrier
+      ? true
+      : (restParams.recurring ?? existing.recurring);
     if (nextRecurring && typeof restParams.maxRuns === "number") {
-      throw new InvalidAutomationMaxRunsUpdateError("无限循环任务不能设置有限次数 maxRuns");
+      throw new InvalidAutomationMaxRunsUpdateError(
+        "无限循环任务不能设置有限次数 maxRuns",
+      );
     }
 
     // 有限任务只提交 recurring=true 时，旧 maxRuns 会被 repo.update 原样保留，
@@ -334,8 +422,12 @@ export class AutomationService {
 
     // 改 cron_expr：校验 + 以 now 重算 next_run_at + 清 retry 态。
     const cronChanged =
-      normalizedParams.cronExpr !== undefined && normalizedParams.cronExpr !== existing.cronExpr;
-    if (normalizedParams.cronExpr !== undefined && !isValidCronExpr(normalizedParams.cronExpr)) {
+      normalizedParams.cronExpr !== undefined &&
+      normalizedParams.cronExpr !== existing.cronExpr;
+    if (
+      normalizedParams.cronExpr !== undefined &&
+      !isValidCronExpr(normalizedParams.cronExpr)
+    ) {
       throw new InvalidCronExprError(normalizedParams.cronExpr);
     }
     const updatedAt = Date.now();
@@ -344,7 +436,12 @@ export class AutomationService {
     // carrier 场景必须重新锚定（anchorAt=updatedAt），后续 explicitScheduleRule 的「规则未变保留旧锚点」
     // 判断对 carrier 无意义——carrier 提交即代表用户要重设间隔，统一走本次保存重新计时。
     const carrierScheduleRule = hasIntervalCarrier
-      ? buildIntervalScheduleRule(intervalUnit, interval, effectiveCron, updatedAt)
+      ? buildIntervalScheduleRule(
+          intervalUnit,
+          interval,
+          effectiveCron,
+          updatedAt,
+        )
       : undefined;
     const effectiveDirectScheduleRule = hasDirectScheduleRule
       ? directScheduleRule
@@ -382,10 +479,16 @@ export class AutomationService {
         : (explicitScheduleRule ?? undefined);
     const updateParams =
       cronChanged && effectiveDirectScheduleRule === undefined
-        ? { ...normalizedWithSchedule, scheduleRule: inferredScheduleRule ?? null }
+        ? {
+            ...normalizedWithSchedule,
+            scheduleRule: inferredScheduleRule ?? null,
+          }
         : effectiveDirectScheduleRule === undefined
           ? normalizedWithSchedule
-          : { ...normalizedWithSchedule, scheduleRule: explicitScheduleRule ?? null };
+          : {
+              ...normalizedWithSchedule,
+              scheduleRule: explicitScheduleRule ?? null,
+            };
     if (
       cronChanged ||
       normalizedParams.endAt !== undefined ||
@@ -402,7 +505,9 @@ export class AutomationService {
     }
 
     const effectiveEndAt =
-      normalizedParams.endAt === undefined ? existing.endAt : (normalizedParams.endAt ?? undefined);
+      normalizedParams.endAt === undefined
+        ? existing.endAt
+        : (normalizedParams.endAt ?? undefined);
     if (
       effectiveEndAt !== undefined &&
       (options.nextRunAt ?? existing.nextRunAt ?? Infinity) > effectiveEndAt
@@ -411,23 +516,31 @@ export class AutomationService {
       options.lifecycleStatus = "completed";
     } else if (
       normalizedParams.endAt !== undefined &&
-      (existing.lifecycleStatus === "completed" || existing.lifecycleStatus === "failed")
+      (existing.lifecycleStatus === "completed" ||
+        existing.lifecycleStatus === "failed")
     ) {
       options.lifecycleStatus = "active";
     }
 
     // 改 recurring / max_runs：重算生命周期。
-    if (normalizedParams.recurring !== undefined || normalizedParams.maxRuns !== undefined) {
+    if (
+      normalizedParams.recurring !== undefined ||
+      normalizedParams.maxRuns !== undefined
+    ) {
       const nextMaxRuns =
         normalizedParams.maxRuns === undefined
           ? existing.maxRuns
           : (normalizedParams.maxRuns ?? undefined);
       // runCount 是 Card 的累计展示数，包含 manual run；若用它重算有限计划，
       // 用户只要手动执行过就可能在编辑 maxRuns 时把任务提前改成 completed。
-      const scheduledRunCount = await this.repo.getScheduledRunCount(automationId, workspaceKey);
+      const scheduledRunCount = await this.repo.getScheduledRunCount(
+        automationId,
+        workspaceKey,
+      );
       if (scheduledRunCount === null) return null;
       // 与 markDispatched 口径一致：有限次任务未显式设 max_runs 时按一次性任务(上限 1)处理。
-      const reachedMax = !nextRecurring && scheduledRunCount >= (nextMaxRuns ?? 1);
+      const reachedMax =
+        !nextRecurring && scheduledRunCount >= (nextMaxRuns ?? 1);
       if (reachedMax) {
         options.lifecycleStatus = "completed";
       } else if (
@@ -451,7 +564,10 @@ export class AutomationService {
     return this.repo.update(automationId, updateParams, options, workspaceKey);
   }
 
-  async delete(automationId: string, scope?: AutomationWorkspaceScope): Promise<boolean> {
+  async delete(
+    automationId: string,
+    scope?: AutomationWorkspaceScope,
+  ): Promise<boolean> {
     return this.repo.delete(automationId, resolveScopeKey(scope));
   }
 
@@ -471,7 +587,10 @@ export class AutomationService {
   }
 
   /** 失败任务手动重跑：回 active、清计数，按 cron 重算下次时间。 */
-  async restart(automationId: string, scope?: AutomationWorkspaceScope): Promise<void> {
+  async restart(
+    automationId: string,
+    scope?: AutomationWorkspaceScope,
+  ): Promise<void> {
     const workspaceKey = resolveScopeKey(scope);
     const existing = await this.repo.get(automationId, workspaceKey);
     if (!existing) return;
@@ -487,11 +606,19 @@ export class AutomationService {
     automationId: string,
     scope?: AutomationWorkspaceScope,
     requestId?: string,
-  ): Promise<{ automation: ZCodeAutomation; run: ZCodeAutomationRun; replayed?: boolean } | null> {
+  ): Promise<{
+    automation: ZCodeAutomation;
+    run: ZCodeAutomationRun;
+    replayed?: boolean;
+  } | null> {
     const workspaceKey = resolveScopeKey(scope);
     const existing = await this.repo.get(automationId, workspaceKey);
     if (!existing) return null;
-    return this.repo.runNow(automationId, { now: Date.now(), requestId }, workspaceKey);
+    return this.repo.runNow(
+      automationId,
+      { now: Date.now(), requestId },
+      workspaceKey,
+    );
   }
 
   async listRuns(
@@ -500,7 +627,10 @@ export class AutomationService {
   ): Promise<ZCodeAutomationRun[]> {
     return this.repo.listRuns(automationId, resolveScopeKey(scope));
   }
-  async deleteRun(runId: string, scope?: AutomationWorkspaceScope): Promise<void> {
+  async deleteRun(
+    runId: string,
+    scope?: AutomationWorkspaceScope,
+  ): Promise<void> {
     return this.repo.deleteRun(runId, resolveScopeKey(scope));
   }
 }

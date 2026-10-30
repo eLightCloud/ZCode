@@ -10,7 +10,7 @@
 
 验证命令的 stdout 和结构化事件在 SSH 模式下全部写入 stderr，SSH stdout 只传输 Git 协议。SSH 进程退出只代表连接过程，最终推送结果由 Git 返回；不能把 receive-pack 的成功退出冒充所有 ref 已更新。
 
-仅自动接合已配置的 SSH 来源。显式 GIT_SSH_COMMAND、HTTPS 或自定义 receive-pack 不经该前置桥，pre-push 继续拒绝无凭证推送；旧显式入口保留诊断 / 兼容用途，不再是日常要求。安装 / doctor 必须核验 SSH 桥与固定 Node 的有效性。
+仅自动接合已配置的 SSH 来源。显式 GIT_SSH_COMMAND、HTTPS 或自定义 receive-pack 不经该前置桥，pre-push 继续拒绝无凭证推送；旧显式入口保留诊断 / 兼容用途，不再是日常要求。安装 / doctor 必须核验 SSH 桥与固定 Node 的有效性。prepare 在没有 Git 元数据的源码包中或显式 HUSKY=0 的容器构建中只跳过推送入口安装，不影响后续构建；check-install 与真正推送仍拒绝缺失或禁用的门禁。
 
 ## 测试分层合同
 

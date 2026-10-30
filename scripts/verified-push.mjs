@@ -106,6 +106,13 @@ export async function main(argv = process.argv.slice(2)) {
   try {
     if (!["push", "check", "ssh", "install", "check-install"].includes(action))
       throw new Rejected("unknown_push_action");
+    // prepare 也用于不含 Git 元数据的容器 / 源码包；只跳过可选安装，推送门禁不放行。
+    if (action === "install" && process.env.HUSKY === "0") {
+      report("installation", "skipped", { reason_code: "hooks_explicitly_disabled" });
+      return 0;
+    }
+    if (action === "check-install" && process.env.HUSKY === "0")
+      throw new Rejected("push_hook_not_enabled");
     const env = withPinnedNodePath(process.env, process.execPath);
     const local = await run("git", ["rev-parse", "--local-env-vars"], { capture: true });
     if (local.code) throw new Rejected("repository_required");
@@ -116,7 +123,15 @@ export async function main(argv = process.argv.slice(2)) {
       if (result.code) throw new Rejected("git_inspection_failed");
       return result.stdout.trimEnd();
     };
-    root = await git("rev-parse", "--show-toplevel");
+    const location = await run("git", ["rev-parse", "--show-toplevel"], { env, capture: true });
+    if (location.code) {
+      if (action === "install") {
+        report("installation", "skipped", { reason_code: "not_a_git_checkout" });
+        return 0;
+      }
+      throw new Rejected("repository_required");
+    }
+    root = location.stdout.trimEnd();
     const config = async (name) => {
       const result = await run("git", ["config", "--get", name], { cwd: root, env, capture: true });
       if (result.code !== 0 && result.code !== 1)

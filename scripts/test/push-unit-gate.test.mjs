@@ -547,3 +547,34 @@ test("server ref rejection remains a failed Git push even when SSH closes normal
   assert.equal(retried.status, 0, retried.stdout + retried.stderr);
   assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 1);
 });
+
+test("source archive prepare skips Git installation while admission still fails", async (t) => {
+  const f = await fixture(t);
+  await rm(join(f.checkout, ".git"), { recursive: true });
+  const installed = f.run(process.execPath, ["scripts/verified-push.mjs", "install"]);
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  assert(installed.stdout.includes('"reason_code":"not_a_git_checkout"'));
+  assert.notEqual(
+    f.run(process.execPath, ["scripts/verified-push.mjs", "check-install"]).status,
+    0,
+  );
+  assert.notEqual(f.push("origin", "main").status, 0);
+});
+
+test("HUSKY=0 prepare skips configuration without allowing a disabled push gate", async (t) => {
+  const f = await fixture(t);
+  f.env.HUSKY = "0";
+  const installed = f.run(process.execPath, ["scripts/verified-push.mjs", "install"]);
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  assert(installed.stdout.includes('"reason_code":"hooks_explicitly_disabled"'));
+  assert.equal(f.run("git", ["config", "--get", "core.sshCommand"]).status, 1);
+  assert.notEqual(
+    f.run(process.execPath, ["scripts/verified-push.mjs", "check-install"]).status,
+    0,
+  );
+  const pushed = f.push("origin", "main");
+  assert.notEqual(pushed.status, 0);
+  assert(pushed.stdout.includes("push_hook_not_enabled"));
+  assert.deepEqual(await f.rows(), []);
+  assert.notEqual(f.published().status, 0);
+});

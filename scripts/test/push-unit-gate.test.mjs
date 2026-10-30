@@ -395,3 +395,155 @@ test("untrusted correlation input cannot become a path or log payload", async (t
     .map(JSON.parse);
   assert.equal(new Set(events.map(({ correlation_id }) => correlation_id)).size, 1);
 });
+
+// 合成 SSH 只替换网络边界，真实 Git packet-line / hook / ref 更新均沿正式入口。
+async function automaticSsh(f) {
+  const binary = join(f.checkout, ".git/ssh-bin");
+  await mkdir(binary);
+  const executable = join(binary, "ssh");
+  await writeFile(
+    executable,
+    `#!${process.execPath}
+import fs from 'node:fs'; import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2);
+if(args.includes('-G')) process.exit(0);
+const command=args.at(-1)??'';
+const push=command.startsWith('git-receive-pack ');
+fs.appendFileSync(process.env.SSH_TRACE,JSON.stringify({push,verified:fs.existsSync('.git/steps.jsonl')})+'\\n');
+if(process.env.SSH_FAIL==='1') process.exit(23);
+const result=spawnSync('git',[push?'receive-pack':'upload-pack',process.env.SSH_REMOTE],{stdio:'inherit'});
+process.exit(result.status??1);
+`,
+  );
+  await chmod(executable, 0o755);
+  Object.assign(f.env, {
+    PATH: binary + (process.platform === "win32" ? ";" : ":") + f.env.PATH,
+    SSH_REMOTE: f.remote,
+    SSH_TRACE: join(f.checkout, ".git/ssh-trace.jsonl"),
+  });
+  f.git("remote", "set-url", "origin", "synthetic.example:repository");
+  const installed = f.run(process.execPath, ["scripts/verified-push.mjs", "install"]);
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  return async () => {
+    try {
+      return (await readFile(f.env.SSH_TRACE, "utf8")).trim().split("\n").map(JSON.parse);
+    } catch (error) {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    }
+  };
+}
+
+test("plain git push automatically validates before SSH and preserves protocol stdout", async (t) => {
+  const f = await fixture(t);
+  const trace = await automaticSsh(f);
+  const result = f.run("git", ["push", "origin", "main"]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(f.published().stdout.trim(), f.git("rev-parse", "HEAD"));
+  assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 1);
+  assert((await trace()).every(({ verified }) => verified));
+  assert(result.stderr.includes('"step":"verification","outcome":"passed"'));
+  const repeated = f.run("git", ["push", "origin", "main"]);
+  assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+  assert(repeated.stderr.includes('"outcome":"reused"'));
+  assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 1);
+});
+
+test("plain push validation failure never opens SSH connection", async (t) => {
+  const f = await fixture(t);
+  const trace = await automaticSsh(f);
+  f.env.UNIT_CODE = "7";
+  const failed = f.run("git", ["push", "origin", "main"]);
+  assert.notEqual(failed.status, 0);
+  assert.deepEqual(await trace(), []);
+  assert.equal((await f.receipts()).length, 0);
+  assert.notEqual(f.published().status, 0);
+});
+
+test("plain push SSH failure is retried with no repeated full validation", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  f.env.SSH_FAIL = "1";
+  assert.notEqual(f.run("git", ["push", "origin", "main"]).status, 0);
+  assert.equal((await f.receipts()).length, 1);
+  delete f.env.SSH_FAIL;
+  const retried = f.run("git", ["push", "origin", "main"]);
+  assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+  assert(retried.stderr.includes('"outcome":"reused"'));
+  assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 1);
+});
+
+test("plain push revalidates a changed source tree", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  assert.equal(f.run("git", ["push", "origin", "main"]).status, 0);
+  await writeFile(join(f.checkout, "next.txt"), "new code");
+  f.git("add", ".");
+  f.git("commit", "-m", "next source");
+  assert.equal(f.run("git", ["push", "origin", "main"]).status, 0);
+  assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 2);
+});
+
+test("fetch and SSH probes bypass validation even without current-branch verifier", async (t) => {
+  const f = await fixture(t);
+  const trace = await automaticSsh(f);
+  assert.equal(f.run("git", ["ls-remote", "origin"]).status, 0);
+  assert.deepEqual(await f.rows(), []);
+  assert((await trace()).every(({ push }) => !push));
+  assert.equal(f.run("git", ["push", "origin", "main"]).status, 0);
+  const before = await f.rows();
+  await rm(join(f.checkout, "scripts/verified-push.mjs"));
+  const fetched = f.run("git", ["fetch", "origin", "main"]);
+  assert.equal(fetched.status, 0, fetched.stderr);
+  assert.deepEqual(await f.rows(), before);
+});
+
+test("automatic installation is idempotent and does not replace external SSH settings", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  assert.equal(f.run(process.execPath, ["scripts/verified-push.mjs", "check-install"]).status, 0);
+  assert.equal(f.run(process.execPath, ["scripts/verified-push.mjs", "install"]).status, 0);
+  f.git("config", "core.sshCommand", "custom-ssh -o user-option");
+  const rejected = f.run(process.execPath, ["scripts/verified-push.mjs", "install"]);
+  assert.notEqual(rejected.status, 0);
+  assert.equal(f.git("config", "--get", "core.sshCommand"), "custom-ssh -o user-option");
+});
+
+test("ordinary git push uses installed Node even if ambient node fails", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  await writeFile(join(f.checkout, ".git/ssh-bin/node"), "#!/bin/sh\nexit 97\n");
+  await chmod(join(f.checkout, ".git/ssh-bin/node"), 0o755);
+  const pushed = f.run("git", ["push", "origin", "main"]);
+  assert.equal(pushed.status, 0, pushed.stdout + pushed.stderr);
+  assert.equal(f.published().stdout.trim(), f.git("rev-parse", "HEAD"));
+});
+
+test("explicit SSH environment override is diagnosed without replacing configuration", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  const configured = f.git("config", "--get", "core.sshCommand");
+  f.env.GIT_SSH_COMMAND = "external-ssh private-option-must-not-be-logged";
+  const refused = f.run(process.execPath, ["scripts/verified-push.mjs", "install"]);
+  assert.notEqual(refused.status, 0);
+  assert(refused.stdout.includes("ssh_environment_override_requires_integration"));
+  assert(!(refused.stdout + refused.stderr).includes("private-option-must-not-be-logged"));
+  assert.equal(f.git("config", "--get", "core.sshCommand"), configured);
+});
+
+test("server ref rejection remains a failed Git push even when SSH closes normally", async (t) => {
+  const f = await fixture(t);
+  await automaticSsh(f);
+  const hook = join(f.remote, "hooks/pre-receive");
+  await writeFile(hook, "#!/bin/sh\nexit 1\n");
+  await chmod(hook, 0o755);
+  const rejected = f.run("git", ["push", "origin", "main"]);
+  assert.notEqual(rejected.status, 0);
+  assert.notEqual(f.published().status, 0);
+  assert(rejected.stderr.includes('"step":"ssh","outcome":"closed"'));
+  assert(!rejected.stderr.includes('"step":"transport","outcome":"passed"'));
+  await rm(hook);
+  const retried = f.run("git", ["push", "origin", "main"]);
+  assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+  assert.equal((await f.rows()).filter(({ step }) => step === "unit").length, 1);
+});

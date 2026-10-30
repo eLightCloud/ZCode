@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 
-# Git 已建立连接；只核验成功凭证，长验证由 pnpm push 在连接前完成。
+# Git 已建立连接；只核验成功凭证，长验证由普通 git push 的 SSH 前置入口完成。
 unset $(git rev-parse --local-env-vars)
-exec node scripts/verified-push.mjs check
+runtime=$(git config --get verifiedPush.node) || runtime=node
+exec "$runtime" scripts/verified-push.mjs check

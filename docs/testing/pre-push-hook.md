@@ -4,6 +4,14 @@
 
 组织推送策略要求每个准确源码和工具链组合先实际执行完整的隔离单元 / 组件套件 `pnpm test:unit`。用户于 2026-10-30 授权验证前置与成功凭证复用，取代每次传输重试都重复全量的旧规则。用户于 2026-10-26 明确授权将真实 IO、数据库、网络、子进程和构建集成从 push 中拆出；原来“完整根测试全部进入 push”的规则由本分层取代。静态检查与单测失败仍阻止 push，affected 保留独立开发命令，不再进入推送链；成功凭证不能由 affected 产生。
 
+## 普通 git push 的自动入口
+
+日常只需 `git push`。prepare 自动安装仓库级 SSH 桥，receive-pack 在真实建连前进入同一验证 owner；匹配成功结果直接复用，失败阻断。fetch / pull / SSH -G 透传，不触发验证。安装固定 Node，hook 使用相同运行时；不覆盖已有自定义 SSH 命令，不修改全局配置。SSH 桥保存在 Git common 元数据目录，避免依赖某个 worktree 的路径；读取操作不依赖当前分支含有验证源码。
+
+验证命令的 stdout 和结构化事件在 SSH 模式下全部写入 stderr，SSH stdout 只传输 Git 协议。SSH 进程退出只代表连接过程，最终推送结果由 Git 返回；不能把 receive-pack 的成功退出冒充所有 ref 已更新。
+
+仅自动接合已配置的 SSH 来源。显式 GIT_SSH_COMMAND、HTTPS 或自定义 receive-pack 不经该前置桥，pre-push 继续拒绝无凭证推送；旧显式入口保留诊断 / 兼容用途，不再是日常要求。安装 / doctor 必须核验 SSH 桥与固定 Node 的有效性。
+
 ## 测试分层合同
 
 | 入口 | 范围 | 自动进入 push |
@@ -20,7 +28,7 @@
 所有根 Vitest 测试入口继续通过现有 HOME / XDG 隔离 runner，scope 与实际 project 选择写入低敏事件；不得用直接 Vitest 绕开隔离。集成缺少依赖或失败必须非零退出，不能改成 skip；原有平台适用性跳过保持。该分层不新增或修改远端 CI 配置，可由 CI 显式调用 `pnpm test:all`。
 
 - 安装依赖后会执行根脚本 `pnpm prepare`，自动完成 Husky 安装。
-- `pnpm push -- [remote] [HEAD:branch]` 先验证再调用 Git；`pre-push` 只快速核验匹配凭证。
+- 普通 `git push` 自动在真实 SSH 建连前验证；`pre-push` 只快速核验匹配凭证。
 - 根 `pnpm test` 现在只跑单测，不再误把桌面端 `packages/desktop/test/e2e` 当成 Vitest 用例。
 - Bugfix：单测脚本里的 E2E exclude glob 必须加引号；否则 shell 会先把 `packages/desktop/test/e2e/**/*.test.ts` 展开成真实文件列表，导致 Vitest 把多余文件当成 filters，同时又被 exclude 排除，最终报 `No test files found` 并阻止 push。
 - `verify:pre-push` 依次执行 lint、完整架构静态检查、收集守恒检查、完整隔离单测；任何失败阻止 push。完整架构检查使凭证不依赖某个远端基线。
@@ -29,7 +37,7 @@
 
 ## 验证前置与成功凭证
 
-唯一编排为 `scripts/verified-push.mjs`，唯一仓库策略为 `.push-verification.json`。入口 `pnpm push -- [remote] [HEAD:branch]` 在任何 push 连接前完成验证；`--force-verify` 放在 remote 前可强制重新验证。直接 `git push` 缺少有效凭证时立即拒绝并提示入口，已有凭证则快速放行，不在连接后启动长测试。单独运行 `pnpm verify:pre-push` 保持显式质量门，不签发凭证。
+唯一编排为 `scripts/verified-push.mjs`，唯一仓库策略为 `.push-verification.json`。日常 `git push` 自动进入同一验证 owner；旧 `pnpm push` 仅保留显式诊断与非 SSH 兼容。`--force-verify` 放在 remote 前可强制重新验证。正常 SSH 推送无凭证时由前置桥自动验证；若安装缺失或显式覆盖 SSH 桥，pre-push 仍会立即拒绝无凭证推送，不在连接后启动长测试。单独运行 `pnpm verify:pre-push` 保持显式质量门，不签发凭证。
 
 凭证只保存在当前仓库的 Git 元数据 `verified-push/`，不提交或跨机器共享。指纹包含干净已提交源码树、递归子模块及 gitlink 一致性、平台 / 架构、实际 Node 路径与版本、策略声明的工具版本、依赖安装元数据、相关环境及编排实现。任何输入改变必须重新验证；dirty / 未跟踪源码、缺失或错位子模块、工具不可用都阻断。推送只放行当前 HEAD（允许删除 ref），不支持批量其它分支或注解 tag。远端、分支名、SSH 连接配置不属于与目标无关的质量门输入；服务端拒绝、断网或 SIGPIPE 后，同输入重试复用成功凭证。
 
@@ -38,11 +46,11 @@
 hook 复核有效 hooksPath、成功凭证、当前指纹与待推 HEAD；入口禁止 `--no-verify` / `-n`、关闭 Husky 及批量推送选项。hook 是本机工程保护，不能代替远端分支保护。日志 `engineering.git.push` 以关联 ID 区分验证开始 / 失败 / 通过 / 复用、hook 准入与传输结果；指纹和退出码可记录，不输出配置秘密或工具异常正文。
 
 ```text
-pnpm push → 指纹 / 成功凭证 → 必要时完整验证 → 原子凭证
-         → git push 建立连接 → pre-push 快速复核 → 传输结果
+git push → SSH 前置桥 → 指纹 / 成功凭证 → 必要时完整验证
+         → 真实 SSH 连接 → pre-push 快速复核 → Git 原生传输结果
 ```
 
-入口与 hook 使用当前 PATH 中的 Node / pnpm，验证和版本查询复用现有跨平台 pnpm runner，不强制原生独立仓库使用 mise；工具版本变化使凭证失效。Vantage 外层入口通过既有 mise 固定工具。GUI 应先在终端用受控入口验证，之后同输入的普通推送可以复用；无法取得 Node / pnpm 时明确失败，不能静默跳过。mise、隔离 runner 和测试失败规则继续保留。
+安装按已准备好的 Node / pnpm 环境记录准确 Node 路径，日常 SSH 入口与 hook 使用该固定 Node；验证子进程沿既有跨平台 runner 固定相同 Node。原生独立仓库不强制安装 mise；重新安装或升级工具时更新登记，实际版本变化使凭证失效。Vantage 外层入口通过既有 mise 固定工具。GUI 应先在终端用受控入口验证，之后同输入的普通推送可以复用；无法取得 Node / pnpm 时明确失败，不能静默跳过。mise、隔离 runner 和测试失败规则继续保留。
 
 ## Affected Unit Tests
 

@@ -68,6 +68,7 @@ export {
   Info,
   SearchX,
   AlertCircle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -79,6 +80,10 @@ export {
   Eye,
   Ellipsis,
   Link,
+  Filter,
+  Layers,
+  ReceiptText,
+  Wallet,
 } from "lucide-react";
 export type { ZCodeState } from "./store/index.js";
 export {

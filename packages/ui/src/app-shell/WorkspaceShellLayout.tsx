@@ -2265,6 +2265,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                       // Bug 根因：独立插件页曾绕过切回聊天页的包装回调，任务虽被创建，
                       // 视图仍停在插件详情，用户看到“立即试用”与示例 Prompt 点击无反应。
                       onCreateTask={handleCreateTaskInChat}
+                      onBack={showChatMainView}
                       sessionId={activeTaskId}
                       remoteSessionId={workspaceRemoteSessionId}
                     />
@@ -2718,6 +2719,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                                     workspacePath={workspaceAbsPath}
                                     workspaceIdentity={workspaceIdentity}
                                     onCreateTask={handleCreateTaskInChat}
+                                    onBack={showChatMainView}
                                     sessionId={activeTaskId}
                                     remoteSessionId={workspaceRemoteSessionId}
                                   />

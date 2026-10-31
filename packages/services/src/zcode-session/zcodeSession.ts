@@ -34,6 +34,8 @@ export interface ZCodeTaskTarget extends ZCodeSessionWorkspaceTarget {
 }
 
 export interface ZCodeSessionCreateParams extends ZCodeSessionWorkspaceTarget {
+  /** 透传既有项目归属，远端会话不能被误判为无项目创建。 */
+  projectId?: string | null;
   /** 仅导入事务使用的预分配 ID；普通新会话继续由 Agent 分配。 */
   sessionId?: string;
   sessionTraceId?: TraceId;

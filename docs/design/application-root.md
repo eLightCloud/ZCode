@@ -1,5 +1,10 @@
 # Optional application admission
 
+Trusted application catalogs may reuse the public `PluginStoreAvatar` beside the
+existing shared catalog row. Icon resolution, trusted custom artwork, decorative
+accessibility and the neutral Blocks default remain native-owned. Missing artwork
+does not require rewriting package metadata or fetching another asset.
+
 ApplicationDialog accepts an optional content className for application-sized forms;
 native focus trapping, Escape, accessible title and overlay behavior remain owned by the shared dialog.
 
@@ -8,6 +13,16 @@ the shared settings/profile menu omits the native Coding Plan upgrade action.
 Usage statistics remain available. Unconfigured native builds retain the action.
 
 ## Trusted application pages
+
+Trusted catalogs may reuse the public plugin mention and creator-prefill builders
+to prepare native conversation drafts. The native builders retain skill identity
+and mention encoding; external catalogs do not copy those protocols or send input.
+`openConversation` accepts an optional exact workspace target. The same target
+owns the persisted draft, tab identity and active session; explicit remote targets
+never route through the default local conversation workspace.
+Archive import receives that same exact workspace target. Trusted import UI may
+finish acquisition there using public workspace-scoped services, without guessing
+a local destination or requiring a second install action in discovery.
 
 Root may receive build-owned applicationPages (stable id, label, optional Icon, render callback).
 The first page trigger belongs to the native workspace header immediately before

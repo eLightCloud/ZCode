@@ -175,3 +175,18 @@ describe("Core operational diagnostics", () => {
     },
   );
 });
+
+it("retains safe extension phases through the bounded diagnostic sink", async () => {
+  const root = await directory();
+  const diagnostics = createCoreDiagnosticLog(root,1);
+  diagnostics.logger.info(undefined,'discarded message',{
+    event:'application.host.extension',method:'synthetic.source',outcome:'unavailable',
+    phase:'discovery',reasonCode:'source_unavailable',correlationId:'opaque-source',
+    arbitrary:'private payload',
+  });
+  await diagnostics.flush();
+  const text = await readFile(join(root,'core.log'),'utf8');
+  expect(JSON.parse(text)).toMatchObject({event:'application.host.extension',phase:'discovery',correlationId:'opaque-source'});
+  expect(text).not.toContain('private payload');
+  expect(text).not.toContain('discarded message');
+});

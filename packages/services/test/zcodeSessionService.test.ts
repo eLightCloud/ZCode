@@ -69,6 +69,7 @@ describe("createZCodeSessionService", () => {
 
     await service.createSession({
       workspacePath: "/workspace/app",
+      projectId: "owning-project",
       mcpServers: [
         {
           name: "plugin:computer-use:computer-use",
@@ -86,6 +87,7 @@ describe("createZCodeSessionService", () => {
     });
 
     const createParams = vi.mocked(agentService.createSession).mock.calls[0]?.[0];
+    expect(createParams?.projectId).toBe("owning-project");
     const server = createParams?.mcpServers?.[0];
     expect(resolver.resolveMcpServers).toHaveBeenCalledTimes(1);
     expect(server && "command" in server ? server.args : []).toEqual([

@@ -232,3 +232,23 @@ describe("Application Host lifecycle", () => {
     }
   });
 });
+
+it("projects bounded extension observations without arbitrary text or fields", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zcode-app-observation-"));
+  const modulePath = join(root, "extension.mjs");
+  await writeFile(modulePath, `export async function createApplicationHost({logger}) {
+    logger.info('synthetic.source', {outcome:'unavailable',phase:'discovery',reason_code:'source_unavailable',source_ref:'opaque-source',secret:'private content'});
+    logger.warn('private content', {outcome:'failed',secret:'private content'});
+    return {async call(){},async dispose(){}}; }`);
+  const logger = {info:vi.fn(),warn:vi.fn(),error:vi.fn(),debug:vi.fn()};
+  const service = createApplicationHostService({native,credentials,storageRoot:root,modulePath,logger});
+  try {
+    await service.call('inspect',{});
+    expect(logger.info.mock.calls.map(call=>call[2])).toContainEqual(expect.objectContaining({
+      event:'application.host.extension',method:'synthetic.source',outcome:'unavailable',
+      phase:'discovery',reasonCode:'source_unavailable',correlationId:'opaque-source',
+    }));
+    expect(logger.warn.mock.calls[0][2]).toMatchObject({event:'application.host.extension',method:'extension',outcome:'failed'});
+    expect(JSON.stringify([logger.info.mock.calls,logger.warn.mock.calls])).not.toContain('private content');
+  } finally { await service.dispose(); await rm(root,{recursive:true,force:true}); }
+});

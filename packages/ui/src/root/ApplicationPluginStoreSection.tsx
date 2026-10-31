@@ -29,7 +29,10 @@ export interface ApplicationPluginStoreSection {
     workspace: { workspacePath: string; workspaceIdentity?: string },
     host?: import("@zcode/services").IApplicationHostService,
   ) => Promise<void | { promptSuffix: string }>;
-  onImport?: (segment: "public" | "community" | "personal" | "application") => void;
+  onImport?: (
+    segment: "public" | "community" | "personal" | "application",
+    workspace: import("@zcode/services").ZCodeAgentWorkspaceTarget,
+  ) => void;
   registeredSourcePluginIds?: readonly string[];
   label: string;
   marketplaceIds: readonly string[];

@@ -34,6 +34,26 @@ export function createApplicationHostService(options: {
   onControlReady?: (port: ApplicationHostControlPort) => void;
 }): IApplicationHostService & { dispose(): Promise<void> } {
   const log = options.logger ?? defaultLog;
+  function extensionLog(level: "info" | "warn", message: unknown, fields: unknown) {
+    const data =
+      fields && typeof fields === "object" && !Array.isArray(fields)
+        ? (fields as Record<string, unknown>)
+        : {};
+    const bounded = (value: unknown) =>
+      typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(value)
+        ? value
+        : undefined;
+    const method = bounded(data.event ?? message) ?? "extension";
+    // 扩展事件原来被 Core 的事件白名单静默丢弃；只投影受控字段，不转发正文或对象。
+    log[level](undefined, "Application Host observation", {
+      event: "application.host.extension",
+      method,
+      outcome: bounded(data.outcome),
+      phase: bounded(data.phase),
+      reasonCode: bounded(data.reason_code ?? data.reasonCode),
+      correlationId: bounded(data.correlation_id ?? data.source_ref ?? data.workspace_ref),
+    });
+  }
   let pending: Promise<ApplicationHostExtension> | undefined;
   let disposed = false;
   async function extension() {
@@ -54,8 +74,8 @@ export function createApplicationHostService(options: {
         storageRoot: join(options.storageRoot, "application"),
         surface: options.surface,
         logger: {
-          info: (...args: unknown[]) => log.info(undefined, ...args),
-          warn: (...args: unknown[]) => log.warn(undefined, ...args),
+          info: (message: unknown, fields: unknown) => extensionLog("info", message, fields),
+          warn: (message: unknown, fields: unknown) => extensionLog("warn", message, fields),
         },
       });
       if (

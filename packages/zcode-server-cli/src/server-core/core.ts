@@ -94,6 +94,7 @@ export function createCoreDiagnosticLog(
         "application.host.call",
         "application.host.control",
         "application.host.lifecycle",
+        "application.host.extension",
         "server.rpc.failure",
         "server.startup",
       ].includes(value.event)
@@ -107,7 +108,15 @@ export function createCoreDiagnosticLog(
       pid: process.pid,
       event: value.event,
     };
-    for (const key of ["method", "channel", "outcome", "reasonCode", "correlationId", "clientMode"])
+    for (const key of [
+      "method",
+      "channel",
+      "outcome",
+      "phase",
+      "reasonCode",
+      "correlationId",
+      "clientMode",
+    ])
       if (typeof value[key] === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(value[key]))
         safe[key] = value[key];
     for (const key of ["commandId", "sessionId"])

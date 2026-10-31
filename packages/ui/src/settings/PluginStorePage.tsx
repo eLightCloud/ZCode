@@ -590,6 +590,7 @@ export function PluginStorePage({
     return (
       <ScopedErrorBoundary scope="application-plugin-store">
         <ApplicationPageContent
+          onNavigate={onBack}
           render={(context) =>
             render({
               ...context,
@@ -710,7 +711,11 @@ export function PluginStorePage({
               onCreateTask={onCreateTask}
               onImport={
                 applicationSection?.onImport
-                  ? () => applicationSection.onImport?.(segment)
+                  ? () => applicationSection.onImport?.(segment, {
+                      workspacePath,
+                      workspaceIdentity: workspaceIdentity ?? undefined,
+                      remoteSessionId: remoteSessionId ?? undefined,
+                    })
                   : undefined
               }
               onAddMarketplace={() => {

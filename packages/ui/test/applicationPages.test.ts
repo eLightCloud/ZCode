@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, renderHook, act } from "@testing-library/react";
 import {
   ApplicationPages,
   ApplicationPageHeaderAction,
   ApplicationPageContent,
+  useNativeConversationNavigation,
   type ApplicationPage,
 } from "@/root/ApplicationPages.js";
 import {
@@ -17,6 +18,7 @@ import { useApplicationPageNavigationState } from "@/root/ApplicationPageNavigat
 import { ApplicationPageIntentBridge } from "@/root/ApplicationPageIntent.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { readV4ComposerDraft } from "@/v4/composer/composerDraftStore.js";
 const navigation = vi.hoisted(() => ({
   addTab: vi.fn(),
   openSettings: vi.fn(),
@@ -105,6 +107,8 @@ describe("trusted application page lifecycle", () => {
     expect(navigation.remote).not.toHaveBeenCalled();
     expect(navigation.addTab).toHaveBeenCalledWith("/synthetic-local", {
       workspacePurpose: "conversation",
+      workspaceIdentity: undefined,
+      remoteSessionId: undefined,
     });
     expect(navigation.setActiveTask).toHaveBeenCalledWith(
       "/synthetic-local",
@@ -318,4 +322,52 @@ it("opens only registered settings sections through the native tab and preserves
   expect(close).toHaveBeenCalledOnce();
   expect(screen.getByText("settings content")).toBeTruthy();
   expect((screen.getByLabelText("workspace draft") as HTMLInputElement).value).toBe("unsent");
+});
+
+it("keeps an explicit remote draft and navigation on its exact workspace", async () => {
+  navigation.addTab.mockClear();
+  navigation.local.mockClear();
+  navigation.remote.mockClear();
+  const services = { projectService: { prepareSession: navigation.local } };
+  const hook = renderHook(() =>
+    useNativeConversationNavigation(services as never),
+  );
+  const target = {
+    workspacePath: "/remote/plugin-work",
+    workspaceIdentity: "ssh:synthetic:plugin-work",
+    remoteSessionId: "remote-session",
+  };
+  const mention = { id: "skill:synthetic", category: "skills" as const,
+    label: "场景助手", value: "creator", markdown: "[场景助手](skill:test)" };
+  await act(async () => {
+    await hook.result.current("edit-session", "[场景助手](skill:test) 请帮我修改场景。", target, mention);
+  });
+  expect(readV4ComposerDraft(target.workspacePath, target.workspaceIdentity, "edit-session")?.mention).toEqual(mention);
+  expect(navigation.local).not.toHaveBeenCalled();
+  expect(navigation.remote).not.toHaveBeenCalled();
+  expect(navigation.addTab).toHaveBeenCalledWith(target.workspacePath, {
+    workspacePurpose: "conversation",
+    workspaceIdentity: target.workspaceIdentity,
+    remoteSessionId: target.remoteSessionId,
+  });
+  expect(navigation.setActiveTask).toHaveBeenCalledWith(
+    target.workspacePath,
+    "edit-session",
+    target.workspaceIdentity,
+  );
+});
+
+it("returns the store to chat only after exact navigation succeeds", async () => {
+  const close = vi.fn();
+  let context!: import("@/root/ApplicationPages.js").ApplicationPageContext;
+  render(createElement(ApplicationPageContent, {
+    onNavigate: close,
+    render: (value) => { context = value; return null; },
+  }));
+  const target = { workspacePath: "/synthetic/store-edit" };
+  await act(async () => { await context.openConversation!("success", undefined, target); });
+  expect(close).toHaveBeenCalledOnce();
+  navigation.addTab.mockImplementationOnce(() => { throw new Error("navigation_failed"); });
+  await expect(context.openConversation!("failed", undefined, target)).rejects.toThrow("navigation_failed");
+  expect(close).toHaveBeenCalledOnce();
 });

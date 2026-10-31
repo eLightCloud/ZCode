@@ -28,6 +28,7 @@ import {
 } from "@/root/ApplicationPageNavigation.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import type { ZCodeAgentWorkspaceTarget } from "@zcode/services";
+import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { logger } from "@/logger.js";
 import { useApplicationSettings } from "@/root/ApplicationSettings.js";
@@ -51,7 +52,12 @@ export interface ApplicationPageContext {
   workspace?: ZCodeAgentWorkspaceTarget;
   rpcReady: boolean;
   /** Native navigation only; never sends input or grants execution. */
-  openConversation?(session: string, draft?: string): Promise<void>;
+  openConversation?(
+    session: string,
+    draft?: string,
+    target?: ZCodeAgentWorkspaceTarget,
+    mention?: ComposerMentionPrefill,
+  ): Promise<void>;
   openSettingsSection?(id: string): void;
 }
 
@@ -77,11 +83,16 @@ export function preserveConversationInputDraft(
   identity: string | undefined,
   session: string,
   text: string,
+  mention?: ComposerMentionPrefill,
 ) {
   const existing = readV4ComposerDraft(path, identity, session);
   if (existing?.text.trim() && existing.text !== text)
     throw new Error("conversation_draft_conflict");
-  persistV4ComposerDraft(path, identity, session, { ...existing, text });
+  persistV4ComposerDraft(path, identity, session, {
+    ...existing,
+    text,
+    ...(mention ? { mention } : {}),
+  });
   if (readV4ComposerDraft(path, identity, session)?.text !== text)
     throw new Error("conversation_draft_unavailable");
 }
@@ -99,18 +110,31 @@ export function useNativeConversationNavigation(
   const tabs = useTabStoreApi();
   const setActiveTaskId = useZCodeSessionStore((s) => s.setActiveTaskId);
   return useCallback(
-    async (session: string, draft?: string) => {
-      if (!services.projectService) throw new Error("conversation_navigation_unavailable");
-      const target = await services.projectService.prepareSession();
+    async (
+      session: string,
+      draft?: string,
+      workspace?: ZCodeAgentWorkspaceTarget,
+      mention?: ComposerMentionPrefill,
+    ) => {
+      if (!workspace && !services.projectService)
+        throw new Error("conversation_navigation_unavailable");
+      const target: ZCodeAgentWorkspaceTarget =
+        workspace ?? (await services.projectService!.prepareSession());
       if (draft)
         preserveConversationInputDraft(
           target.workspacePath,
           target.workspaceIdentity,
           session,
           draft,
+          mention,
         );
-      tabs.getState().addTab(target.workspacePath, { workspacePurpose: "conversation" });
+      tabs.getState().addTab(target.workspacePath, {
+        workspacePurpose: "conversation",
+        workspaceIdentity: target.workspaceIdentity,
+        remoteSessionId: target.remoteSessionId,
+      });
       setActiveTaskId(target.workspacePath, session, target.workspaceIdentity);
+      logger.info("application.page.conversation_opened", { hasDraft: Boolean(draft) });
     },
     [services, tabs, setActiveTaskId],
   );
@@ -147,8 +171,8 @@ export function ApplicationPageContent({
           logger.info("application.page.settings_opened", { sectionId: id });
         },
         rpcReady: Boolean(workspace) && resolution.rpcReady,
-        openConversation: async (session, draft) => {
-          await openConversation(session, draft);
+        openConversation: async (session, draft, target, mention) => {
+          await openConversation(session, draft, target, mention);
           onNavigate?.();
         },
         workspace: workspace

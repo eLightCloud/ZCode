@@ -17,6 +17,9 @@ export {
   useAssistantCodeCommentFeatureEnabled,
 } from "./AssistantCodeCommentFeatureProvider.js";
 export { PluginStoreCatalogRow } from "./settings/PluginStoreCatalogRow.js";
+export { PluginStoreAvatar } from "./settings/PluginStoreAvatar.js";
+export { buildPluginCreatorPrefill } from "./settings/pluginCreatorPrefill.js";
+export { buildSkillMentionMarkdown } from "./mentions/mentionMarkdown.js";
 export { Root } from "./Root.js";
 export { UpdateStatusWindowRoot } from "./UpdateStatusWindowRoot.js";
 export type { WebRemoteControlTerminalTransportState } from "./root/types.js";

@@ -32,3 +32,17 @@ stale targets stop mutation; enabled choices stay native-owned. Application
 reconciliation must use immutable package revisions so existing runs retain their
 previous native package paths. Desktop and web use this same projection; this
 extension adds no execution transport, queue or recovery state.
+
+Application scenario conversations use the existing session facade with the
+project owning the exact workspace root. The facade forwards `projectId` to the
+Agent's existing project admission; it does not infer a project or bypass remote
+project requirements. Ambiguous project ownership is rejected before creation.
+After exact conversation navigation succeeds, the existing store `onBack`
+callback returns the main view to chat; a rejected navigation keeps the store open.
+Structured skill mentions use the existing composer draft mention field, so the
+editor presents its label rather than exposing the canonical installed file path.
+
+Host extension observations are projected as `application.host.extension` through
+the existing bounded diagnostic sink. Only a bounded event name, outcome, phase,
+reason and opaque correlation may pass; inputs, files and arbitrary fields are
+discarded. This observation never changes command admission or business state.

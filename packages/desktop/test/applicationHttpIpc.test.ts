@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { APPLICATION_HTTP_CHANNEL, APPLICATION_HTTP_CANCEL_CHANNEL } from "@zcode/shared";
 const mocks = vi.hoisted(() => ({
@@ -13,7 +15,7 @@ vi.mock("electron", () => ({
     get isPackaged() {
       return mocks.packaged;
     },
-    getAppPath: () => "/owned/application",
+    getAppPath: () => appPath,
   },
   BrowserWindow: { fromWebContents: () => ({ id: 1 }) },
   ipcMain: {
@@ -23,8 +25,12 @@ vi.mock("electron", () => ({
   session: { defaultSession: { fetch: mocks.fetch, cookies: { get: mocks.get } } },
 }));
 import { registerApplicationHttpIpc } from "../src/main/applicationHttp/index.js";
+// Electron 返回本机绝对路径，可信 renderer 的 URL 也必须使用同一盘符。
+const appPath = resolve("owned/application");
 function event(id = 1) {
-  const mainFrame = { url: "file:///owned/application/out/renderer/index.html?owned=1" };
+  const rendererUrl = pathToFileURL(join(appPath, "out/renderer/index.html"));
+  rendererUrl.search = "?owned=1";
+  const mainFrame = { url: rendererUrl.href };
   const sender = Object.assign(new EventEmitter(), {
     id,
     mainFrame,
@@ -56,7 +62,7 @@ it("denies an iframe and a non-app file before private cookie/network access", a
   iframe.senderFrame = { ...iframe.senderFrame };
   expect((await invoke(iframe, input)).status).toBe(403);
   const outside = event();
-  outside.senderFrame.url = "file:///tmp/untrusted.html";
+  outside.senderFrame.url = pathToFileURL(resolve("untrusted.html")).href;
   expect((await invoke(outside, input)).status).toBe(403);
   expect(mocks.get).not.toHaveBeenCalled();
   expect(mocks.fetch).not.toHaveBeenCalled();

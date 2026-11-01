@@ -10,7 +10,6 @@ export function WindowsTopLeftLogo({
   imageClassName?: string;
 }) {
   const brand = useApplicationBrand();
-  if (brand) return <brand.Mark className="size-5" />;
 
   return (
     <div
@@ -22,14 +21,19 @@ export function WindowsTopLeftLogo({
     >
       <span
         role="img"
-        aria-label="ZCode"
+        aria-label={brand?.name ?? "ZCode"}
         data-testid="settings-logo"
         className={cn(
           "pointer-events-none flex size-5 items-center justify-center select-none",
           imageClassName,
         )}
       >
-        <ZCodeStartupLogoBadge size="titlebar" animated={false} />
+        {/* 品牌只替换图案，不能绕过绝对定位容器：裸 SVG 会占用设置页 grid，挤走导航和正文。 */}
+        {brand ? (
+          <brand.Mark className="size-5" />
+        ) : (
+          <ZCodeStartupLogoBadge size="titlebar" animated={false} />
+        )}
       </span>
     </div>
   );

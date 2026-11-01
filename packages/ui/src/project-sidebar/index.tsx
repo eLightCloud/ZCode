@@ -85,7 +85,12 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
   );
   const remoteSync = useProjectRemoteSync(props, directory);
   const diagnostics = useProjectConnectionDiagnostics(directory, props);
-  const onSelectTask = useProjectTaskNavigation(props, tree, remoteService);
+  const selectAttachedTask = useProjectTaskNavigation(props, tree, remoteService);
+  const openEntryTask = peripherals?.openEntryProjectTask;
+  // 首屏只连接项目索引；所有视图选中已有任务后再进入对应工作区。
+  const onSelectTask: ProjectSidebarProps["onSelectTask"] = openEntryTask
+    ? (_path, taskId) => openEntryTask(taskId)
+    : selectAttachedTask;
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
   const tabStore = useTabStoreApi();
   const setTheme = useZCodeStore((state) => state.setTheme);

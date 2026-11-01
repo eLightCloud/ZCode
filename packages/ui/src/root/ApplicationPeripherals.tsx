@@ -22,6 +22,8 @@ export interface ApplicationPeripherals {
     context: Pick<import("./ApplicationPages.js").ApplicationPageContext, "openConversation">,
   ) => ReactNode;
   closeConversationContent?: () => void;
+  /** Open an existing native task from a read-only host index before workspace attachment. */
+  openEntryProjectTask?: (taskId: string) => void;
   renderConversationList?: (nativeSessionIds: readonly string[]) => ReactNode;
   /** Compact decoration in the task title row; never a second text row or navigation. */
   renderConversationListStatus?: (sessionId: string) => ReactNode;

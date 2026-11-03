@@ -176,6 +176,7 @@ vi.mock("@/hooks/useServices.js", () => ({
   useServices: () => stableHookValues.services,
 }));
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
+  useBaseWorkspaceServices: () => stableHookValues.services,
   useOptionalBaseWorkspaceServices: () => null,
   useWorkspaceServicesResolution: (
     workspacePath: string | null | undefined,

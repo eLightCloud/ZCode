@@ -179,6 +179,7 @@ export interface ToolExecutionContext {
   artifactStore?: ToolArtifactStorePort;
   deliverableStore?: DeliverableStorePort;
   getProducerContextRef?: () => string | undefined;
+  deliverySkill?: { current(): string | undefined; loaded(pluginId?: string): void };
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;

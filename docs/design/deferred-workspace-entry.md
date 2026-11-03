@@ -26,6 +26,8 @@ ApplicationPageContext.close closes its existing overlay, preserving underlying 
 
 An application may project the native project index from an already authorized, online host into the disconnected shell. Only project reads are exposed there. Selecting a projected task hands its ID to the application to open the exact existing task through the normal native connection. The host rechecks membership on arrival. Opening the index never requests provisioning or sends input.
 
+On an authenticated Web home, selecting Plugin Store or Automations may explicitly request workspace attachment. The application passes only the selected view through its normal authenticated bootstrap. The attached shell opens that native view once. This navigation neither starts a task nor changes automation rules. A disconnected shell without this integration keeps its workspace-only buttons disabled.
+
 Acceptance: authenticated root shows native navigation, including accessible existing projects. With no existing host it displays saved history without a socket. Historical read/failure/empty states do not prepare; explicit new work requests the existing location chain once; cancel/retry preserves boundaries; Desktop current-session status stays in the native conversation. Check wide/narrow layouts, keyboard focus and permission failures.
 
 The sidebar failure state is one compact, non-wrapping row: a localized loading-failure summary and refresh action. Do not expand permission/configuration troubleshooting text in task navigation. Typed failures and bounded diagnostics remain intact.

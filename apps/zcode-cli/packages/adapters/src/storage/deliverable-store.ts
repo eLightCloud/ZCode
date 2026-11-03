@@ -16,6 +16,17 @@ const COPY_CHUNK_BYTES = 256 * 1024;
 const FIRST_PRINTABLE_CODE = 0x20;
 const ASCII_DELETE_CODE = 0x7f;
 
+async function namedFileStat(path: string) {
+  if (process.platform !== "win32") return stat(path, { bigint: true });
+  // On Windows path stat can report device zero while fstat returns the volume serial.
+  const handle = await open(path, constants.O_RDONLY);
+  try {
+    return await handle.stat({ bigint: true });
+  } finally {
+    await handle.close();
+  }
+}
+
 type Row = { descriptor: string; snapshot: string; fingerprint: string; sequence: number };
 
 /** 异步文件 IO；SQLite 仅执行短元数据事务，不在事务中复制或哈希。 */
@@ -99,6 +110,8 @@ export class NodeDeliverableStore implements DeliverableStorePort {
       .update(
         JSON.stringify({
           sourcePath: resolve(input.workspacePath, input.sourcePath),
+          requestPublicLink: input.requestPublicLink,
+          sourcePluginId: input.sourcePluginId,
           sessionId: input.sessionId,
           turnId: input.turnId,
           previous: input.previous,
@@ -158,6 +171,7 @@ export class NodeDeliverableStore implements DeliverableStorePort {
         const descriptor = nativeDeliverableSchema.parse({
           kind: "file",
           purpose: "final",
+          ...(input.requestPublicLink ? { requestPublicLink: true, sourcePluginId: input.sourcePluginId } : {}),
           id,
           version,
           sequence: 1,
@@ -214,8 +228,8 @@ export class NodeDeliverableStore implements DeliverableStorePort {
     const input = await open(source, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     let output: Awaited<ReturnType<typeof open>> | undefined;
     try {
-      const before = await input.stat();
-      const current = await stat(source);
+      const before = await input.stat({ bigint: true });
+      const current = await namedFileStat(source);
       if (
         (await realpath(source)) !== source ||
         current.dev !== before.dev ||
@@ -232,7 +246,7 @@ export class NodeDeliverableStore implements DeliverableStorePort {
         const { bytesRead } = await input.read(buffer, 0, buffer.length, size);
         if (!bytesRead) break;
         size += bytesRead;
-        if (size > before.size) throw new Error("deliverable_source_changed");
+        if (BigInt(size) > before.size) throw new Error("deliverable_source_changed");
         const chunk = buffer.subarray(0, bytesRead);
         hash.update(chunk);
         let written = 0;
@@ -241,15 +255,15 @@ export class NodeDeliverableStore implements DeliverableStorePort {
           written += result.bytesWritten;
         }
       }
-      const after = await input.stat();
-      const stillNamed = await stat(source);
+      const after = await input.stat({ bigint: true });
+      const stillNamed = await namedFileStat(source);
       if (stillNamed.dev !== before.dev || stillNamed.ino !== before.ino)
         throw new Error("deliverable_source_changed");
       if (
-        size !== before.size ||
+        BigInt(size) !== before.size ||
         after.size !== before.size ||
-        after.mtimeMs !== before.mtimeMs ||
-        after.ctimeMs !== before.ctimeMs
+        after.mtimeNs !== before.mtimeNs ||
+        after.ctimeNs !== before.ctimeNs
       )
         throw new Error("deliverable_source_changed");
       await output.sync();

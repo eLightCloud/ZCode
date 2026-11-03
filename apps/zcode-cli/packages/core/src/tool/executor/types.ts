@@ -48,6 +48,7 @@ import type {
   ReadFileStateMap,
   ToolBatchEvent,
   ToolExecutionResult,
+  ToolExecutionContext,
   ToolRuntimeScope,
 } from "../types.js";
 
@@ -109,6 +110,7 @@ export interface ToolExecutorOptions {
   artifactStore?: ToolArtifactStorePort;
   deliverableStore?: DeliverableStorePort;
   getProducerContextRef?: () => string | undefined;
+  deliverySkill?: ToolExecutionContext["deliverySkill"];
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;
@@ -226,6 +228,7 @@ export interface ToolExecutorDeps {
   artifactStore?: ToolArtifactStorePort;
   deliverableStore?: DeliverableStorePort;
   getProducerContextRef?: () => string | undefined;
+  deliverySkill?: ToolExecutionContext["deliverySkill"];
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;

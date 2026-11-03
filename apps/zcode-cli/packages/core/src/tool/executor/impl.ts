@@ -60,6 +60,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       artifactStore: options.artifactStore,
       deliverableStore: options.deliverableStore,
       getProducerContextRef: options.getProducerContextRef,
+      deliverySkill: options.deliverySkill,
       automationPort: options.automationPort,
       offPeakPort: options.offPeakPort,
       topicResourcePort: options.topicResourcePort,

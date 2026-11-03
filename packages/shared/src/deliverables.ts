@@ -5,6 +5,8 @@ export const nativeDeliverableSchema = z
   .object({
     kind: z.literal("file"),
     purpose: z.literal("final"),
+    requestPublicLink: z.literal(true).optional(),
+    sourcePluginId: z.string().min(1).max(256).optional(),
     id: z.string().uuid(),
     version: z.number().int().positive(),
     sequence: z.number().int().positive(),

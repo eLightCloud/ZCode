@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   createRootTraceContext,
@@ -84,6 +85,20 @@ describe("DeliverFiles", () => {
         files: [{ status: "delivered", file: { path: "/private" } }],
       }),
     ).toBeUndefined();
+    const selected = { path: "report.html", requestPublicLink: true };
+    expect(await deliverFilesHandler({ files: [selected] }, context)).toMatchObject({
+      files: [{ code: "deliverable_publication_source_required" }],
+    });
+    await expect(deliverFilesHandler({
+      files: [{ ...selected, sourcePluginId: "spoof@market" }],
+    }, context)).rejects.toThrow();
+    expect(publish).toHaveBeenCalledTimes(3);
+    context.deliverySkill = { current: () => "original@market", loaded() {} };
+    await deliverFilesHandler({ files: [selected, { path: "private.html" }] }, context);
+    expect(publish.mock.calls[3][0]).toMatchObject({
+      requestPublicLink: true, sourcePluginId: "original@market",
+    });
+    expect(publish.mock.calls[4][0].sourcePluginId).toBeUndefined();
   });
   it("exposes delivery and its guidance only when the native capability is present", () => {
     const without = createToolRegistry();
@@ -101,12 +116,13 @@ describe("DeliverFiles", () => {
 
 it("enforces project permission patterns across every declared file", () => {
   const input = { files: [{ path: "public.csv" }, { path: "private/secret.csv" }] };
+  const workspaceRoot = resolve("workspace");
   const policy = deliverFilesToolEntry.resolvePermissionRulePolicy!(input, {
-    workspaceRoot: "/workspace",
+    workspaceRoot,
   });
   expect(
     policy.evaluateRules("deny", [
-      { toolName: "DeliverFiles", ruleContent: "/workspace/private/*" },
+      { toolName: "DeliverFiles", ruleContent: resolve(workspaceRoot, "private", "*") },
     ]),
   ).toBe(true);
   expect(
@@ -116,6 +132,6 @@ it("enforces project permission patterns across every declared file", () => {
     policy.evaluateRules("allow", [{ toolName: "DeliverFiles", ruleContent: "public.csv" }]),
   ).toBe(false);
   expect(
-    policy.evaluateRules("allow", [{ toolName: "DeliverFiles", ruleContent: "/workspace/*" }]),
+    policy.evaluateRules("allow", [{ toolName: "DeliverFiles", ruleContent: resolve(workspaceRoot, "*") }]),
   ).toBe(true);
 });

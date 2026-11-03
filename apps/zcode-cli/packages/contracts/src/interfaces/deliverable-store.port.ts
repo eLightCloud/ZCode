@@ -8,6 +8,8 @@ export interface PublishDeliverableInput {
   turnId?: string;
   requestKey: string;
   sourcePath: string;
+  requestPublicLink?: true;
+  sourcePluginId?: string;
   producerContextRef?: string;
   previous?: { id: string; version: number };
   trace: TraceContext;

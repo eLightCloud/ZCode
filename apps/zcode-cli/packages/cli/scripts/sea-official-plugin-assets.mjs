@@ -194,7 +194,7 @@ export const officialSeaPlugins = [
     packageName: "@zcode/plugin-creator-plugin",
     requiresRuntime: false,
     rootPath: join("packages", "plugin-creator-plugin"),
-    version: "0.1.1",
+    version: "0.1.2",
   },
   {
     // 纯内容型（只提供 skills）：requiresRuntime:false，SEA 构建不校验 dist/mcp/server.js。

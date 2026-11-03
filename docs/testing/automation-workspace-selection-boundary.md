@@ -1,5 +1,7 @@
 # 定时任务工作区选择边界
 
+定时任务使用当前执行 Host 的项目服务。Desktop 根 Host 提供本地项目，直接连接 Server 的 Web 使用该 Server 自己的项目；两者都以不带 hostId 的 `readProjects()` 查询所属项目，不聚合控制端的其它远程连接。新规则的项目、模型和创建请求共用这个 Host。闲时任务仍只提供本地项目。
+
 ## Feature/change summary
 
 手动新建定时任务必须绑定真实项目。`AutomationEditView` 可以复用普通会话草稿的 workspace 菜单，但不能继承“切到非项目工作区”的入口。此次修正只收口调用方能力边界，不改变 workspace、session、stream、queue 或远控协议。

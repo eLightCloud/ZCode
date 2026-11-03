@@ -24,6 +24,7 @@ const KNOWN_FAILURES = new Set([
   "deliverable_source_changed",
   "deliverable_revision_conflict",
   "deliverable_request_conflict",
+  "deliverable_publication_source_required",
   "deliverable_name_invalid",
 ]);
 
@@ -39,6 +40,8 @@ export const deliverFilesHandler: ToolHandler = async (raw, context) => {
   for (const [index, item] of input.files.entries()) {
     context.abortSignal.throwIfAborted();
     try {
+      const sourcePluginId = item.requestPublicLink ? context.deliverySkill?.current() : undefined;
+      if (item.requestPublicLink && !sourcePluginId) throw new Error("deliverable_publication_source_required");
       const file = await store.publish(
         {
           workspaceKey: context.workspaceIdentity?.trim() || context.workspaceRoot,
@@ -48,6 +51,8 @@ export const deliverFilesHandler: ToolHandler = async (raw, context) => {
           producerContextRef,
           requestKey: `${context.toolCallId}:${index}`,
           sourcePath: item.path,
+          requestPublicLink: item.requestPublicLink,
+          sourcePluginId,
           previous: item.previous,
           trace: context.traceContext ?? {
             traceId: context.traceId,
@@ -91,6 +96,13 @@ export const deliverFilesToolEntry: ToolEntry = {
   outputSchema: DeliverFilesOutputJsonSchema,
   runtimeInputSchema: DeliverFilesInputSchema,
   runtimeOutputSchema: DeliverFilesOutputSchema,
+  resolvePermissionCapability(raw) {
+    if (!DeliverFilesInputSchema.parse(raw).files.some((file) => file.requestPublicLink)) return;
+    return {
+      riskLevel: "medium", sideEffectScope: "network", allowedInPlanMode: false,
+      permission: { permission: "deliver.public", reason: "Request anonymous publication of selected final files", riskLevel: "medium", sideEffectScope: "network" },
+    };
+  },
   resolvePermissionRulePolicy(raw, context) {
     const input = DeliverFilesInputSchema.parse(raw);
     const workspaceRoot = context?.workspaceRoot;

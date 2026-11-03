@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- workspace 的 task、自动化与插件市场共享浏览器式历史，集中处理才能保证前进/后退目标一致。 */
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import {
   canGoBack as navCanGoBack,
@@ -54,6 +55,7 @@ export function useWorkspaceTaskNavigation({
   // services 仍可能属于旧 remote attachment。local 目标必须固定从 window base attachment
   // 发起，再由 Host Controller 路由，不能把本地路径送进旧 remote scope。
   const baseServices = useBaseWorkspaceServices();
+  const takeEntryView = useApplicationPeripherals()?.takeEntryWorkspaceView;
   const tabStoreApi = useTabStoreApi();
   const setActiveTaskId = useZCodeSessionStore((s) => s.setActiveTaskId);
   const taskNavHistory = useZCodeSessionStore((s) => s.taskNavHistory);
@@ -223,6 +225,16 @@ export function useWorkspaceTaskNavigation({
     taskNavPushPluginStore(workspaceAbsPath, workspaceIdentity);
     onNavigateToPluginStore?.({ workspacePath: workspaceAbsPath, workspaceIdentity });
   }, [onNavigateToPluginStore, taskNavPushPluginStore, workspaceAbsPath, workspaceIdentity]);
+
+  useEffect(() => {
+    if (!workspaceAbsPath || !takeEntryView) return;
+    const view = takeEntryView();
+    if (!view) return;
+    // 连接完成后才交给原生导航入栈，避免空路径或重复消费首页点击。
+    if (view === "automations") handleOpenAutomations();
+    else handleOpenPluginStore();
+    logger.info("workspace.entry.navigation", { view, outcome: "opened" });
+  }, [workspaceAbsPath, takeEntryView, handleOpenAutomations, handleOpenPluginStore]);
 
   const handleTaskNavBack = useCallback(() => {
     const currentWorkspaceState = useZCodeSessionStore

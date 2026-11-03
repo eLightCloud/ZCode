@@ -10,6 +10,7 @@ import { useComposerClientNamespace } from "@/hooks/useServices.js";
 import { isWorkspaceTab, type TabStoreState, type WindowTabState } from "@/store/tabStore.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { logger } from "@/logger.js";
+import { useApplicationPeripherals } from "./ApplicationPeripherals.js";
 import { resolveImportedComposerConfig } from "@/v4/composer/newTaskDraft.js";
 import { dismissToast, toast, updateToast } from "@/components/ui/toast.js";
 import { matchesPrimaryShortcut } from "@/lib/keyboardShortcuts.js";
@@ -97,6 +98,7 @@ export function useRootPlatformEffects({
   isRestoringOAuthSession: boolean;
 }) {
   const didBootstrapInitialWorkspaceRef = useRef(false);
+  const enteringWorkspaceView = Boolean(useApplicationPeripherals()?.takeEntryWorkspaceView);
   const baseServices = useOptionalBaseWorkspaceServices();
   const pendingShareImportRef = useRef<ShareImportIntent | null>(null);
   const [shareImportRevision, setShareImportRevision] = useState(0);
@@ -151,7 +153,7 @@ export function useRootPlatformEffects({
         useZCodeSessionStore
           .getState()
           .setActiveTaskId(initialWorkspaceAbsPath, initialTaskId, initialWorkspaceIdentity);
-      } else if (draftIntent || !isRendererReloadNavigation()) {
+      } else if (!enteringWorkspaceView && (draftIntent || !isRendererReloadNavigation())) {
         // 修复原因：main 注入 initial workspace 只表达工作区入口；没有显式 taskId
         // 的 app 冷启动必须进入草稿，不能让 renderer-local last-session/group/pane
         // 抢回历史会话；同一 renderer reload 则保留当前 session 续流资格。
@@ -166,6 +168,7 @@ export function useRootPlatformEffects({
   }, [
     addTab,
     canBootstrapInitialWorkspace,
+    enteringWorkspaceView,
     initialTaskId,
     initialTaskDraft,
     composerClientNamespace,

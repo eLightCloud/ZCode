@@ -309,7 +309,7 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
   {
     defaultEnabled: true,
     name: "plugin-creator",
-    version: "0.1.1",
+    version: "0.1.2",
     listing: {
       author: ZAI_AUTHOR,
       category: "utilities",

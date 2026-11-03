@@ -14,6 +14,9 @@ export const DeliverFilesInputSchema = z
         z
           .object({
             path: z.string().min(1).max(4096),
+            requestPublicLink: z.literal(true).optional().describe(
+              "Request anonymous publication by the host application only when explicitly authorized for this file.",
+            ),
             previous: z
               .object({ id: z.string().uuid(), version: z.number().int().positive() })
               .strict()

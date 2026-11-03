@@ -28,7 +28,7 @@
 
 ## Skill 内容与分发
 
-独立内置内容插件 `plugin-creator`，版本 0.1.1，默认启用，中文名称“插件创建器”。随 Desktop、CLI/SEA、server/远端 Agent 资产一起分发，所有 scripts/references 均须存在。
+独立内置内容插件 `plugin-creator` 默认启用，中文名称“插件创建器”。随 Desktop、CLI/SEA、server/远端 Agent 资产一起分发，所有 scripts/references 均须存在。文件系统来源与 SEA 使用同一发行版本，显式应用来源的 manifest 必须匹配。
 
 Skill 按 scaffold -> optional components -> validate -> install/update 流程组织；正文路由到脚本与参考资料。脚手架使用 Node 标准库、异步 IO，默认 `<cwd>/plugins/<slug>`，名称规范化为小写连字符，目录名与 manifest 一致。已有文件默认拒绝覆盖，显式 force 才能更新选定文件；市场无关字段与条目顺序保留。组件只声明实际生成的路径。
 

@@ -67,4 +67,15 @@ describe("automation virtual project options", () => {
       ]),
     ).toEqual([]);
   });
+  it("offers the connected server's own projects for scheduled rules", async () => {
+    service.readProjects.mockResolvedValue([
+      project("dev", ["/dev"], { hostId: "remote:server:mine" }),
+      project("deleted", [], { hostId: "remote:server:mine", deleted: true }),
+    ]);
+    const { result } = renderHook(() => useAutomationProjectOptions("current-host"));
+    await waitFor(() => expect(result.current).toEqual([
+      { projectId: "dev", hostId: "remote:server:mine", workspacePath: "/dev", label: "dev" },
+    ]));
+    expect(service.readProjects).toHaveBeenCalledWith();
+  });
 });

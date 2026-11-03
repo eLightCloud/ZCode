@@ -128,7 +128,10 @@ import {
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useAutomationProjectOptions } from "@/hooks/useAutomationProjectOptions.js";
-import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
+import {
+  useBaseWorkspaceServices,
+  useWorkspaceServicesResolution,
+} from "@/hooks/useWorkspaceServices.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
@@ -1257,10 +1260,11 @@ export function AutomationEditView({
   // 目标项目 key(仅新建时可改;编辑锁定为 automation 所属项目)。
   const [workspaceKey, setWorkspaceKey] = useState<string | null>(null);
 
-  const localWorkspaceOptions = useAutomationProjectOptions();
+  const projectOwner = useBaseWorkspaceServices();
+  const projectOptions = useAutomationProjectOptions("current-host");
   const editingWorkspaceOption = editing
     ? findAutomationWorkspaceOptionByKey(
-        localWorkspaceOptions,
+        projectOptions,
         resolveAutomationWorkspaceSelectionKey(editing),
       )
     : undefined;
@@ -1276,8 +1280,8 @@ export function AutomationEditView({
               label: editingWorkspaceOption?.label ?? workspaceLabelFromPath(editing.workspacePath),
             },
           ]
-        : localWorkspaceOptions,
-    [editing, editingWorkspaceOption, localWorkspaceOptions],
+        : projectOptions,
+    [editing, editingWorkspaceOption, projectOptions],
   );
   const workspaceOptionsRef = useRef(workspaceOptions);
   workspaceOptionsRef.current = workspaceOptions;
@@ -1455,6 +1459,8 @@ export function AutomationEditView({
     selectedWorkspace?.remoteSessionId,
     selectedWorkspaceIdentity,
     selectedWorkspace?.remoteTarget,
+    // 新建候选取自根 Host。按路径猜测其它标签页的 attachment 会读取错误的模型。
+    !editing ? { unscopedServices: projectOwner, forceUnscoped: true } : undefined,
   );
   const modelSelectionRead = useModelSelectionServiceView(
     selectionOwner.services.modelSelectionService,
@@ -2612,7 +2618,7 @@ export function AutomationEditView({
                       >
                         <FolderOpen className="size-3.5" aria-hidden="true" />
                         {intl.formatMessage({
-                          id: "automations.form.project.localRequired",
+                          id: "automations.form.workspaceUnavailableLabel",
                         })}
                       </Button>
                     )}

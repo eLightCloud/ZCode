@@ -80,6 +80,7 @@ export function createToolHandlerContext(
     artifactStore: deps.artifactStore,
     deliverableStore: deps.deliverableStore,
     getProducerContextRef: deps.getProducerContextRef,
+    deliverySkill: deps.deliverySkill,
     automationPort: deps.automationPort,
     offPeakPort: deps.offPeakPort,
     topicResourcePort: deps.topicResourcePort,

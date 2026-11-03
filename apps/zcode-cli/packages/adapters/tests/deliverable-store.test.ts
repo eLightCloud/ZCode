@@ -79,10 +79,12 @@ describe("explicit final file snapshots", () => {
   });
 
   it("rejects escapes and publishes revisions only against an exact current predecessor", async () => {
-    await writeFile(join(root, "outside.csv"), "outside");
-    await symlink(join(root, "outside.csv"), join(workspace, "link.csv"));
-    await expect(publish("../outside.csv", "escape")).rejects.toThrow("outside_workspace");
-    await expect(publish("link.csv", "link")).rejects.toThrow("outside_workspace");
+    const outside = join(root, "outside");
+    await mkdir(outside);
+    await writeFile(join(outside, "file.csv"), "outside");
+    await symlink(outside, join(workspace, "link"), process.platform === "win32" ? "junction" : "dir");
+    await expect(publish("../outside/file.csv", "escape")).rejects.toThrow("outside_workspace");
+    await expect(publish("link/file.csv", "link")).rejects.toThrow("outside_workspace");
     await writeFile(join(workspace, "result.csv"), "v1");
     const v1 = await publish("result.csv", "first");
     await writeFile(join(workspace, "result.csv"), "v2");

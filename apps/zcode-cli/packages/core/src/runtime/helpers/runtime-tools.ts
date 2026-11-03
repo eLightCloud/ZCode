@@ -193,6 +193,12 @@ function createRuntimeToolExecutor(
     artifactStore: deps.artifactStore,
     deliverableStore: deps.deliverableStore,
     getProducerContextRef: () => runtime.activeTurn?.inputId,
+    deliverySkill: {
+      current: () => runtime.activeTurn?.loadedPluginId,
+      loaded: (pluginId) => {
+        if (runtime.activeTurn) runtime.activeTurn.loadedPluginId = pluginId;
+      },
+    },
     automationPort: deps.automationPort,
     offPeakPort: deps.offPeakPort,
     topicResourcePort: deps.topicResourcePort,

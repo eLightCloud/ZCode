@@ -590,6 +590,7 @@ export interface PreparedImageData {
 }
 
 export interface ActiveTurnSteeringState {
+  loadedPluginId?: string;
   kind: ActiveTurnKind;
   // active turn 被 Stop 时，goal reminder 不能插进尚未闭合的 tool results。
   // deferral 只在 regular model/tool loop 内打开，退出 loop 时先关闭再物化 pending。

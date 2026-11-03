@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import type { NativeDeliverable } from "@zcode/shared";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { WorkspaceMainView } from "@/app-shell/types.js";
+
+type WorkspaceFeatureView = Exclude<WorkspaceMainView, "chat">;
 
 export interface ApplicationShareCandidate {
   title: string;
@@ -24,6 +27,10 @@ export interface ApplicationPeripherals {
   closeConversationContent?: () => void;
   /** Open an existing native task from a read-only host index before workspace attachment. */
   openEntryProjectTask?: (taskId: string) => void;
+  /** Authenticated home can attach on an explicit sidebar click. */
+  openEntryWorkspaceView?: (view: WorkspaceFeatureView) => void;
+  /** Present only for a feature landing. Consume once after native attachment. */
+  takeEntryWorkspaceView?: () => WorkspaceFeatureView | undefined;
   renderConversationList?: (nativeSessionIds: readonly string[]) => ReactNode;
   /** Compact decoration in the task title row; never a second text row or navigation. */
   renderConversationListStatus?: (sessionId: string) => ReactNode;

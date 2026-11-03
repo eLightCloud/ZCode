@@ -119,6 +119,7 @@ export async function enforceRequiredPluginEntry(
         { signal },
       );
       text = PREFIX + pluginId + "\n" + renderSkillContent(loaded);
+      if (runtime.activeTurn) runtime.activeTurn.loadedPluginId = loaded.metadata.pluginId;
       runtime.logger?.info("Required plugin skill loaded", {
         ...traceContextToLogContext(trace),
         event: "required_skill.loaded",

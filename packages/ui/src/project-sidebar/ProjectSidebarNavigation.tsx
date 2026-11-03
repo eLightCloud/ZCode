@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button.js";
 import { NewTaskButtonGroup } from "@/NewTaskButtonGroup.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { WebRemoteControlDeviceHeader } from "@/web-remote-control/WebRemoteControlDeviceHeader.js";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 
 /** 顶部导航只展示 Shell 的选中状态，路由仍由 Shell 唯一持有。 */
 export function ProjectSidebarNavigation({
@@ -28,6 +29,8 @@ export function ProjectSidebarNavigation({
   onCreate(): void;
 }) {
   const { intl } = useZCodeIntl();
+  // 登录首页没有工作区路径；只允许显式点击经受信入口连接，普通离线窗口仍禁用。
+  const prepareView = useApplicationPeripherals()?.openEntryWorkspaceView;
   const deviceNavigation = props.webRemoteControlWorkspaceSwitcher?.deviceNavigation;
   return (
     <div
@@ -39,27 +42,27 @@ export function ProjectSidebarNavigation({
       <NewTaskButtonGroup onCreateTask={onCreate} />
       {props.onOpenAutomations ? (
         <Button
-          disabled={!connected}
+          disabled={!connected && !prepareView}
           variant="ghost"
           size="lg"
           className={`w-full justify-start gap-2 ${props.automationsActive ? "bg-selected text-foreground" : ""}`}
           aria-pressed={props.automationsActive ?? false}
           data-testid={TID_AUTOMATIONS_OPEN}
           // 点击事件不能进入业务导航的可选 automationId 参数。
-          onClick={() => props.onOpenAutomations?.()}
+          onClick={() => connected ? props.onOpenAutomations?.() : prepareView?.("automations")}
         >
           <CalendarClock className="size-4" />
           {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
         </Button>
       ) : null}
       <Button
-        disabled={!connected}
+        disabled={!connected && !prepareView}
         variant="ghost"
         size="lg"
         className={`w-full justify-start gap-2 ${props.pluginStoreActive ? "bg-selected text-foreground" : ""}`}
         aria-pressed={props.pluginStoreActive ?? false}
         data-testid="plugin-store-sidebar-open"
-        onClick={() => props.onOpenPluginStore?.()}
+        onClick={() => connected ? props.onOpenPluginStore?.() : prepareView?.("plugin-store")}
       >
         <Blocks className="size-4" />
         {intl.formatMessage({ id: "workspace.openPluginsSettings" })}

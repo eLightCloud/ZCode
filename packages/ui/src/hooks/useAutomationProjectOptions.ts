@@ -11,15 +11,18 @@ export interface AutomationProjectOption {
   label: string;
 }
 
+type ProjectScope = "local-only" | "current-host";
+
 export function isRemoteAutomationWorkspace(tab: WorkspaceTabState | undefined): boolean {
   return Boolean(tab?.remoteSessionId || tab?.remoteTarget || tab?.workspaceIdentity);
 }
 
 export function resolveAutomationProjectOptions(
   projects: readonly VirtualProject[],
+  scope: ProjectScope = "local-only",
 ): AutomationProjectOption[] {
   return projects
-    .filter((project) => !project.deleted && project.hostId === "local")
+    .filter((project) => !project.deleted && (scope === "current-host" || project.hostId === "local"))
     .map((project) => ({
       projectId: project.id,
       hostId: project.hostId,
@@ -29,9 +32,9 @@ export function resolveAutomationProjectOptions(
 }
 
 /** 定义选择 Host 的虚拟项目；空项目在提交时初始化目录，不随打开的 tab 增减。 */
-export function useAutomationProjectOptions(): AutomationProjectOption[] {
+export function useAutomationProjectOptions(scope: ProjectScope = "local-only"): AutomationProjectOption[] {
   const services = useBaseWorkspaceServices();
-  const [projects, setProjects] = useState<VirtualProject[]>([]);
+  const [snapshot, setSnapshot] = useState<{ owner: typeof services; projects: VirtualProject[] }>();
   useEffect(() => {
     let generation = 0;
     const refresh = async () => {
@@ -39,10 +42,11 @@ export function useAutomationProjectOptions(): AutomationProjectOption[] {
       try {
         if (!services.projectService) throw new Error("project.service-unavailable");
         const projects = await services.projectService.readProjects();
-        if (request === generation) setProjects(projects);
+        // 不传 hostId 只读取此连接自己的项目。直连 Server 的项目带服务端标识，也属于这个 Host。
+        if (request === generation) setSnapshot({ owner: services, projects });
       } catch (error) {
         if (request !== generation) return;
-        setProjects([]);
+        setSnapshot(undefined);
         logger.error("[automation-projects] 读取项目选项失败", error);
       }
     };
@@ -55,5 +59,8 @@ export function useAutomationProjectOptions(): AutomationProjectOption[] {
       subscription.dispose();
     };
   }, [services]);
-  return useMemo(() => resolveAutomationProjectOptions(projects), [projects]);
+  return useMemo(
+    () => resolveAutomationProjectOptions(snapshot?.owner === services ? snapshot.projects : [], scope),
+    [snapshot, services, scope],
+  );
 }

@@ -6,6 +6,19 @@ fixes the HTTPS destination and explicit API prefixes (a native control subtree 
 and returns bounded bytes with public response headers. Packaged HTTP and credential-bearing or
 non-root endpoint URLs are rejected. Missing configuration stays unavailable.
 
+Application requests use Node fetch because Electron session.fetch rejects the explicit trusted
+Origin. Main remains the single cookie owner: outgoing cookies use the configured name allowlist
+(or the current API jar when no list is configured); response Set-Cookie values are parsed by
+the existing undici dependency and persisted through Electron's cookie API before returning.
+The same name allowlist applies to writes. Cookie attributes and expiry preserve rotation/logout;
+cookies and Set-Cookie never reach the renderer. Persistence failure reports the bounded
+`cookie_persistence_failed` reason, without credential values or raw Electron errors.
+
+```text
+renderer request → Main admission → current Main cookies/CSRF → fixed API
+API response → Main cookie persistence → bounded public response to renderer
+```
+
 Active requests are owned by sender and request ID, not by tenant or business state. Cancellation,
 top-level navigation, renderer loss and destruction release them. A thirty-second transport deadline
 and bounded in-flight requests limit resource use. These limits do not change test deadlines or

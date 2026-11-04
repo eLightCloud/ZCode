@@ -20,6 +20,7 @@ import {
 } from "./configuration.js";
 import { applicationHttpFailure, performApplicationHttp } from "./transport.js";
 import { createPluginHttpBroker } from "./sourceBroker.js";
+import { createApplicationSessionFetch } from "./sessionFetch.js";
 
 /** Await before window/Host creation so native acquisition sees the ready capability file. */
 export async function initializeApplicationPluginHttp({
@@ -182,7 +183,10 @@ export function registerApplicationHttpIpc({
         input,
         {
           cookies: session.defaultSession.cookies,
-          fetch: (url, init) => session.defaultSession.fetch(url, init),
+          fetch: createApplicationSessionFetch(
+            session.defaultSession.cookies,
+            configuration.sessionCookies,
+          ),
         },
         AbortSignal.any([controller.signal, timeout]),
       );
@@ -219,7 +223,10 @@ export function registerApplicationHttpIpc({
             ? "cancelled"
             : timeout.aborted
               ? "deadline"
-              : "transport_unavailable",
+              : error instanceof Error &&
+                  error.message === "application_http_cookie_persistence_failed"
+                ? "cookie_persistence_failed"
+                : "transport_unavailable",
       });
       return applicationHttpFailure(status, "application_http_unavailable");
     } finally {

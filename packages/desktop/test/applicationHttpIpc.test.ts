@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(),
   fetch: vi.fn(),
   get: vi.fn(),
+  set: vi.fn(),
   logger: { info: vi.fn(), warn: vi.fn() },
 }));
 vi.mock("electron", () => ({
@@ -22,7 +23,14 @@ vi.mock("electron", () => ({
     handle: (channel: string, callback: (...args: any[]) => any) =>
       mocks.handlers.set(channel, callback),
   },
-  session: { defaultSession: { fetch: mocks.fetch, cookies: { get: mocks.get } } },
+  session: {
+    defaultSession: {
+      fetch: () => {
+        throw new Error("Electron rejects explicit Origin");
+      },
+      cookies: { get: mocks.get, set: mocks.set },
+    },
+  },
 }));
 import { registerApplicationHttpIpc } from "../src/main/applicationHttp/index.js";
 // Electron 返回本机绝对路径，可信 renderer 的 URL 也必须使用同一盘符。
@@ -48,6 +56,9 @@ beforeEach(() => {
   mocks.packaged = true;
   vi.clearAllMocks();
   mocks.handlers.clear();
+  mocks.get.mockResolvedValue([]);
+  mocks.set.mockResolvedValue(undefined);
+  vi.stubGlobal("fetch", mocks.fetch);
   vi.stubEnv("ZCODE_APPLICATION_ACCOUNT_API", "https://owned.invalid");
   vi.stubEnv("ZCODE_APPLICATION_PUBLIC_ORIGIN", "https://owned.invalid");
   vi.stubEnv("ZCODE_APPLICATION_API_PREFIXES", "");
@@ -55,7 +66,10 @@ beforeEach(() => {
   vi.stubEnv("ZCODE_APPLICATION_CSRF_HEADER", "X-CSRF-Token");
   registerApplicationHttpIpc({ logger: mocks.logger });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 it("denies an iframe and a non-app file before private cookie/network access", async () => {
   const invoke = mocks.handlers.get(APPLICATION_HTTP_CHANNEL)!;
   const iframe = event();

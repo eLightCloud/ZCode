@@ -408,6 +408,18 @@ describe("automationFormat", () => {
     expect(hasAutomationFailureState({ lifecycleStatus: "active" })).toBe(false);
   });
 
+  it("恢复启用后保留上次失败提示，但当前调度状态仍为 active", () => {
+    const automation = {
+      lifecycleStatus: "active" as const,
+      enabled: true,
+      dispatchStatus: "idle" as const,
+      lastError: "application_admission_denied",
+    };
+    expect(hasAutomationFailureState(automation)).toBe(true);
+    expect(resolveAutomationStatusKind(automation)).toBe("active");
+    expect(resolveAutomationStatusKind({ ...automation, enabled: false })).toBe("paused");
+  });
+
   it("只有真实进入退避重试队列时才展示排队标签", () => {
     expect(
       hasAutomationRetryQueueState({

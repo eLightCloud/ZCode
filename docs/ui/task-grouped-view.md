@@ -43,6 +43,8 @@
 - 复用 task_groups、task_group_members、task_group_view_node_orders；bootstrap 表仅保留历史。
   分组服务提供结构读取、CRUD、单节点移动和首次任务登记，保存到控制端 tasks-index.sqlite。
 - 任务引用保留 Host、canonical workspace identity、taskId；临时 remoteSessionId 不入持久化键。
+  Server 直接承载的路径型任务沿持库 Host 身份校验，不因缺省 workspaceIdentity 被误判成本机；
+  桌面本地、显式远程 identity 和跨 Host 拒绝规则保持原合同，任务存在性仍由所属 Host 树核验。
   复用当前共享任务树，不另建任务事实缓存，不为分组查询连远程或拉起 Agent。
 - 移动只提交涉及节点和锚点，事务内复检来源与目标，失效拒绝并刷新。
   不用可见列表覆盖全库，保留离线/归档/置顶成员。断线或快照缺行不等于删除。

@@ -10,7 +10,7 @@ import type { Event, IDisposable } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
 import type { AppUsageRange, AppUsageSnapshot, ZCodeTaskTokenUsageResult } from "@zcode/shared";
 import type { DynamicWorkflowMode } from "@zcode/shared";
-import type { ZCodeAutomation, ZCodeAutomationRun } from "@zcode/shared";
+import type { ZCodeAutomation, ZCodeAutomationRun, AutomationExecutionCapabilities } from "@zcode/shared";
 import type {
   ZCodeStorageStartupState,
   ZCodeDeliveryKind,
@@ -180,6 +180,7 @@ export interface ZCodeAgentSessionTarget extends ZCodeAgentWorkspaceTarget {
 }
 
 export interface ZCodeAgentResumeSessionParams extends ZCodeAgentSessionTarget {
+  refreshConfiguration?: boolean;
   additionalDirectories?: string[];
   model?: ModelSelection;
   thoughtLevel?: string;
@@ -821,7 +822,7 @@ export interface IZCodeAgentService {
   // ---- 定时任务(automation)管理 ----
   listAutomations(params: ZCodeAgentWorkspaceTarget): Promise<ZCodeAutomation[]>;
   listAllAutomations(): Promise<ZCodeAutomation[]>;
-  getAutomationCapabilities(): Promise<{ manualDispatchAvailable: boolean; timezone: string }>;
+  getAutomationCapabilities(): Promise<AutomationExecutionCapabilities>;
   createAutomation(params: ZCodeAgentCreateAutomationParams): Promise<ZCodeAutomation>;
   inspectAutomationCreation(
     params: ZCodeAgentCreateAutomationParams & { creationId: string },

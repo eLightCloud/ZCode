@@ -3,6 +3,7 @@ import { remoteHostIdFromWorkspaceIdentity } from "@zcode/shared";
 import type { DatabaseSync } from "node:sqlite";
 import type { GroupTaskFact, GroupTaskRef, ITaskGroupService } from "#src/task-groups/contract.js";
 import { TaskGroupRepository, groupTaskKey } from "#src/task-groups/repository.js";
+import { createServiceLogger } from "#src/logger/serviceLogger.js";
 export { TaskGroupRepository, groupTaskKey } from "#src/task-groups/repository.js";
 export { ITaskGroupService } from "#src/task-groups/contract.js";
 export type {
@@ -15,28 +16,38 @@ export type {
   GroupTaskFact,
 } from "#src/task-groups/contract.js";
 
-const taskSchema = z
+const logger = createServiceLogger("task-groups");
+const taskShape = z
   .object({
     hostId: z.string().min(1),
     workspacePath: z.string().min(1),
     workspaceIdentity: z.string().trim().min(1).optional(),
     taskId: z.string().min(1),
   })
-  .strict()
-  .refine(
-    (task) =>
-      (remoteHostIdFromWorkspaceIdentity(task.workspaceIdentity ?? "") ?? "local") === task.hostId,
-    "task-group.host-identity-mismatch",
-  );
-const nodeSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("group"), groupId: z.string().min(1) }).strict(),
-  z.object({ type: z.literal("task"), task: taskSchema }).strict(),
-]);
+  .strict();
 export function createTaskGroupService(options: {
+  ownerHostId?: string;
   database(): Promise<DatabaseSync>;
   resolveTasks(tasks: GroupTaskRef[]): Promise<GroupTaskFact[]>;
   afterChange(): Promise<void>;
 }): ITaskGroupService {
+  const taskSchema = taskShape.refine((task) => {
+    const expectedHost =
+      remoteHostIdFromWorkspaceIdentity(task.workspaceIdentity ?? "") ??
+      options.ownerHostId ??
+      "local";
+    const matches = expectedHost === task.hostId;
+    if (!matches)
+      logger.warn(undefined, "task_group_reference_rejected", {
+        reason: "host_identity_mismatch",
+        taskId: task.taskId,
+      });
+    return matches;
+  }, "task-group.host-identity-mismatch");
+  const nodeSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("group"), groupId: z.string().min(1) }).strict(),
+    z.object({ type: z.literal("task"), task: taskSchema }).strict(),
+  ]);
   const repository = async () => new TaskGroupRepository(await options.database());
   const changed = async (run: (repo: TaskGroupRepository) => void) => {
     const repo = await repository();

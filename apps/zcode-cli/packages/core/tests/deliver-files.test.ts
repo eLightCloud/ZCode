@@ -98,7 +98,8 @@ describe("DeliverFiles", () => {
     expect(publish.mock.calls[3][0]).toMatchObject({
       requestPublicLink: true, sourcePluginId: "original@market",
     });
-    expect(publish.mock.calls[4][0].sourcePluginId).toBeUndefined();
+    expect(publish.mock.calls[4][0].sourcePluginId).toBe("original@market");
+    expect(publish.mock.calls[4][0].requestPublicLink).not.toBe(true);
   });
   it("exposes delivery and its guidance only when the native capability is present", () => {
     const without = createToolRegistry();

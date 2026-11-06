@@ -254,6 +254,18 @@ describe("workspace/updateDynamicWorkflowPolicy 同步（DWG-02）", () => {
 });
 
 describe("session create / resume / v4 createSession 的 flag（DWG-02）", () => {
+  it("显式配置刷新透传到恢复协议，普通恢复不请求刷新", async () => {
+    const { service, request } = await setup({ enabled: false });
+    try {
+      await service.resumeSession({ workspacePath: WORKSPACE_PATH, sessionId: "s-ordinary" });
+      await service.resumeSession({ workspacePath: WORKSPACE_PATH, sessionId: "s-refresh", refreshConfiguration: true });
+      const requests = paramsOf(request, zcodeProtocolMethods.sessionResume);
+      expect(requests[0]).not.toHaveProperty("refreshConfiguration");
+      expect(requests[1]).toMatchObject({ sessionId: "s-refresh", refreshConfiguration: true });
+    } finally {
+      service.disposeAll();
+    }
+  });
   it("灰度开启时三条创建路径都带 dynamicWorkflowEnabled:true", async () => {
     const { service, request, resolveConfig } = await setup({ enabled: true });
     try {

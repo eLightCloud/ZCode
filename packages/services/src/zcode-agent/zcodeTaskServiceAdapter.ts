@@ -198,6 +198,7 @@ interface TaskTarget {
 }
 
 interface TaskTargetWithMcpServers extends TaskTarget {
+  refreshConfiguration?: boolean;
   additionalDirectories?: string[];
   model?: string;
   thoughtLevel?: string;
@@ -1079,6 +1080,7 @@ export function createZCodeTaskServiceAdapter(
     const thoughtLevel = params.thoughtLevel?.trim();
     const mcpServers = await resolveProductMcpServers(params.mcpServers);
     return options.zcodeAgentService.resumeSession({
+      ...(params.refreshConfiguration ? { refreshConfiguration: true } : {}),
       workspacePath: params.workspacePath,
       workspaceIdentity: params.workspaceIdentity,
       sessionId: params.taskId,
@@ -2451,6 +2453,7 @@ export function createZCodeTaskServiceAdapter(
       const model = explicitModel || indexHints.model;
       const thoughtLevel = explicitThoughtLevel || indexHints.thoughtLevel;
       const restored = await resumeSnapshotOrLegacy({
+        ...(params.automationId ? { refreshConfiguration: true } : {}),
         taskId: params.taskId,
         workspacePath: params.workspacePath,
         workspaceIdentity: params.workspaceIdentity,

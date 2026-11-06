@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAuxiliarySessionKind } from "@zcode/shared";
+import { isAuxiliarySessionKind, AUTOMATION_DISPATCH_UNAVAILABLE } from "@zcode/shared";
 import {
   pluginUiToolResultNotificationSchema,
   type PluginUiToolResultNotification,
@@ -778,6 +778,8 @@ function buildSessionResumeParams(
 ) {
   return {
     sessionId: params.sessionId,
+    // 资源配置必须生效，旧 Agent 不支持时拒绝，不加入可忽略的兼容字段。
+    ...(params.refreshConfiguration ? { refreshConfiguration: true } : {}),
     additionalDirectories: params.additionalDirectories,
     workspace: buildWorkspaceRef(params),
     ...(params.thoughtLevel !== undefined && !omittedFields.has("thoughtLevel")
@@ -5399,7 +5401,11 @@ export function createZCodeAgentService(
       if (!dispatch) {
         // runNow 会先写 manual run 并占用 single-flight claim；dispatcher
         // 缺失是同步可判定的配置错误，必须在认领前失败，不能依赖 stale 崩溃回收。
-        throw new Error("Automation immediate dispatcher is unavailable.");
+        logger.warn(undefined, "automation.dispatch.rejected", {
+          automationId: params.automationId,
+          reasonCode: AUTOMATION_DISPATCH_UNAVAILABLE,
+        });
+        throw new Error(AUTOMATION_DISPATCH_UNAVAILABLE);
       }
       const claimed = await automationService.runNow(
         params.automationId,

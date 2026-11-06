@@ -393,6 +393,26 @@ export async function activateSessionForResume(
 
 export async function resumeSession(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(zcodeSessionResumeParamsSchema, rawParams);
+  if (params.refreshConfiguration && context.sessions.has(params.sessionId)) {
+    // 自动化接纳会先登记本轮 MCP；原有热恢复直接返回旧 App，工具仍绑定上一轮。
+    // 由原生生命周期 owner 在无运行/排队工作时关闭并冷恢复，保留同一会话和历史。
+    if (!context.sessionResidentPool) throw new Error("Session configuration refresh unavailable");
+    try {
+      await context.sessionResidentPool.refreshForResume(params.sessionId);
+      context.logger?.info("Automation session configuration refreshed", {
+        event: "zcode_protocol.session.automation_refresh",
+        sessionId: params.sessionId,
+        outcome: "completed",
+      });
+    } catch (error) {
+      context.logger?.warn("Automation session configuration refresh blocked", {
+        event: "zcode_protocol.session.automation_refresh",
+        sessionId: params.sessionId,
+        outcome: "blocked",
+      });
+      throw error;
+    }
+  }
   const activated = await activateSessionForResume(context, params);
   return await snapshot(context, activated.record, activated.knownSession);
 }

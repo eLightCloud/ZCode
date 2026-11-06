@@ -188,6 +188,8 @@ describe("Application Host lifecycle", () => {
       async control(method){return {state:method};},
       async beforeAutomationInput(input){
         if(input.automationId==='context') return {state:'admitted',context:{filename:'business.json',text:'{"fixed":true}'}};
+        if(input.automationId==='authorization') return {state:'blocked',reason:'authorization_required'};
+        if(input.automationId==='unsafe') return {state:'blocked',reason:'private details'};
         if(input.automationId==='large') return {state:'admitted',context:{filename:'business.json',text:'x'.repeat(16385)}};
         return input.automationId==='blocked'?'blocked':'invalid';},
       async dispose(){} };}`,
@@ -215,6 +217,12 @@ describe("Application Host lifecycle", () => {
       };
       expect(await privatePort.beforeAutomationInput(input)).toBe("blocked");
       expect(
+        await privatePort.beforeAutomationInput({ ...input, automationId: "authorization" }),
+      ).toEqual({ state: "blocked", reason: "authorization_required" });
+      expect(await privatePort.beforeAutomationInput({ ...input, automationId: "unsafe" })).toBe(
+        "unavailable",
+      );
+      expect(
         await privatePort.beforeAutomationInput({ ...input, automationId: "context" }),
       ).toEqual({
         state: "admitted",
@@ -236,19 +244,43 @@ describe("Application Host lifecycle", () => {
 it("projects bounded extension observations without arbitrary text or fields", async () => {
   const root = await mkdtemp(join(tmpdir(), "zcode-app-observation-"));
   const modulePath = join(root, "extension.mjs");
-  await writeFile(modulePath, `export async function createApplicationHost({logger}) {
+  await writeFile(
+    modulePath,
+    `export async function createApplicationHost({logger}) {
     logger.info('synthetic.source', {outcome:'unavailable',phase:'discovery',reason_code:'source_unavailable',source_ref:'opaque-source',secret:'private content'});
     logger.warn('private content', {outcome:'failed',secret:'private content'});
-    return {async call(){},async dispose(){}}; }`);
-  const logger = {info:vi.fn(),warn:vi.fn(),error:vi.fn(),debug:vi.fn()};
-  const service = createApplicationHostService({native,credentials,storageRoot:root,modulePath,logger});
+    return {async call(){},async dispose(){}}; }`,
+  );
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+  const service = createApplicationHostService({
+    native,
+    credentials,
+    storageRoot: root,
+    modulePath,
+    logger,
+  });
   try {
-    await service.call('inspect',{});
-    expect(logger.info.mock.calls.map(call=>call[2])).toContainEqual(expect.objectContaining({
-      event:'application.host.extension',method:'synthetic.source',outcome:'unavailable',
-      phase:'discovery',reasonCode:'source_unavailable',correlationId:'opaque-source',
-    }));
-    expect(logger.warn.mock.calls[0][2]).toMatchObject({event:'application.host.extension',method:'extension',outcome:'failed'});
-    expect(JSON.stringify([logger.info.mock.calls,logger.warn.mock.calls])).not.toContain('private content');
-  } finally { await service.dispose(); await rm(root,{recursive:true,force:true}); }
+    await service.call("inspect", {});
+    expect(logger.info.mock.calls.map((call) => call[2])).toContainEqual(
+      expect.objectContaining({
+        event: "application.host.extension",
+        method: "synthetic.source",
+        outcome: "unavailable",
+        phase: "discovery",
+        reasonCode: "source_unavailable",
+        correlationId: "opaque-source",
+      }),
+    );
+    expect(logger.warn.mock.calls[0][2]).toMatchObject({
+      event: "application.host.extension",
+      method: "extension",
+      outcome: "failed",
+    });
+    expect(JSON.stringify([logger.info.mock.calls, logger.warn.mock.calls])).not.toContain(
+      "private content",
+    );
+  } finally {
+    await service.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
 });

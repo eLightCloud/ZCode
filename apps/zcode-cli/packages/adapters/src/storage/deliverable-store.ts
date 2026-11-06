@@ -171,7 +171,8 @@ export class NodeDeliverableStore implements DeliverableStorePort {
         const descriptor = nativeDeliverableSchema.parse({
           kind: "file",
           purpose: "final",
-          ...(input.requestPublicLink ? { requestPublicLink: true, sourcePluginId: input.sourcePluginId } : {}),
+          ...(input.requestPublicLink ? { requestPublicLink: true } : {}),
+          sourcePluginId: input.sourcePluginId,
           id,
           version,
           sequence: 1,

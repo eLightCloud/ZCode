@@ -33,10 +33,12 @@ export function startServerAutomationRuntime(
     clientMode: "web-remote-replayable",
     async beforeAutomationInput(input) {
       const outcome = await options.applicationAdmission?.(input);
+      if (typeof outcome === "object" && outcome.state === "blocked")
+        throw new AutomationDispatchConfigurationError("application_authorization_required");
       if (outcome === "blocked")
         throw new AutomationDispatchConfigurationError("application_admission_denied");
       if (outcome === "unavailable") throw new Error("Application admission unavailable");
-      if (outcome && typeof outcome === "object")
+      if (outcome && typeof outcome === "object" && outcome.state === "admitted")
         return [
           {
             kind: "file" as const,
@@ -113,7 +115,11 @@ export function startServerAutomationRuntime(
         runId: request.runId,
         automationId: request.automationId,
       });
-      throw new Error("Native automation dispatch failed");
+      throw new Error(
+        diagnosis.reason === "application_authorization_required"
+          ? diagnosis.reason
+          : "Native automation dispatch failed",
+      );
     }
   };
   const track = (work: Promise<void>) => {

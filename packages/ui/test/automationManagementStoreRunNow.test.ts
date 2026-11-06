@@ -14,6 +14,16 @@ function deferred<T>() {
 }
 
 describe("automationManagementStore runAutomationNow", () => {
+  it("reports disabled dispatch distinctly without claiming a queued run", async () => {
+    const agentService = {
+      runAutomationNow: vi.fn(async () => { throw new Error("AUTOMATION_DISPATCH_UNAVAILABLE"); }),
+      listAllAutomations: vi.fn(),
+    } as unknown as IZCodeAgentService;
+    useAutomationManagementStore.setState({ workspacePath: "/tmp/ws", workspaceIdentity: null });
+    await expect(useAutomationManagementStore.getState().runAutomationNow("automation-1", agentService)).resolves.toBe("unavailable");
+    expect(agentService.listAllAutomations).not.toHaveBeenCalled();
+    expect(useAutomationManagementStore.getState().operationId).toBeNull();
+  });
   afterEach(() => {
     useAutomationManagementStore.setState(useAutomationManagementStore.getInitialState(), true);
   });

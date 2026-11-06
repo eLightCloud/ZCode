@@ -40,7 +40,8 @@ export const deliverFilesHandler: ToolHandler = async (raw, context) => {
   for (const [index, item] of input.files.entries()) {
     context.abortSignal.throwIfAborted();
     try {
-      const sourcePluginId = item.requestPublicLink ? context.deliverySkill?.current() : undefined;
+      // 普通定稿也保留可信 Skill 来源；消费方另行裁决公开权限，不能由模型自填来源。
+      const sourcePluginId = context.deliverySkill?.current();
       if (item.requestPublicLink && !sourcePluginId) throw new Error("deliverable_publication_source_required");
       const file = await store.publish(
         {

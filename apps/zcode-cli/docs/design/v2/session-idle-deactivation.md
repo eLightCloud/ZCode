@@ -21,6 +21,16 @@ eligible session 空闲超过 TTL 后无论 resident 数量多少都去激活；
 
 ## 核心不变量
 
+### 自动化恢复前刷新连接
+
+自动化 adapter 在本轮资源接纳完成后发送 `refreshConfiguration=true` 的显式 `session/resume`，刷新已有 resident runtime，
+经同一 pool 去激活屏障关闭旧 App，再按原 session ID 从持久历史冷恢复；普通查看和订阅不刷新。
+原因是应用可在每次派发前更新 MCP 配置，热恢复直接复用旧 App 会丢失本轮连接与凭据。
+只有当前恢复请求独占该 session 的 operation lease，且无运行、后台收尾、待交互、排队命令时
+才允许刷新；有活动则明确拒绝，不中断已接受工作。只读订阅不阻止显式刷新，沿既有 V4
+去激活/再水合恢复，不删除历史或发送 session.removed。关闭失败保留失败屏障，禁止假成功。
+验收覆盖热会话更新 MCP 后自动化恢复、普通恢复复用、忙时拒绝、并发恢复等待关闭及关闭失败。
+
 `DEACTIVATED` 必须等价于“当前 CLI 进程从未加载过该 session”：
 
 - `context.sessions` 无 record；

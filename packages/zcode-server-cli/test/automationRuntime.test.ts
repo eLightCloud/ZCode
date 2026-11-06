@@ -58,10 +58,15 @@ async function fixture() {
       },
       { nextRunAt },
     );
-  const start = () => {
+  const start = (
+    applicationAdmission?: NonNullable<
+      Parameters<typeof startServerAutomationRuntime>[1]
+    >["applicationAdmission"],
+  ) => {
     const runtime = startServerAutomationRuntime(services, {
       databasePath,
       serverId: "owned-server",
+      applicationAdmission,
     });
     cleanups.push(() => runtime.dispose());
     return runtime;
@@ -70,6 +75,27 @@ async function fixture() {
 }
 
 describe("Server Core native automation wiring", () => {
+  it("preserves authorization mismatch for scheduled and manual failures without creating a task", async () => {
+    const f = await fixture();
+    const scheduled = await f.create(Date.now() - 1000);
+    const next = Date.now() + 3600_000;
+    const manual = await f.create(next);
+    const runtime = f.start(async () => ({ state: "blocked", reason: "authorization_required" }));
+    await runtime.ready;
+    await vi.waitFor(async () =>
+      expect((await f.repo.get(scheduled.automationId))?.enabled).toBe(false),
+    );
+    const claim = (await f.repo.runNow(manual.automationId, { now: Date.now() }))!;
+    await expect(runtime.runManual(claim)).rejects.toThrow("application_authorization_required");
+    for (const rule of [manual, scheduled]) {
+      expect((await f.repo.listRuns(rule.automationId))[0]?.error).toBe(
+        "application_authorization_required",
+      );
+    }
+    expect((await f.repo.get(manual.automationId))?.nextRunAt).toBe(next);
+    expect(f.task.createTask).not.toHaveBeenCalled();
+    expect(f.task.sendPrompt).not.toHaveBeenCalled();
+  });
   it("retries the same persisted run successfully after a temporary admission failure", async () => {
     const f = await fixture();
     f.task.sendPrompt.mockRejectedValueOnce(new Error("controlled temporary connection failure"));

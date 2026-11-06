@@ -7,6 +7,7 @@ import type { ICredentialService } from "../credential/credential.js";
 import type { ConversationSyncHost, ConversationRuntimePort } from "@zcode/shared";
 import type { IProjectService } from "../project/contract.js";
 import type { IModelSelectionService } from "../model-provider/providerFacadeServices.js";
+import type { IMcpSyncService } from "../mcp-sync/mcpSync.js";
 import { createServiceLogger, type ServiceLogger } from "../logger/serviceLogger.js";
 
 interface ApplicationHostExtension {
@@ -25,6 +26,7 @@ export function createApplicationHostService(options: {
   runtime?: ConversationRuntimePort;
   projects?: Pick<IProjectService, "readProjects">;
   models?: Pick<IModelSelectionService, "getView">;
+  mcp?: Pick<IMcpSyncService, "saveMcpToUserDirectory">;
   credentials: ICredentialService;
   storageRoot: string;
   modulePath?: string;
@@ -68,6 +70,7 @@ export function createApplicationHostService(options: {
         files: options.files,
         projects: options.projects,
         models: options.models,
+        mcp: options.mcp,
         conversations: options.conversations,
         runtime: options.runtime,
         credentials: options.credentials,
@@ -182,11 +185,17 @@ export function createApplicationHostService(options: {
           /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$/.test(result.context.filename) &&
           typeof result.context.text === "string" &&
           Buffer.byteLength(result.context.text) <= 16384;
+        const authorizationRequired =
+          typeof result === "object" &&
+          result !== null &&
+          result.state === "blocked" &&
+          result.reason === "authorization_required";
         if (
           !(
             typeof result === "string" && ["admitted", "blocked", "unavailable"].includes(result)
           ) &&
-          !attached
+          !attached &&
+          !authorizationRequired
         )
           throw new Error("application_admission_invalid");
         log.info(undefined, "Application admission checked", {

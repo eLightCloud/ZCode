@@ -129,6 +129,10 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useAutomationProjectOptions } from "@/hooks/useAutomationProjectOptions.js";
 import {
+  useAutomationCapabilities,
+  formatExecutionTimezone,
+} from "./automation-capabilities/index.js";
+import {
   useBaseWorkspaceServices,
   useWorkspaceServicesResolution,
 } from "@/hooks/useWorkspaceServices.js";
@@ -150,7 +154,6 @@ import {
   describeCronBuilder,
   formatDateTime,
   formatDuration,
-  formatGmtOffset,
   isSessionCreatedAutomation as resolveIsSessionCreatedAutomation,
   parseCronToBuilder,
   resolveAutomationStatusKind,
@@ -1468,6 +1471,16 @@ export function AutomationEditView({
     selectedWorkspace ? "remote-waiting" : "missing-target",
     { selection: originalSelection },
   );
+  const execution = useAutomationCapabilities(
+    selectionOwner.services.zcodeAgentService,
+    Boolean(selectedWorkspace) && selectionOwner.rpcReady,
+  );
+  const dispatchAvailable =
+    execution.state.status === "ready" && execution.state.value.manualDispatchAvailable;
+  const executionTimezone =
+    execution.state.status === "ready"
+      ? formatExecutionTimezone(execution.state.value.timezone, editing?.nextRunAt)
+      : intl.formatMessage({ id: "automations.execution.unknownTimezone" });
   const modelSelectionView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;
   const effectiveSelection = modelSelectionView?.effectiveSelection;
@@ -1475,7 +1488,22 @@ export function AutomationEditView({
     ? encodeCustomModelValue(effectiveSelection.providerId, effectiveSelection.modelId)
     : "";
   const effectiveReasoningLevel = effectiveSelection?.options?.reasoningLevel ?? "";
-  const applicationGrouping = Boolean(useApplicationSettings()?.modelEntries.length);
+  const applicationSettings = useApplicationSettings();
+  const applicationGrouping = Boolean(applicationSettings?.modelEntries.length);
+  const reviewScope = useRef<AbortController | null>(null);
+  const reviewPendingRef = useRef(false);
+  const [reviewPending, setReviewPending] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewCurrent, setReviewCurrent] = useState<{
+    automation: ZCodeAutomation;
+    timezone: string;
+  } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    reviewScope.current = controller;
+    setReviewCurrent(null);
+    return () => controller.abort();
+  }, [editing?.automationId, selectionOwner.services]);
   const modelSelectGroups = useMemo(() => {
     if (!modelSelectionView) return [];
     return buildAutomationModelSelectGroups({
@@ -1751,7 +1779,7 @@ export function AutomationEditView({
   const recommendStartPlan = useStartPlanRecommendation(modelSelectionView);
   const submitAutomation = useCallback(
     async (options: { validationSource: "save" | "run-now"; returnToList?: boolean }) => {
-      if (saving) return false;
+      if (saving || reviewPendingRef.current) return false;
       if (!requestRequiredFieldValidation(options.validationSource)) {
         return false;
       }
@@ -1795,8 +1823,46 @@ export function AutomationEditView({
         workspaceKind: editing?.workspaceIdentity?.trim() ? "remote" : "local",
         automationKind: "scheduled",
       });
+      const signal = reviewScope.current?.signal;
+      reviewPendingRef.current = true;
+      setReviewPending(true);
+      setReviewError(null);
       try {
         const ok = await onSubmit({ input, ...target });
+        if (ok && editing && applicationSettings?.automation) {
+          if (!signal || signal.aborted) return false;
+          // 规则写入成功不等于资源授权仍匹配；读取相同 Host 已保存的事实后才可继续运行。
+          const reviewed = await applicationSettings.automation.review({
+            signal,
+            readCurrent: async () => {
+              signal.throwIfAborted();
+              const agent = selectionOwner.services.zcodeAgentService;
+              const [rules, capabilities] = await Promise.all([
+                agent.listAllAutomations(),
+                agent.getAutomationCapabilities(),
+              ]);
+              signal.throwIfAborted();
+              const automation = rules.find((rule) => rule.automationId === editing.automationId);
+              if (!automation) throw new Error("automation_unavailable");
+              const current = { automation, timezone: capabilities.timezone };
+              setReviewCurrent(current);
+              return current;
+            },
+            confirm: (description) =>
+              confirmDialog({
+                title: intl.formatMessage({ id: "automations.authorization.title" }),
+                description,
+                confirmLabel: intl.formatMessage({ id: "automations.authorization.confirm" }),
+                presentation: "automation-confirmation",
+              }),
+          });
+          if (signal.aborted || !reviewed) {
+            trace.reject({ resultSource: "platform_result" });
+            if (!signal.aborted)
+              setReviewError(intl.formatMessage({ id: "automations.authorization.required" }));
+            return false;
+          }
+        }
         if (ok) {
           trace.complete({ resultSource: "platform_result" });
           if (options?.returnToList !== false) onBack();
@@ -1804,13 +1870,22 @@ export function AutomationEditView({
           trace.reject({ resultSource: "platform_result" });
         }
         return ok;
-      } catch (error) {
+      } catch {
         trace.fail({ failureStage: "automation_save" });
-        throw error;
+        if (!signal?.aborted)
+          setReviewError(intl.formatMessage({ id: "automations.authorization.failed" }));
+        return false;
+      } finally {
+        reviewPendingRef.current = false;
+        if (!signal?.aborted) setReviewPending(false);
       }
     },
     [
       buildSubmitInput,
+      applicationSettings,
+      confirmDialog,
+      intl,
+      selectionOwner.services,
       changedFields,
       recommendStartPlan,
       canSubmit,
@@ -1977,7 +2052,7 @@ export function AutomationEditView({
                     form="automation-edit-form"
                     data-testid={TID_AUTOMATION_FORM_SUBMIT}
                     className="inline-flex h-8 items-center rounded-lg border-0 bg-white px-3 text-ui-base font-medium text-black shadow-none outline-none transition-colors hover:bg-white/90 focus-visible:ring-0 disabled:pointer-events-none disabled:opacity-40"
-                    disabled={!submissionContextReady || saving}
+                    disabled={!submissionContextReady || saving || reviewPending}
                   >
                     {intl.formatMessage({
                       id: saving ? "automations.form.saving" : "automations.form.save",
@@ -1989,7 +2064,13 @@ export function AutomationEditView({
                     type="button"
                     data-testid={TID_AUTOMATION_RUN_NOW}
                     className="inline-flex h-8 items-center gap-1.5 rounded-lg border-0 bg-white/[0.06] px-3 text-ui-base font-medium text-foreground shadow-none outline-none transition-colors hover:bg-white/10 focus-visible:ring-0 disabled:pointer-events-none disabled:cursor-not-allowed disabled:text-foreground-subtlest disabled:opacity-40"
-                    disabled={!submissionContextReady || saving || saveAndRunPending}
+                    disabled={
+                      !submissionContextReady ||
+                      saving ||
+                      reviewPending ||
+                      saveAndRunPending ||
+                      !dispatchAvailable
+                    }
                     onClick={() => void handleSaveAndRun()}
                   >
                     <AutomationRunNowIcon className="size-4" aria-hidden="true" />
@@ -2061,6 +2142,30 @@ export function AutomationEditView({
           </div>
         </div>
 
+        {!dispatchAvailable && selectedWorkspace ? (
+          <div role="status" className="flex items-center gap-2 text-ui-sm text-foreground-subtle">
+            {intl.formatMessage({
+              id:
+                execution.state.status === "ready"
+                  ? "automations.execution.disabled"
+                  : "automations.execution.unavailable",
+            })}
+            <button type="button" className="underline" onClick={() => execution.reload()}>
+              {intl.formatMessage({ id: "common.retry" })}
+            </button>
+          </div>
+        ) : null}
+        {reviewError ? (
+          <div role="alert" className="text-ui-sm text-destructive">
+            {reviewError}
+          </div>
+        ) : null}
+        {editing && execution.state.status === "ready"
+          ? applicationSettings?.automation?.renderStatus(
+              reviewCurrent?.automation ?? editing,
+              reviewCurrent?.timezone ?? execution.state.value.timezone,
+            )
+          : null}
         {tab === "settings" ? (
           <form
             id="automation-edit-form"
@@ -2369,7 +2474,7 @@ export function AutomationEditView({
                             }}
                           />
                           <span className="whitespace-nowrap text-foreground-subtle">
-                            {formatGmtOffset()}
+                            {executionTimezone}
                           </span>
                         </>
                       ) : null}
@@ -2485,7 +2590,7 @@ export function AutomationEditView({
                               setBuilder((prev) => ({ ...prev, hour, minute }));
                             }}
                           />
-                          <span className="text-foreground-subtle">{formatGmtOffset()}</span>
+                          <span className="text-foreground-subtle">{executionTimezone}</span>
                         </>
                       ) : null}
 
@@ -2806,10 +2911,14 @@ export function AutomationEditView({
                                     sideOffset={6}
                                     className="max-w-96 whitespace-normal break-words"
                                   >
-                                    {run.error?.trim() ||
-                                      intl.formatMessage({
-                                        id: "automations.runs.errorUnavailable",
-                                      })}
+                                    {run.error === "application_authorization_required"
+                                      ? intl.formatMessage({
+                                          id: "automations.authorization.required",
+                                        })
+                                      : run.error?.trim() ||
+                                        intl.formatMessage({
+                                          id: "automations.runs.errorUnavailable",
+                                        })}
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>

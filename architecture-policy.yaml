@@ -1703,7 +1703,7 @@ modules:
     roots:
       - packages/ui/src/workspace-entry
     managed: true
-    requires: [ui]
+    requires: [ ui ]
     publicEntrypoints:
       - packages/ui/src/workspace-entry/contract.ts
     layers:
@@ -1714,12 +1714,25 @@ modules:
     roots:
       - packages/web/src/workspace-entry
     managed: true
-    requires: [ui, shared]
+    requires: [ ui, shared ]
     publicEntrypoints:
       - packages/web/src/workspace-entry/contract.ts
     layers:
       adapters: .
     owner: web-entry
+  # automation-capabilities：由 architecture:adopt 登记
+  - id: automation-capabilities
+    roots:
+      - packages/ui/src/settings/automation-capabilities
+    managed: true
+    requires:
+      - shared
+    publicEntrypoints:
+      - packages/ui/src/settings/automation-capabilities/index.ts
+      - packages/ui/src/settings/automation-capabilities/contract.ts
+    layers:
+      ui: .
+    owner: automation
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

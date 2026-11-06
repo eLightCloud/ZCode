@@ -1,5 +1,11 @@
 # Tool Change Chain Spec
 
+## 自动化复用会话的 MCP 重新装载（2026-11-06）
+
+应用在派发前登记本轮 MCP 后，原生自动化以 refreshConfiguration 的显式恢复经 resident pool 的安全屏障
+冷恢复同一会话，读取最新连接；不改 MCP 工具 schema、权限、调用或效果账本。
+忙会话拒绝刷新，历史与原会话身份保留。合同与回归见 session-idle-deactivation.md。
+
 ## 跨分支效果核对（2026-10-25）
 
 原生中心从已保存版本收集 MCP 效果引用，选择正文不删除该上下文。恢复只把低敏引用写入

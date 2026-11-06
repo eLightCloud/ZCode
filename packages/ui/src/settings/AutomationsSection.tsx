@@ -38,10 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { Spinner } from "@/components/ui/spinner.js";
-import {
-  toast as showToast,
-  type ToastOptions,
-} from "@/components/ui/toast.js";
+import { toast as showToast, type ToastOptions } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { AutomationScheduledTemplateIcon } from "@/settings/AutomationScheduledTemplateIcon.js";
@@ -81,10 +78,7 @@ import {
 } from "@/lib/offPeakTelemetry.js";
 import { OffPeakTaskList } from "@/settings/OffPeakTaskList.js";
 import { OffPeakTemplateIcon } from "@/settings/OffPeakTemplateIcon.js";
-import {
-  OffPeakEditView,
-  type OffPeakEditSubmit,
-} from "@/settings/OffPeakEditView.js";
+import { OffPeakEditView, type OffPeakEditSubmit } from "@/settings/OffPeakEditView.js";
 import {
   formatAutomationCardNextRun,
   hasAutomationFailureState,
@@ -92,10 +86,7 @@ import {
   type AutomationStatusKind,
 } from "@/settings/automationFormat.js";
 import { describeAutomationCardSchedule } from "@/settings/automationCardSchedule.js";
-import {
-  AutomationEditView,
-  type AutomationEditSubmit,
-} from "@/settings/AutomationEditView.js";
+import { AutomationEditView, type AutomationEditSubmit } from "@/settings/AutomationEditView.js";
 import { AutomationScheduleBadge } from "@/settings/AutomationScheduleBadge.js";
 import {
   AutomationClockIcon,
@@ -162,20 +153,14 @@ interface AutomationsSectionProps {
   workspaceIdentity?: string;
   /** 「Create via chat」:切到会话让 agent 用 CronCreate 创建;缺省则回退到手动创建整页。
    * target = 工作流所属项目；定时任务的「通过对话创建」不带 target，落到活动项目。 */
-  onCreateViaChat?: (
-    prompt: string,
-    target?: SavedWorkflowProjectTarget,
-  ) => void;
+  onCreateViaChat?: (prompt: string, target?: SavedWorkflowProjectTarget) => void;
   /** 会话内创建卡片的详情导航目标；定位成功后由调用方清空。 */
   openAutomationId?: string | null;
   /** 推荐提示词携带的一次性 tab 导航目标；仅在目标 tab 可见时应用。"workflow" 落到顶级「工作流」标签。 */
   openAutomationTab?: AutomationsNavigationTab | null;
   onOpenAutomationConsumed?: () => void;
   /** 工作流「运行」= GUI 直接启动：accepted 后切到新会话。 */
-  onNavigateToLaunchedRun?: (
-    target: SavedWorkflowLaunchTarget,
-    sessionId: string,
-  ) => void;
+  onNavigateToLaunchedRun?: (target: SavedWorkflowLaunchTarget, sessionId: string) => void;
   /** 工作流运行历史「查看实例」：切到发起它的会话并打开实例详情页。 */
   onOpenWorkflowRun?: (params: SavedWorkflowsOpenRunParams) => void;
   /** 产物 chip → `workflow-artifact` tab。 */
@@ -257,10 +242,7 @@ type AutomationsView =
 export type AutomationsTab = "scheduled" | "idle";
 
 const SCHEDULED_ONLY_AUTOMATION_TABS: readonly AutomationsTab[] = ["scheduled"];
-const SCHEDULED_AND_IDLE_AUTOMATION_TABS: readonly AutomationsTab[] = [
-  "scheduled",
-  "idle",
-];
+const SCHEDULED_AND_IDLE_AUTOMATION_TABS: readonly AutomationsTab[] = ["scheduled", "idle"];
 
 export function resolveVisibleAutomationTabs({
   hasAnyTasks,
@@ -270,9 +252,7 @@ export function resolveVisibleAutomationTabs({
   offPeakVisible: boolean;
 }): readonly AutomationsTab[] {
   if (!hasAnyTasks) return [];
-  return offPeakVisible
-    ? SCHEDULED_AND_IDLE_AUTOMATION_TABS
-    : SCHEDULED_ONLY_AUTOMATION_TABS;
+  return offPeakVisible ? SCHEDULED_AND_IDLE_AUTOMATION_TABS : SCHEDULED_ONLY_AUTOMATION_TABS;
 }
 
 export function resolveAutomationTabAfterOffPeakChange(
@@ -314,8 +294,7 @@ export function resolveAutomationTemplateVisibility({
   // 无任务时恢复两类模板并列展示；有任务后继续由 Scheduled / Idle tab 分流。
   const showAllTemplates = !hasAnyTasks;
   return {
-    showOffPeakTemplates:
-      offPeakCreationEnabled && (showAllTemplates || tab === "idle"),
+    showOffPeakTemplates: offPeakCreationEnabled && (showAllTemplates || tab === "idle"),
     showScheduledTemplates: showAllTemplates || tab === "scheduled",
   };
 }
@@ -342,13 +321,8 @@ export function canRestartAutomation(
   return automation.lifecycleStatus === "failed";
 }
 
-export function canToggleAutomation(
-  automation: Pick<ZCodeAutomation, "lifecycleStatus">,
-): boolean {
-  return (
-    automation.lifecycleStatus !== "completed" &&
-    automation.lifecycleStatus !== "failed"
-  );
+export function canToggleAutomation(automation: Pick<ZCodeAutomation, "lifecycleStatus">): boolean {
+  return automation.lifecycleStatus !== "completed" && automation.lifecycleStatus !== "failed";
 }
 
 export function getAutomationRunNowToastId(
@@ -356,18 +330,17 @@ export function getAutomationRunNowToastId(
 ):
   | "automations.runNowQueued"
   | "automations.runNowAlreadyRunning"
+  | "automations.execution.disabled"
+  | "automations.authorization.required"
   | "automations.runNowFailed" {
   if (result === "queued") return "automations.runNowQueued";
   if (result === "duplicate") return "automations.runNowAlreadyRunning";
+  if (result === "authorization-required") return "automations.authorization.required";
+  if (result === "unavailable") return "automations.execution.disabled";
   return "automations.runNowFailed";
 }
 
-export type AutomationActionError =
-  | "create"
-  | "update"
-  | "toggle"
-  | "restart"
-  | "delete";
+export type AutomationActionError = "create" | "update" | "toggle" | "restart" | "delete";
 
 /** 原始 Agent/RPC 错误留在 logger；界面只展示当前动作对应的可理解提示。 */
 export function getAutomationActionErrorToastId(
@@ -394,29 +367,21 @@ export function resolveAutomationDetailTarget(
 ): ZCodeAutomation | null {
   const targetId = automationId?.trim();
   if (!targetId) return null;
-  return (
-    automations.find((automation) => automation.automationId === targetId) ??
-    null
-  );
+  return automations.find((automation) => automation.automationId === targetId) ?? null;
 }
 
 export function resolveAutomationDetailNavigation(
   automations: readonly ZCodeAutomation[],
   automationId: string | null | undefined,
   listReady: boolean,
-):
-  | { status: "pending" }
-  | { status: "missing" }
-  | { status: "found"; target: ZCodeAutomation } {
+): { status: "pending" } | { status: "missing" } | { status: "found"; target: ZCodeAutomation } {
   if (!automationId?.trim() || !listReady) return { status: "pending" };
   const target = resolveAutomationDetailTarget(automations, automationId);
   return target ? { status: "found", target } : { status: "missing" };
 }
 
 /** D49：openAutomationId 里 `offpeak-` 前缀 id 的判别（生成点唯一：offPeakTaskService 的 offpeak-${uuid}）。 */
-export function isOffPeakDetailNavigationId(
-  automationId: string | null | undefined,
-): boolean {
+export function isOffPeakDetailNavigationId(automationId: string | null | undefined): boolean {
   return Boolean(automationId?.trim().startsWith("offpeak-"));
 }
 
@@ -505,11 +470,7 @@ function AutomationActionsMenu({
             onSelect={() => void onRestart(automation)}
           >
             <span className="flex size-5 items-center justify-center">
-              <RotateCcw
-                className="size-4"
-                strokeWidth={1.33}
-                aria-hidden="true"
-              />
+              <RotateCcw className="size-4" strokeWidth={1.33} aria-hidden="true" />
             </span>
             {intl.formatMessage({ id: "automations.restart" })}
           </DropdownMenuItem>
@@ -524,10 +485,7 @@ function AutomationActionsMenu({
           >
             {automation.enabled ? (
               <span className="flex size-5 items-center justify-center">
-                <AutomationPauseActionIcon
-                  className="size-4"
-                  aria-hidden="true"
-                />
+                <AutomationPauseActionIcon className="size-4" aria-hidden="true" />
               </span>
             ) : (
               <span className="flex size-5 items-center justify-center">
@@ -535,9 +493,7 @@ function AutomationActionsMenu({
               </span>
             )}
             {intl.formatMessage({
-              id: automation.enabled
-                ? "automations.pause"
-                : "automations.resume",
+              id: automation.enabled ? "automations.pause" : "automations.resume",
             })}
           </DropdownMenuItem>
         ) : null}
@@ -593,52 +549,29 @@ export function AutomationsSection({
   const application = useApplicationPeripherals();
   const { intl, locale } = useZCodeIntl();
   const platform = usePlatform();
-  const { clientScenesService, offPeakTaskService, zcodeAgentService } =
-    useServices();
+  const { clientScenesService, offPeakTaskService, zcodeAgentService } = useServices();
   const creationHost = useBaseWorkspaceServices();
   const confirmDialog = useConfirmDialog();
   const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
   const providerSettingsRead = useProviderSettingsView();
   const providerSettingsView =
-    providerSettingsRead.state.status === "ready"
-      ? providerSettingsRead.state.view
-      : null;
-  const {
-    status: entryStatus,
-    label: entryLabel,
-    retry: retryEntry,
-  } = useCodingPlanEntryGate();
-  const { settings: sharedSettings, update: updateSharedSettings } =
-    useSettings();
+    providerSettingsRead.state.status === "ready" ? providerSettingsRead.state.view : null;
+  const { status: entryStatus, label: entryLabel, retry: retryEntry } = useCodingPlanEntryGate();
+  const { settings: sharedSettings, update: updateSharedSettings } = useSettings();
   useOffPeakEligibility(sharedSettings, providerSettingsView?.revision);
 
-  const automations = useAutomationManagementStore(
-    (state) => state.automations,
-  );
-  const automationCreateLimitReached =
-    automations.length >= AUTOMATION_CREATE_LIMIT;
+  const automations = useAutomationManagementStore((state) => state.automations);
+  const automationCreateLimitReached = automations.length >= AUTOMATION_CREATE_LIMIT;
   const loading = useAutomationManagementStore((state) => state.loading);
-  const operationId = useAutomationManagementStore(
-    (state) => state.operationId,
-  );
+  const operationId = useAutomationManagementStore((state) => state.operationId);
   const runsCache = useAutomationManagementStore((state) => state.runsCache);
   const initialize = useAutomationManagementStore((state) => state.initialize);
-  const createAutomation = useAutomationManagementStore(
-    (state) => state.createAutomation,
-  );
-  const updateAutomation = useAutomationManagementStore(
-    (state) => state.updateAutomation,
-  );
-  const deleteAutomation = useAutomationManagementStore(
-    (state) => state.deleteAutomation,
-  );
+  const createAutomation = useAutomationManagementStore((state) => state.createAutomation);
+  const updateAutomation = useAutomationManagementStore((state) => state.updateAutomation);
+  const deleteAutomation = useAutomationManagementStore((state) => state.deleteAutomation);
   const setEnabled = useAutomationManagementStore((state) => state.setEnabled);
-  const restartAutomation = useAutomationManagementStore(
-    (state) => state.restartAutomation,
-  );
-  const runAutomationNow = useAutomationManagementStore(
-    (state) => state.runAutomationNow,
-  );
+  const restartAutomation = useAutomationManagementStore((state) => state.restartAutomation);
+  const runAutomationNow = useAutomationManagementStore((state) => state.runAutomationNow);
   const loadRuns = useAutomationManagementStore((state) => state.loadRuns);
   const deleteRun = useAutomationManagementStore((state) => state.deleteRun);
   const refresh = useAutomationManagementStore((state) => state.refresh);
@@ -647,9 +580,7 @@ export function AutomationsSection({
   const offPeakTasks = useOffPeakTaskStore((state) => state.tasks);
   const offPeakStoreLoading = useOffPeakTaskStore((state) => state.loading);
   const offPeakGrayConfig = useOffPeakTaskStore((state) => state.grayConfig);
-  const offPeakCodingPlanSupport = useOffPeakTaskStore(
-    (state) => state.codingPlanSupport,
-  );
+  const offPeakCodingPlanSupport = useOffPeakTaskStore((state) => state.codingPlanSupport);
   const offPeakTakeNumberAvailability = useOffPeakTaskStore(
     (state) => state.takeNumberAvailability,
   );
@@ -670,12 +601,8 @@ export function AutomationsSection({
   const offPeakContinue = useOffPeakTaskStore((state) => state.continueTask);
   const offPeakCancel = useOffPeakTaskStore((state) => state.cancelTask);
   const offPeakDelete = useOffPeakTaskStore((state) => state.deleteTask);
-  const offPeakDeleteHistory = useOffPeakTaskStore(
-    (state) => state.deleteHistory,
-  );
-  const consumePendingCreateDraft = useOffPeakTaskStore(
-    (state) => state.consumePendingCreateDraft,
-  );
+  const offPeakDeleteHistory = useOffPeakTaskStore((state) => state.deleteHistory);
+  const consumePendingCreateDraft = useOffPeakTaskStore((state) => state.consumePendingCreateDraft);
 
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<AutomationsView>({ mode: "list" });
@@ -689,16 +616,12 @@ export function AutomationsSection({
   const setTab = useCallback(
     (next: AutomationsTab | ((current: AutomationsTab) => AutomationsTab)) =>
       setTabState((previous) =>
-        resolveAutomationTabState(
-          previous,
-          typeof next === "function" ? next(previous.tab) : next,
-        ),
+        resolveAutomationTabState(previous, typeof next === "function" ? next(previous.tab) : next),
       ),
     [],
   );
   const setStatusFilter = useCallback(
-    (filter: AutomationStatusFilter) =>
-      setTabState((previous) => ({ ...previous, filter })),
+    (filter: AutomationStatusFilter) => setTabState((previous) => ({ ...previous, filter })),
     [],
   );
   // 动态工作流灰度：未命中就没有「工作流」标签，
@@ -712,38 +635,28 @@ export function AutomationsSection({
   // 灰度关时忽略 sessionStorage 里记住的「工作流」：只收窄读出来的值，记忆本身不清，
   // 灰度再开时用户仍然回到上次那一页。中枢只在 `pageTab === "workflow"` 分支挂载，
   // 收窄 pageTab 等于 SavedWorkflowsSection 永不挂载，不会有一帧的误挂载去发查询。
-  const pageTab: AutomationsPageTab = dynamicWorkflowEnabled
-    ? storedPageTab
-    : "automation";
+  const pageTab: AutomationsPageTab = dynamicWorkflowEnabled ? storedPageTab : "automation";
   const setPageTab = useCallback((next: AutomationsPageTab) => {
     setPageTabState(next);
     writeAutomationsPageTab(next);
   }, []);
   const activeWorkspaceTab = useTabStore((state) => {
-    const activeTab = state.tabs.find(
-      (candidate) => candidate.id === state.activeTabId,
-    );
+    const activeTab = state.tabs.find((candidate) => candidate.id === state.activeTabId);
     return activeTab && isWorkspaceTab(activeTab) ? activeTab : undefined;
   });
-  const currentWorkspaceIsRemote =
-    isRemoteAutomationWorkspace(activeWorkspaceTab);
+  const currentWorkspaceIsRemote = isRemoteAutomationWorkspace(activeWorkspaceTab);
   // 灰度中途翻转：只藏创建入口；有非终态存量仍展示并跑到终态。
   const offPeakGrayEnabled = offPeakGrayConfig?.enabled === true;
-  const offPeakCreationEnabled =
-    offPeakGrayEnabled && !currentWorkspaceIsRemote;
+  const offPeakCreationEnabled = offPeakGrayEnabled && !currentWorkspaceIsRemote;
   // 扫描全部 provider 会把未选中的 Coding Plan 当成当前执行凭证。
   // mock 演示字段仍可覆盖；真实路径只接受与当前 family/selectedKey 一致的脱敏 resolver 快照。
   const offPeakNoPlan =
     offPeakGrayConfig?.codingPlanActive === false ||
     (offPeakGrayConfig?.codingPlanActive === undefined &&
       !offPeakStoreLoading &&
-      !isCurrentOffPeakCodingPlanSupported(
-        offPeakCodingPlanSupport,
-        sharedSettings,
-      ));
+      !isCurrentOffPeakCodingPlanSupported(offPeakCodingPlanSupport, sharedSettings));
   const offPeakVisible =
-    !currentWorkspaceIsRemote &&
-    (offPeakGrayEnabled || offPeakTasks.length > 0);
+    !currentWorkspaceIsRemote && (offPeakGrayEnabled || offPeakTasks.length > 0);
   const hasAnyTasks = automations.length > 0 || offPeakTasks.length > 0;
   const visibleTabs = resolveVisibleAutomationTabs({
     hasAnyTasks,
@@ -751,25 +664,16 @@ export function AutomationsSection({
   });
   const hasVisibleTaskCards =
     tab === "scheduled" ? automations.length > 0 : offPeakTasks.length > 0;
-  const visibleAutomations = filterAutomationsByStatus(
-    automations,
-    statusFilter,
-  );
-  const visibleOffPeakTasks = filterOffPeakTasksByStatus(
-    offPeakTasks,
-    statusFilter,
-  );
-  const { showOffPeakTemplates, showScheduledTemplates } =
-    resolveAutomationTemplateVisibility({
-      hasAnyTasks,
-      offPeakCreationEnabled,
-      tab,
-    });
+  const visibleAutomations = filterAutomationsByStatus(automations, statusFilter);
+  const visibleOffPeakTasks = filterOffPeakTasksByStatus(offPeakTasks, statusFilter);
+  const { showOffPeakTemplates, showScheduledTemplates } = resolveAutomationTemplateVisibility({
+    hasAnyTasks,
+    offPeakCreationEnabled,
+    tab,
+  });
   const hasVisibleTemplates = showOffPeakTemplates || showScheduledTemplates;
   const showTaskTemplateSeparator = hasVisibleTaskCards && hasVisibleTemplates;
-  const [loadedWorkspaceKey, setLoadedWorkspaceKey] = useState<string | null>(
-    null,
-  );
+  const [loadedWorkspaceKey, setLoadedWorkspaceKey] = useState<string | null>(null);
   // 相对时间基准;刷新列表时更新,避免频繁 setInterval。
   const [now, setNow] = useState(() => Date.now());
 
@@ -787,8 +691,7 @@ export function AutomationsSection({
         ? intl.formatMessage({ id: "offPeak.create.codingPlanOnly" })
         : reason === "unavailable"
           ? intl.formatMessage({ id: "offPeak.create.availabilityUnavailable" })
-          : reason === "quota" &&
-              offPeakTakeNumberAvailability?.nextTakeAt !== undefined
+          : reason === "quota" && offPeakTakeNumberAvailability?.nextTakeAt !== undefined
             ? intl.formatMessage(
                 { id: "offPeak.create.limitReachedAt" },
                 {
@@ -889,31 +792,19 @@ export function AutomationsSection({
   // 服务端给出准确恢复时间；到点后重查。刷新期间及失败后继续禁入，直到成功返回 true。
   useEffect(() => {
     const nextTakeAt = offPeakTakeNumberAvailability?.nextTakeAt;
-    if (
-      offPeakTakeNumberAvailability?.canTakeNumber !== false ||
-      nextTakeAt === undefined
-    )
-      return;
+    if (offPeakTakeNumberAvailability?.canTakeNumber !== false || nextTakeAt === undefined) return;
     const delay = Math.max(0, nextTakeAt - Date.now()) + 100;
     const timer = setTimeout(() => {
       setNow(Date.now());
       void offPeakRefreshTakeNumberAvailability(offPeakTaskService);
     }, delay);
     return () => clearTimeout(timer);
-  }, [
-    offPeakRefreshTakeNumberAvailability,
-    offPeakTaskService,
-    offPeakTakeNumberAvailability,
-  ]);
+  }, [offPeakRefreshTakeNumberAvailability, offPeakTaskService, offPeakTakeNumberAvailability]);
 
   // 额度 Tooltip 曾改成不会递减的绝对日期；按远端实现推进分钟边界，保持剩余时长准确。
   useEffect(() => {
     const nextTakeAt = offPeakTakeNumberAvailability?.nextTakeAt;
-    if (
-      offPeakTakeNumberAvailability?.canTakeNumber !== false ||
-      nextTakeAt === undefined
-    )
-      return;
+    if (offPeakTakeNumberAvailability?.canTakeNumber !== false || nextTakeAt === undefined) return;
     const remainingMs = nextTakeAt - Date.now();
     if (remainingMs <= 0) return;
     const minuteMs = 60_000;
@@ -938,9 +829,7 @@ export function AutomationsSection({
       await Promise.all([
         refresh(zcodeAgentService),
         offPeakRefresh(offPeakTaskService),
-        ...(offPeakGrayEnabled
-          ? [offPeakRefreshCodingPlanSupport(offPeakTaskService)]
-          : []),
+        ...(offPeakGrayEnabled ? [offPeakRefreshCodingPlanSupport(offPeakTaskService)] : []),
       ]);
       setNow(Date.now());
     } finally {
@@ -990,40 +879,27 @@ export function AutomationsSection({
       funnelContext: createIdleTimeCodingPlanFunnelContext({
         providerId,
         eventText,
-        entryPlanState:
-          resolveCodingPlanEntryPlanStateFromProviderSettings(
-            providerSettingsView,
-          ),
+        entryPlanState: resolveCodingPlanEntryPlanStateFromProviderSettings(providerSettingsView),
       }),
     });
-  }, [
-    intl,
-    openCodingPlanUpgrade,
-    providerSettingsView,
-    sharedSettings?.providerFamilyDomain,
-  ]);
+  }, [intl, openCodingPlanUpgrade, providerSettingsView, sharedSettings?.providerFamilyDomain]);
 
   const showCodingPlanRequiredToast = useCallback(() => {
-    toast(
-      entryLabel ??
-        intl.formatMessage({ id: "offPeak.create.codingPlanToast" }),
-      {
-        durationMs: 8000,
-        position: "top-center",
-        variant: "info",
-        actionLabel:
-          entryStatus === "loading"
-            ? undefined
-            : (entryLabel ??
-              intl.formatMessage({
-                id: "settings.modelProvider.codingPlan.upgrade",
-              })),
-        onAction:
-          entryStatus === "error" ? retryEntry : handleOpenCodingPlanUpgrade,
-        dismissible: true,
-        dismissLabel: intl.formatMessage({ id: "common.close" }),
-      },
-    );
+    toast(entryLabel ?? intl.formatMessage({ id: "offPeak.create.codingPlanToast" }), {
+      durationMs: 8000,
+      position: "top-center",
+      variant: "info",
+      actionLabel:
+        entryStatus === "loading"
+          ? undefined
+          : (entryLabel ??
+            intl.formatMessage({
+              id: "settings.modelProvider.codingPlan.upgrade",
+            })),
+      onAction: entryStatus === "error" ? retryEntry : handleOpenCodingPlanUpgrade,
+      dismissible: true,
+      dismissLabel: intl.formatMessage({ id: "common.close" }),
+    });
   }, [handleOpenCodingPlanUpgrade, intl, entryStatus, entryLabel, retryEntry]);
 
   const showAutomationCreateLimitToast = useCallback(() => {
@@ -1088,8 +964,7 @@ export function AutomationsSection({
     const result = resolveAutomationDetailNavigation(
       automations,
       openAutomationId,
-      currentWorkspaceKey !== null &&
-        loadedWorkspaceKey === currentWorkspaceKey,
+      currentWorkspaceKey !== null && loadedWorkspaceKey === currentWorkspaceKey,
     );
     if (result.status === "pending") return;
     if (result.status === "found") {
@@ -1132,9 +1007,7 @@ export function AutomationsSection({
       return;
     }
     if (onCreateViaChat) {
-      onCreateViaChat(
-        intl.formatMessage({ id: "automations.createViaChat.prompt" }),
-      );
+      onCreateViaChat(intl.formatMessage({ id: "automations.createViaChat.prompt" }));
     } else setView({ mode: "create", draft: null });
   }, [
     automationCreateLimitReached,
@@ -1167,11 +1040,7 @@ export function AutomationsSection({
       workspaceIdentity: targetIdentity,
     }: AutomationEditSubmit) => {
       if (view.mode === "edit") {
-        const ok = await updateAutomation(
-          view.automation.automationId,
-          input,
-          zcodeAgentService,
-        );
+        const ok = await updateAutomation(view.automation.automationId, input, zcodeAgentService);
         if (!ok) {
           toast(
             intl.formatMessage({
@@ -1239,16 +1108,12 @@ export function AutomationsSection({
     async (automation: ZCodeAutomation, enabled: boolean) => {
       await setEnabled(automation.automationId, enabled, zcodeAgentService);
       const message = useAutomationManagementStore.getState().error;
-      if (message)
-        toast(
-          intl.formatMessage({ id: getAutomationActionErrorToastId("toggle") }),
-        );
+      if (message) toast(intl.formatMessage({ id: getAutomationActionErrorToastId("toggle") }));
       else {
         // 编辑页 view 持有进入页面时的 automation 对象；列表刷新不会自动替换
         // 这个局部对象，导致菜单点击 Pause/Resume 后文案仍停在旧状态。
         setView((prev) =>
-          prev.mode === "edit" &&
-          prev.automation.automationId === automation.automationId
+          prev.mode === "edit" && prev.automation.automationId === automation.automationId
             ? {
                 mode: "edit",
                 automation: {
@@ -1292,10 +1157,7 @@ export function AutomationsSection({
         automation,
         providerSettingsView,
       });
-      const result = await runAutomationNow(
-        automation.automationId,
-        zcodeAgentService,
-      );
+      const result = await runAutomationNow(automation.automationId, zcodeAgentService);
       logger.debug("[automations] 立即运行交互结束", {
         automationId: automation.automationId,
         source,
@@ -1305,14 +1167,11 @@ export function AutomationsSection({
         await loadRuns(automation.automationId, zcodeAgentService, true);
         const latestSessionId = useAutomationManagementStore
           .getState()
-          .runsCache[
-            automation.automationId
-          ]?.runs?.find((run) => run.trigger === "manual" && Boolean(run.sessionId))?.sessionId;
+          .runsCache[automation.automationId]?.runs?.find(
+            (run) => run.trigger === "manual" && Boolean(run.sessionId),
+          )?.sessionId;
         toast(
-          intl.formatMessage(
-            { id: "scheduledPreview.toast.running" },
-            { title: automation.title },
-          ),
+          intl.formatMessage({ id: "scheduledPreview.toast.running" }, { title: automation.title }),
           {
             durationMs: 4000,
             position: "top-center",
@@ -1378,26 +1237,15 @@ export function AutomationsSection({
       });
       await deleteAutomation(automation.automationId, zcodeAgentService);
       const message = useAutomationManagementStore.getState().error;
-      if (message)
-        toast(
-          intl.formatMessage({ id: getAutomationActionErrorToastId("delete") }),
-        );
+      if (message) toast(intl.formatMessage({ id: getAutomationActionErrorToastId("delete") }));
       // 若在编辑该任务的整页,删除后回列表。
       setView((prev) =>
-        prev.mode === "edit" &&
-        prev.automation.automationId === automation.automationId
+        prev.mode === "edit" && prev.automation.automationId === automation.automationId
           ? { mode: "list" }
           : prev,
       );
     },
-    [
-      confirmDialog,
-      deleteAutomation,
-      intl,
-      platform,
-      providerSettingsView,
-      zcodeAgentService,
-    ],
+    [confirmDialog, deleteAutomation, intl, platform, providerSettingsView, zcodeAgentService],
   );
 
   const handleOffPeakOpenSession = useCallback(
@@ -1406,9 +1254,7 @@ export function AutomationsSection({
       onOpenSession({
         sessionId: task.sessionId,
         workspacePath: task.workspacePath,
-        ...(task.workspaceIdentity
-          ? { workspaceIdentity: task.workspaceIdentity }
-          : {}),
+        ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
       });
     },
     [onOpenSession],
@@ -1451,8 +1297,7 @@ export function AutomationsSection({
       const message = useOffPeakTaskStore.getState().error;
       if (message) toast(message);
       setView((prev) =>
-        prev.mode === "offpeak-edit" &&
-        prev.task.offPeakTaskId === task.offPeakTaskId
+        prev.mode === "offpeak-edit" && prev.task.offPeakTaskId === task.offPeakTaskId
           ? { mode: "list" }
           : prev,
       );
@@ -1480,19 +1325,13 @@ export function AutomationsSection({
               providerId: input.modelSelection.providerId,
             })
           : null;
-      if (
-        current.mode !== "offpeak-edit" &&
-        offPeakCreateGrey.reason !== null
-      ) {
+      if (current.mode !== "offpeak-edit" && offPeakCreateGrey.reason !== null) {
         if (offPeakCreateGrey.reason === "plan") {
           showCodingPlanRequiredToast();
         } else if (offPeakCreateGrey.reason === "unavailable") {
           toast(intl.formatMessage({ id: "offPeak.error.unavailable" }));
         } else {
-          toast(
-            offPeakCreateGrey.tooltip ??
-              intl.formatMessage({ id: "offPeak.error.quota" }),
-          );
+          toast(offPeakCreateGrey.tooltip ?? intl.formatMessage({ id: "offPeak.error.quota" }));
         }
         if (telemetrySnapshot) {
           void reportOffPeakCreateResult(platform, telemetrySnapshot, {
@@ -1561,17 +1400,13 @@ export function AutomationsSection({
   if (view.mode === "offpeak-create" || view.mode === "offpeak-edit") {
     const editingTask =
       view.mode === "offpeak-edit"
-        ? (offPeakTasks.find(
-            (task) => task.offPeakTaskId === view.task.offPeakTaskId,
-          ) ?? view.task)
+        ? (offPeakTasks.find((task) => task.offPeakTaskId === view.task.offPeakTaskId) ?? view.task)
         : null;
     return (
       <>
         <OffPeakEditView
           editing={editingTask}
-          initialDraft={
-            view.mode === "offpeak-create" ? (view.draft ?? null) : null
-          }
+          initialDraft={view.mode === "offpeak-create" ? (view.draft ?? null) : null}
           modelSelectionView={
             offPeakGrayConfig?.modelSelectionView ?? {
               revision: 0,
@@ -1585,21 +1420,15 @@ export function AutomationsSection({
             offPeakOperationId?.startsWith("offpeak:update") ||
             false
           }
-          createBlocked={
-            view.mode === "offpeak-create" && offPeakCreateGrey.reason !== null
-          }
+          createBlocked={view.mode === "offpeak-create" && offPeakCreateGrey.reason !== null}
           createBlockedTooltip={offPeakCreateGrey.tooltip}
           onBack={() => setView({ mode: "list" })}
           onSubmit={handleOffPeakSubmit}
           onOpenSession={onOpenSession}
           onDelete={(task) => void handleOffPeakDelete(task)}
           onDeleteHistory={(task) => void handleOffPeakDeleteHistory(task)}
-          onPause={(task) =>
-            void offPeakPause(task.offPeakTaskId, offPeakTaskService)
-          }
-          onContinue={(task) =>
-            void offPeakContinue(task.offPeakTaskId, offPeakTaskService)
-          }
+          onPause={(task) => void offPeakPause(task.offPeakTaskId, offPeakTaskService)}
+          onContinue={(task) => void offPeakContinue(task.offPeakTaskId, offPeakTaskService)}
           showToast={toast}
         />
       </>
@@ -1625,26 +1454,14 @@ export function AutomationsSection({
           onRunNow={(automation) => handleRunNow(automation, "editor")}
           onToggle={handleToggle}
           onDelete={(automation) => handleDelete(automation, "editor")}
-          runsEntry={
-            view.mode === "edit"
-              ? runsCache[view.automation.automationId]
-              : undefined
-          }
+          runsEntry={view.mode === "edit" ? runsCache[view.automation.automationId] : undefined}
           onLoadRuns={() => {
             if (view.mode === "edit")
-              void loadRuns(
-                view.automation.automationId,
-                zcodeAgentService,
-                true,
-              );
+              void loadRuns(view.automation.automationId, zcodeAgentService, true);
           }}
           onDeleteRun={(runId) => {
             if (view.mode === "edit") {
-              void deleteRun(
-                view.automation.automationId,
-                runId,
-                zcodeAgentService,
-              );
+              void deleteRun(view.automation.automationId, runId, zcodeAgentService);
             }
           }}
           onOpenSession={
@@ -1704,10 +1521,7 @@ export function AutomationsSection({
   }
 
   return (
-    <div
-      data-automations-content
-      className={cn(SETTINGS_FRAME_CONTENT_CLASSNAME, "flex flex-col")}
-    >
+    <div data-automations-content className={cn(SETTINGS_FRAME_CONTENT_CLASSNAME, "flex flex-col")}>
       {pageHeader}
       {application?.renderAutomationSupplement?.()}
 
@@ -1716,10 +1530,7 @@ export function AutomationsSection({
       {visibleTabs.length > 0 ? (
         <div className="mt-8 flex items-center justify-between">
           {/* 修复原因：tab 曾与右侧操作组共用 12px 间距，未体现最新设计要求的 8px 紧凑节奏。 */}
-          <div
-            className="flex items-center gap-2"
-            data-testid={TID_OFFPEAK_TAB}
-          >
+          <div className="flex items-center gap-2" data-testid={TID_OFFPEAK_TAB}>
             {/* 修复原因：未选中态旧实现强制显示 surface 背景，无法与 hover、选中态形成层级。 */}
             {visibleTabs.map((key) => (
               <button
@@ -1740,9 +1551,7 @@ export function AutomationsSection({
           <div className="flex items-center gap-3">
             <ControlHintTooltip
               title={intl.formatMessage({
-                id: refreshing
-                  ? "automations.refreshing"
-                  : "automations.refresh",
+                id: refreshing ? "automations.refreshing" : "automations.refresh",
               })}
             >
               <Button
@@ -1830,9 +1639,7 @@ export function AutomationsSection({
 
             {/* 去掉 All 混排视图后两类任务不再共用统一 grid；保留该锚点标记任务区起点。 */}
             <div data-automations-task-grid className="contents">
-              {offPeakVisible &&
-              tab !== "scheduled" &&
-              offPeakTasks.length > 0 ? (
+              {offPeakVisible && tab !== "scheduled" && offPeakTasks.length > 0 ? (
                 <section className="flex w-full flex-col gap-4">
                   {visibleOffPeakTasks.length === 0 ? (
                     <AutomationStatusFilterEmpty />
@@ -1841,17 +1648,9 @@ export function AutomationsSection({
                       tasks={visibleOffPeakTasks}
                       busyOperationId={offPeakOperationId}
                       onOpen={handleOffPeakOpen}
-                      onPause={(task) =>
-                        void offPeakPause(
-                          task.offPeakTaskId,
-                          offPeakTaskService,
-                        )
-                      }
+                      onPause={(task) => void offPeakPause(task.offPeakTaskId, offPeakTaskService)}
                       onContinue={(task) =>
-                        void offPeakContinue(
-                          task.offPeakTaskId,
-                          offPeakTaskService,
-                        )
+                        void offPeakContinue(task.offPeakTaskId, offPeakTaskService)
                       }
                       onCancel={(task) => void handleOffPeakCancel(task)}
                       onDelete={(task) => void handleOffPeakDelete(task)}
@@ -1892,24 +1691,19 @@ export function AutomationsSection({
                     >
                       {visibleAutomations.map((automation) => {
                         const status = resolveAutomationStatusKind(automation);
-                        const hasFailure =
-                          hasAutomationFailureState(automation);
+                        const hasFailure = hasAutomationFailureState(automation);
                         const statusMeta = STATUS_META[status];
                         const StatusIcon = statusMeta.icon;
-                        const scheduleText = describeAutomationCardSchedule(
-                          automation,
-                          intl,
-                        );
+                        const scheduleText = describeAutomationCardSchedule(automation, intl);
                         const formattedNextRun = formatAutomationCardNextRun(
                           automation.nextRunAt,
                           now,
                           intl,
                         );
-                        // completed/paused/失败态的调度不再推进，但有限次任务跑完后
-                        // nextRunAt 仍可能指向未来时刻，曾被拼进卡片误显“下次运行”。只有活跃
-                        // 且未失败的卡片才追加下次运行时间，其余一律只展示频率摘要。
+                        // 最近一次失败不等于规则停用。恢复后的 active 规则仍展示未来调度，
+                        // 历史失败单独提示；终态和暂停仍只展示频率，避免误报下次运行。
                         const scheduleCardText =
-                          status === "active" && !hasFailure && formattedNextRun
+                          status === "active" && formattedNextRun
                             ? `${scheduleText} · ${intl.formatMessage(
                                 { id: "automations.nextRun" },
                                 { when: formattedNextRun },
@@ -1921,10 +1715,7 @@ export function AutomationsSection({
                           { id: "automations.runCount" },
                           { count: String(automation.runCount) },
                         );
-                        const busy =
-                          operationId?.endsWith(
-                            `:${automation.automationId}`,
-                          ) ?? false;
+                        const busy = operationId?.endsWith(`:${automation.automationId}`) ?? false;
                         // completed 表示有限次任务已经自然结束，不能再通过 Restart 复活；
                         // failed 才是可恢复终态，允许用户手动重排下一次运行。
                         const canRestart = canRestartAutomation(automation);
@@ -1935,9 +1726,7 @@ export function AutomationsSection({
                             data-testid={TID_AUTOMATION_CARD}
                             role="button"
                             tabIndex={0}
-                            onClick={() =>
-                              setView({ mode: "edit", automation })
-                            }
+                            onClick={() => setView({ mode: "edit", automation })}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
@@ -1948,21 +1737,26 @@ export function AutomationsSection({
                               // 任务卡与模板卡曾分别使用 surface/border，跨主题下描边深浅不一致。
                               "group relative flex h-full min-h-0 cursor-pointer gap-3 overflow-hidden rounded-xl border border-card-border bg-background p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused",
                               // 已完成任务保持静态弱化，不在 hover 时恢复透明度或改变背景。
-                              status === "completed"
-                                ? "opacity-60"
-                                : "hover:bg-hover",
+                              status === "completed" ? "opacity-60" : "hover:bg-hover",
                             )}
                           >
                             <div className="flex h-full min-w-0 flex-1 flex-col gap-3">
-                              <span className="block truncate pr-12 text-ui-base font-medium leading-5 text-foreground">
-                                {automation.title}
-                              </span>
+                              <div className="flex min-w-0 items-center gap-2 pr-12">
+                                <span className="truncate text-ui-base font-medium leading-5 text-foreground">
+                                  {automation.title}
+                                </span>
+                                {hasFailure && status !== "failed" ? (
+                                  <span className="shrink-0 text-ui-caption text-destructive">
+                                    {intl.formatMessage({ id: "automations.lastRunFailed" })}
+                                  </span>
+                                ) : null}
+                              </div>
                               <p className="text-wrap-phrase line-clamp-2 h-10 text-ui-base font-normal leading-5 text-foreground-subtle">
                                 {automationPromptSummary(automation.prompt)}
                               </p>
                               <div className="mt-auto flex h-6 min-w-0 items-center gap-2 text-ui-base leading-5">
                                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                                  {hasFailure ? (
+                                  {status === "failed" ? (
                                     <>
                                       <span className="inline-flex shrink-0 items-center py-0.5 pl-1 pr-2 font-normal text-destructive">
                                         <span className="flex size-5 shrink-0 items-center justify-center">
@@ -1986,9 +1780,7 @@ export function AutomationsSection({
                                             aria-hidden="true"
                                           />
                                         </span>
-                                        <span className="truncate pl-1">
-                                          {scheduleCardText}
-                                        </span>
+                                        <span className="truncate pl-1">{scheduleCardText}</span>
                                       </span>
                                     </>
                                   ) : status === "active" ? (
@@ -2021,8 +1813,7 @@ export function AutomationsSection({
                                           id: `automations.lifecycle.${status}`,
                                         })}
                                       </span>
-                                      {status === "paused" ||
-                                      status === "completed" ? (
+                                      {status === "paused" || status === "completed" ? (
                                         /* 暂停/完成后调度不再推进，只展示 cron 摘要，不展示 nextRunAt。 */
                                         <AutomationScheduleBadge
                                           dimmed
@@ -2041,8 +1832,7 @@ export function AutomationsSection({
                                 <span
                                   className={cn(
                                     "inline-flex shrink-0 items-center whitespace-nowrap rounded-md bg-surface px-1.5 py-0.5 text-ui-base font-normal text-foreground-subtle",
-                                    (hasFailure || status === "paused") &&
-                                      "opacity-40",
+                                    (status === "failed" || status === "paused") && "opacity-40",
                                   )}
                                 >
                                   {runCountText}
@@ -2058,9 +1848,7 @@ export function AutomationsSection({
                                 canRestart={canRestart}
                                 canToggle={canToggle}
                                 onRunNow={handleRunNow}
-                                onEdit={(target) =>
-                                  setView({ mode: "edit", automation: target })
-                                }
+                                onEdit={(target) => setView({ mode: "edit", automation: target })}
                                 onToggle={handleToggle}
                                 onRestart={handleRestart}
                                 onDelete={handleDelete}
@@ -2162,8 +1950,10 @@ export function AutomationsSection({
                             showCodingPlanRequiredToast();
                             return;
                           }
-                          const materializedDraft =
-                            materializeOffPeakTemplateDraft(template, locale);
+                          const materializedDraft = materializeOffPeakTemplateDraft(
+                            template,
+                            locale,
+                          );
                           setView({
                             mode: "offpeak-create",
                             draft: template.customize
@@ -2268,24 +2058,15 @@ export function AutomationsSection({
                             />
                           </span>
                           <span className="truncate text-ui-base font-medium leading-5 text-foreground">
-                            {resolveAutomationTemplateText(
-                              template.title,
-                              locale,
-                            )}
+                            {resolveAutomationTemplateText(template.title, locale)}
                           </span>
                         </div>
                         {/* Bug 原因：定时模板首次实现时把周期时间拼进标题行，和闲时模板的底部时间层级不一致。 */}
                         <p className="line-clamp-2 flex-1 text-ui-base font-normal leading-5 text-foreground-subtle">
-                          {resolveAutomationTemplateText(
-                            template.description,
-                            locale,
-                          )}
+                          {resolveAutomationTemplateText(template.description, locale)}
                         </p>
                         <div className="text-ui-base font-normal leading-5 text-foreground-subtle">
-                          {describeAutomationCardSchedule(
-                            { cronExpr: template.cronExpr },
-                            intl,
-                          )}
+                          {describeAutomationCardSchedule({ cronExpr: template.cronExpr }, intl)}
                         </div>
                       </button>
                     );

@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import {
   AUTOMATION_CREATE_LIMIT,
+  AUTOMATION_DISPATCH_UNAVAILABLE,
   AUTOMATION_CREATE_LIMIT_ERROR_CODE,
   isAutomationCreateLimitError,
   type ZCodeAutomation,
@@ -22,7 +23,12 @@ export interface AutomationRunsEntry {
   error?: string;
 }
 
-export type AutomationRunNowResult = "queued" | "duplicate" | "failed";
+export type AutomationRunNowResult =
+  | "queued"
+  | "duplicate"
+  | "failed"
+  | "unavailable"
+  | "authorization-required";
 
 export interface CreateAutomationInput {
   projectId?: string | null;
@@ -448,7 +454,9 @@ export const useAutomationManagementStore = create<AutomationManagementState>((s
         error: toMessage(error),
       });
       set({ error: toMessage(error) });
-      return "failed";
+      if (toMessage(error).includes("application_authorization_required"))
+        return "authorization-required";
+      return toMessage(error).includes(AUTOMATION_DISPATCH_UNAVAILABLE) ? "unavailable" : "failed";
     } finally {
       inFlightRunNowAutomationIds.delete(automationId);
       set({ operationId: null });

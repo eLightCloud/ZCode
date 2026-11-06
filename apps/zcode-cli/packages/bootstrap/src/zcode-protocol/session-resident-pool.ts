@@ -245,6 +245,31 @@ export class SessionResidentPool {
     return result;
   }
 
+  /** Explicit automation resume owns one lease; refresh only quiescent runtime configuration. */
+  async refreshForResume(sessionId: string): Promise<void> {
+    const facts = this.host.readResidencyFacts(sessionId);
+    if (
+      this.maintenanceOperation ||
+      this.checkpointInProgress ||
+      this.rebalancing ||
+      this.inFlightDeactivations.has(sessionId) ||
+      this.operationLeaseCounts.get(sessionId) !== 1 ||
+      !facts?.persisted ||
+      facts.hasResidencyBlockingWork ||
+      facts.hasPendingInteractions ||
+      facts.hasQueuedCommands
+    )
+      throw new Error("Session configuration refresh busy");
+    // 每轮 MCP 在派发前更新；热恢复不能复用旧凭据。检查与摘除在同一同步片，
+    // 并发 subscribe/resume 必须等旧 App 关闭，失败则保留拒绝屏障，不误用半关闭资源。
+    const closing = this.host.deactivate(sessionId);
+    this.inFlightDeactivations.set(sessionId, closing);
+    await closing;
+    if (this.inFlightDeactivations.get(sessionId) === closing)
+      this.inFlightDeactivations.delete(sessionId);
+    this.eligibleSinceAt.delete(sessionId);
+  }
+
   /** Short read barrier; unlike retirement it preserves read-only subscriptions. */
   async withCheckpoint<T>(sessionId: string, read: () => Promise<T>): Promise<T> {
     const resident = this.host.listSessionIds().includes(sessionId);

@@ -15,6 +15,8 @@ import {
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import { logger } from "@/logger.js";
 
+import type { ZCodeAutomation } from "@zcode/shared";
+
 type SettingsIcon = ComponentType<{
   className?: string;
   "aria-hidden"?: boolean;
@@ -40,10 +42,19 @@ export interface ApplicationModelEntry {
   }) => ReactNode;
 }
 export interface ApplicationSettings {
+  automation?: {
+    review: (input: {
+      readCurrent: () => Promise<{ automation: ZCodeAutomation; timezone: string }>;
+      confirm: (description: string) => Promise<boolean>;
+      signal: AbortSignal;
+    }) => Promise<boolean>;
+    renderStatus: (automation: ZCodeAutomation, timezone: string) => ReactNode;
+  };
   sections?: readonly ApplicationSettingsSection[];
   modelEntries?: readonly ApplicationModelEntry[];
 }
 interface SettingsContext extends ApplicationSettingsNavigation {
+  automation?: ApplicationSettings["automation"];
   sections: readonly ApplicationSettingsSection[];
   modelEntries: readonly ApplicationModelEntry[];
   section?: ApplicationSettingsSection;
@@ -63,6 +74,7 @@ export function ApplicationSettingsProvider({
   settings?: ApplicationSettings;
   children: ReactNode;
 }) {
+  const automation = settings?.automation;
   const sections = settings?.sections ?? EMPTY_SECTIONS;
   const modelEntries = settings?.modelEntries ?? EMPTY_ENTRIES;
   const [sectionId, setSectionId] = useState<string | null>(null);
@@ -102,6 +114,7 @@ export function ApplicationSettingsProvider({
   );
   const value = useMemo(
     () => ({
+      automation,
       sections,
       modelEntries,
       section: sections.find((section) => section.id === sectionId),
@@ -114,6 +127,7 @@ export function ApplicationSettingsProvider({
       openSection,
     }),
     [
+      automation,
       sections,
       modelEntries,
       sectionId,

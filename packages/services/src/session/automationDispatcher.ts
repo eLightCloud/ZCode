@@ -1,3 +1,4 @@
+import { describeAutomationDispatchFailure } from "./automationDispatchFailure.js";
 import type { IDisposable } from "@zcode/rpc";
 import {
   formatModelPickerValue,
@@ -388,7 +389,7 @@ export function createAutomationDispatcher(options: {
         trigger,
         outcome: "failed",
         // 回执与 outcome 写入可能交错；两条写路径必须使用相同的低敏原因。
-        error: "native_dispatch_failed",
+        error: describeAutomationDispatchFailure(error).reason,
       });
       throw error;
     }

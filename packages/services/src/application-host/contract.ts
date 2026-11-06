@@ -2,10 +2,13 @@ import { createServiceDescriptor } from "../descriptors.js";
 import type { AutomationInputAdmission } from "@zcode/shared";
 
 /** Launcher-only capability. Do not register this port on browser RPC. */
+// Trusted extensions receive the existing MCP configuration writer for resource connections.
+// Resource credentials stay in connection configuration, never in admission attachments.
 export type ApplicationAutomationAdmission =
   | "admitted"
   | "blocked"
   | "unavailable"
+  | { state: "blocked"; reason: "authorization_required" }
   | {
       state: "admitted";
       context: { filename: string; text: string };

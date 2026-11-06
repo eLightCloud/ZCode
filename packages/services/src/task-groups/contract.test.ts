@@ -183,6 +183,31 @@ it("rejects a mismatched authority result even when the task count matches", asy
   ).rejects.toThrow("unavailable");
   expect(repo.read().members).toEqual([]);
 });
+it("uses the trusted Server owner for path-only tasks without accepting a foreign host", async () => {
+  const { db, repo } = await fixture();
+  const ref = { taskId: "server-task", workspacePath: "/repo", hostId: "remote:server:owner" };
+  const service = createTaskGroupService({
+    ownerHostId: ref.hostId,
+    database: async () => db,
+    resolveTasks: async (refs) => refs.filter((t) => t.taskId === ref.taskId),
+    afterChange: async () => {},
+  });
+  await service.admit({ tasks: [ref] });
+  const group = await service.save({ title: "Reports" });
+  await service.move({ node: taskNode(ref), sourceGroupId: null, groupId: group.id });
+  expect(repo.read().members).toMatchObject([{ workspaceKey: "/repo", taskId: ref.taskId }]);
+  for (const invalid of [
+    { ...ref, hostId: "local" },
+    { ...ref, hostId: "remote:server:foreign" },
+    { ...ref, workspaceIdentity: "remote:server:foreign:/repo" },
+  ]) {
+    await expect(service.admit({ tasks: [invalid] })).rejects.toThrow("host-identity-mismatch");
+    await expect(
+      service.move({ node: taskNode(invalid), sourceGroupId: group.id, groupId: null }),
+    ).rejects.toThrow("host-identity-mismatch");
+  }
+  expect(repo.read().members).toHaveLength(1);
+});
 it("initial discovery keeps newest-created tasks first without reordering known tasks", async () => {
   const { repo, task } = await fixture();
   repo.admit([

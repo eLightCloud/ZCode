@@ -1950,6 +1950,8 @@ export type ZCodeSessionCreateParams = z.infer<typeof zcodeSessionCreateParamsSc
 
 export const zcodeSessionResumeParamsSchema = z
   .object({
+    // 显式重新装载运行时配置：只允许无已接受工作，不能静默降级为热恢复。
+    refreshConfiguration: z.boolean().optional(),
     additionalDirectories: z.array(nonEmptyString).max(256).optional(),
     sessionId: nonEmptyString,
     workspace: zcodeWorkspaceRefSchema.optional(),

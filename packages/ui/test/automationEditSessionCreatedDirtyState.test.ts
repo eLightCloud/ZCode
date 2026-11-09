@@ -31,7 +31,15 @@ const stableHookValues = vi.hoisted(() => ({
   effectiveSelection: undefined as ModelSelection | null | undefined,
   selectionInputs: [] as Array<{ selection: ModelSelection | null } | undefined>,
   locale: "zh-CN" as "zh-CN" | "en-US",
-  services: { zcodeAgentService: {} },
+  // 编辑页从选中 Host 读取执行能力；替身也遵守新增接口，避免旧空对象中断原有表单回归。
+  services: {
+    zcodeAgentService: {
+      getAutomationCapabilities: async () => ({
+        manualDispatchAvailable: true,
+        timezone: "UTC",
+      }),
+    },
+  },
 }));
 
 vi.mock("@/components/ui/select.js", async () => {
@@ -190,7 +198,7 @@ vi.mock("@/hooks/useWorkspaceServices.js", () => ({
       workspaceIdentity,
       remoteTarget,
     });
-    return { connectionKind: "local", services: stableHookValues.services };
+    return { connectionKind: "local", rpcReady: true, services: stableHookValues.services };
   },
 }));
 vi.mock("@/hooks/useModelSelectionView.js", () => ({

@@ -1,5 +1,6 @@
 import { getDesktopApplicationBrand } from "./desktopElectronApp.js";
 import { initializeApplicationPluginHttp } from "./applicationHttp/index.js";
+import { initializeApplicationModelBroker } from "./applicationModelBroker.js";
 import { installRequestSecurityDiagnostics } from "./request-security-edition/index.js";
 import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
@@ -2295,6 +2296,7 @@ app.whenReady().then(async () => {
     });
   }
 
+  await initializeApplicationModelBroker(logger);
   await initializeApplicationPluginHttp({ logger });
   registerPlatformIpcHandlers({
     fetchHelpConfig: readHelpConfig,

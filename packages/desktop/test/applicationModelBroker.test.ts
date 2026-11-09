@@ -1,10 +1,12 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
+import { fileURLToPath } from "node:url";
 const state = vi.hoisted(() => ({
   directory: "",
+  bundledPath: "",
   cookies: [] as { name: string; value: string }[],
   close: () => {},
 }));
@@ -17,13 +19,22 @@ vi.mock("electron", () => ({
   },
   session: { defaultSession: { cookies: { get: async () => state.cookies } } },
 }));
+vi.mock("../src/main/desktopProviderConfig.js", () => ({
+  resolveZCodeBuiltinProviderConfigFilePath: () => state.bundledPath,
+}));
 afterEach(async () => {
   state.close();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   await rm(state.directory, { force: true, recursive: true });
 });
-it("binds each native call to the current Electron app cookie and rejects logout or an untrusted caller", async () => {
+beforeEach(async () => {
+  vi.resetModules();
+  state.close = () => {};
+  state.cookies = [];
+  state.bundledPath = fileURLToPath(
+    new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
+  );
   state.directory = await mkdtemp(join(tmpdir(), "application-model-broker-"));
   const probe = createServer();
   await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
@@ -41,6 +52,8 @@ it("binds each native call to the current Electron app cookie and rejects logout
     ZCODE_APPLICATION_MODEL_BROKER_PORT: String(port),
   }))
     vi.stubEnv(key, value);
+});
+it("retains bundled templates while binding calls to the current cookie and rejecting unauthorized callers", async () => {
   const originalFetch = globalThis.fetch;
   const upstream = vi.fn(
     async (_url: unknown, init?: RequestInit) =>
@@ -55,9 +68,21 @@ it("binds each native call to the current Electron app cookie and rejects logout
       ),
   );
   vi.stubGlobal("fetch", upstream);
-  const { applicationModelBrokerEnvironment } =
+  const { applicationModelBrokerEnvironment, initializeApplicationModelBroker } =
     await import("../src/main/applicationModelBroker.js");
+  await initializeApplicationModelBroker();
   const env = applicationModelBrokerEnvironment();
+  const baseline = JSON.parse(await readFile(env.ZCODE_APPLICATION_PROVIDER_CONFIG_FILE, "utf8"));
+  const bundled = JSON.parse(
+    await readFile(new URL("../../../config/provider/zcode-builtin.json", import.meta.url), "utf8"),
+  );
+  // 启动期阻断未授权企业模型，不应同时抹掉自定义供应商模板及模型能力。
+  expect(baseline.config.providerConfigRules.templateRules).toEqual(
+    bundled.config.providerConfigRules.templateRules,
+  );
+  expect(baseline.config.modelConfigRules).toEqual(bundled.config.modelConfigRules);
+  expect(baseline.config.providerConfigRules.providerRules).toEqual([]);
+  expect(baseline.applicationDefault.providerId).toBe("application:unavailable");
   await new Promise((resolve) => setImmediate(resolve));
   const call = () =>
     originalFetch(env.ZCODE_APPLICATION_MODEL_BASE_URL + "/chat/completions", {
@@ -108,4 +133,34 @@ it("binds each native call to the current Electron app cookie and rejects logout
   });
   expect(missing.status).toBe(403);
   expect(upstream).toHaveBeenCalledTimes(2);
+  upstream.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+  const refresh = () =>
+    originalFetch(env.ZCODE_APPLICATION_MODEL_CONFIG_URL, {
+      headers: { Authorization: "Bearer " + env.ZCODE_APPLICATION_MODEL_TOKEN },
+    });
+  expect((await refresh()).status).toBe(503);
+  expect(JSON.parse(await readFile(env.ZCODE_APPLICATION_PROVIDER_CONFIG_FILE, "utf8"))).toEqual(
+    baseline,
+  );
+  upstream.mockResolvedValueOnce(new Response(JSON.stringify(baseline)));
+  const refreshed = await (await refresh()).json();
+  expect(refreshed.config.providerConfigRules.templateRules).toEqual(
+    baseline.config.providerConfigRules.templateRules,
+  );
+  expect(refreshed.config.modelConfigRules).toEqual(baseline.config.modelConfigRules);
+});
+it("rejects malformed bundled config and reports a low-sensitivity reason before starting any Host", async () => {
+  state.bundledPath = join(state.directory, "invalid.json");
+  await writeFile(state.bundledPath, "{}");
+  const { initializeApplicationModelBroker, applicationModelBrokerEnvironment } =
+    await import("../src/main/applicationModelBroker.js");
+  const logger = { info: vi.fn(), warn: vi.fn() };
+  await expect(initializeApplicationModelBroker(logger)).rejects.toThrow(
+    "application_model_bundled_provider_config_invalid",
+  );
+  expect(logger.warn).toHaveBeenCalledWith("application.model.baseline", {
+    outcome: "failed",
+    reason_code: "bundled_provider_config_invalid",
+  });
+  expect(applicationModelBrokerEnvironment).toThrow("application_model_broker_not_initialized");
 });

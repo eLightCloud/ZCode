@@ -254,7 +254,7 @@ export function spawnHostProcess(
     execArgv,
     env: {
       ...buildHostProcessEnv(dependencies.hostProcessLocalEnv),
-      ...applicationModelBrokerEnvironment(dependencies.logger),
+      ...applicationModelBrokerEnvironment(),
       ...buildHostE2ECoverageEnv(),
       ZCODE_PROCESS_LABEL: label,
       // macOS-only: the Computer Use Helper launcher runs inside this forked host utilityProcess, whose

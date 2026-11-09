@@ -2,17 +2,28 @@
 import { app, session } from "electron";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { decodeZCodeBuiltinRelease } from "@zcode/provider-node";
+import { resolveZCodeBuiltinProviderConfigFilePath } from "./desktopProviderConfig.js";
 
 let environment: Record<string, string> | undefined;
 
-export function applicationModelBrokerEnvironment(logger?: {
+export function applicationModelBrokerEnvironment(): Record<string, string> {
+  if (environment) return environment;
+  if (
+    process.env["ZCODE_APPLICATION_MODEL_REMOTE_BASE_URL"] ||
+    process.env["ZCODE_APPLICATION_MODEL_REMOTE_CONFIG_URL"]
+  )
+    throw new Error("application_model_broker_not_initialized");
+  return {};
+}
+
+export async function initializeApplicationModelBroker(logger?: {
   info: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
-}): Record<string, string> {
+}): Promise<Record<string, string>> {
   if (environment) return environment;
   const upstream = process.env["ZCODE_APPLICATION_MODEL_REMOTE_BASE_URL"];
   const configuration = process.env["ZCODE_APPLICATION_MODEL_REMOTE_CONFIG_URL"];
@@ -53,10 +64,23 @@ export function applicationModelBrokerEnvironment(logger?: {
   const token = randomBytes(48).toString("base64url");
   const localBase = `http://127.0.0.1:${port}`;
   const directory = join(app.getPath("userData"), "application-models");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = join(directory, "providers.json");
-  // 空基线确保登录/配置不可用时不会回落成另一个通道；首次成功获取沿同一个 Source 发布。
-  writeFileSync(
+  // 企业目录暂不可用时只阻断可执行 Provider；清空模板会让自定义供应商快捷添加也消失。
+  // 在创建任何 Host 前读取同环境的原生配置，保留模板及模型能力，不引入第二份预设。
+  let bundled;
+  try {
+    bundled = decodeZCodeBuiltinRelease(
+      JSON.parse(await readFile(resolveZCodeBuiltinProviderConfigFilePath(), "utf8")),
+    );
+  } catch {
+    logger?.warn("application.model.baseline", {
+      outcome: "failed",
+      reason_code: "bundled_provider_config_invalid",
+    });
+    throw new Error("application_model_bundled_provider_config_invalid");
+  }
+  await writeFile(
     file,
     JSON.stringify({
       schemaVersion: 1,
@@ -67,18 +91,21 @@ export function applicationModelBrokerEnvironment(logger?: {
         options: { reasoningLevel: "disabled" },
       },
       config: {
-        providerConfigRules: { templateRules: [], providerRules: [] },
-        modelConfigRules: {
-          modelRules: [],
-          modelApiRules: [],
-          providerSiteRules: [],
-          templateModelRules: [],
-          builtinProviderModelRules: [],
+        providerConfigRules: {
+          templateRules: bundled.config.providerTemplates.toJSON(),
+          providerRules: [],
         },
+        modelConfigRules: bundled.config.modelConfigRules.toZCodeBuiltinJSON(),
       },
     }),
     { mode: 0o600 },
   );
+  logger?.info("application.model.baseline", {
+    outcome: "prepared",
+    bundled_revision: bundled.revision,
+    template_count: bundled.config.providerTemplates.toJSON().length,
+    provider_count: 0,
+  });
   let signature = "";
   let revision = Date.now();
   const server = createServer(async (request, response) => {

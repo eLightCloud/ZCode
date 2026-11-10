@@ -136,6 +136,7 @@ const zhCN: Record<string, string> = {
   "taskGroup.remove": "移出分组",
   "taskGroup.noGroups": "暂无分组",
   "taskGroup.failed": "分组操作失败，请重试",
+  "taskGroup.placementFailed": "任务已创建，分组整理失败",
   "taskGroup.retryPlacement": "重试加入分组",
   "taskGroup.expandAll": "展开全部分组",
   "taskGroup.collapseAll": "收起全部分组",

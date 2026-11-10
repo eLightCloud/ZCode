@@ -238,10 +238,26 @@ describe("任务分组独立视图", () => {
       (await read()).members.some((m) => m.taskId === taskId && m.groupId === groupId),
     );
     const tree = await callHandoffHost<{
-      tasks: Array<{ taskId: string; workspacePath: string; projectId: string | null }>;
+      tasks: Array<{
+        taskId: string;
+        hostId: string;
+        workspacePath: string;
+        workspaceIdentity?: string;
+        projectId: string | null;
+      }>;
     }>(ServiceChannels.Project, "readTree");
     const task = tree.tasks.find((t) => t.taskId === taskId)!;
     expect(task.projectId).toBeNull();
+    // GRP12：真实目录引用与已提交成员必须使用同一 canonical key；成功不能靠仅隐藏失败提示。
+    expect(task.hostId).toBe("local");
+    expect((await read()).members.find((member) => member.taskId === taskId)?.workspaceKey).toBe(
+      task.workspaceIdentity?.trim() || task.workspacePath,
+    );
+    expect(
+      await browser.execute(() =>
+        /任务已创建，分组整理失败|Task created, but group placement failed/.test(document.body.innerText),
+      ),
+    ).toBe(false);
     const target = { taskId, workspacePath: task.workspacePath };
     const selector = `[data-testid="${testId(TID_TASK_ITEM, taskId)}"]`;
     for (const view of ["projects", "timeline", "grouped"]) {

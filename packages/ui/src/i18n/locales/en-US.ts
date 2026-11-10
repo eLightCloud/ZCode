@@ -109,6 +109,7 @@ const enUS: Record<string, string> = {
   "taskGroup.remove": "Remove from group",
   "taskGroup.noGroups": "No groups",
   "taskGroup.failed": "Group action failed. Please retry.",
+  "taskGroup.placementFailed": "Task created, but group placement failed.",
   "taskGroup.retryPlacement": "Retry group placement",
   "taskGroup.expandAll": "Expand all groups",
   "taskGroup.collapseAll": "Collapse all groups",

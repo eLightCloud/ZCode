@@ -3,11 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type {
   ProjectTree,
   ProjectTaskRef,
+  GroupTaskRef,
   ProjectAvailability,
   RemoteProjectDirectory,
 } from "@/project-sidebar/contract.js";
 import { readProjectSidebarTree } from "@/project-sidebar/project-tree-reader.js";
-import { stabilizeProjectTree, applyProjectTaskActivities } from "@/project-sidebar/view.js";
+import { groupTaskRef } from "@/project-sidebar/grouped-view.js";
+import {
+  stabilizeProjectTree,
+  applyProjectTaskActivities,
+  findCreatedProjectTask,
+} from "@/project-sidebar/view.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
@@ -62,7 +68,7 @@ export function useProjectTree(isDesktop = false) {
     new Set<{
       target: ProjectTaskRef;
       commit(): void;
-      organize?(): Promise<void>;
+      organize?(task: GroupTaskRef): Promise<void>;
       finish(error?: unknown): void;
     }>(),
   );
@@ -119,20 +125,17 @@ export function useProjectTree(isDesktop = false) {
             }
           }
         }
-        const ready = [...pendingCommits.current].filter(({ target }) =>
-          result.tree.tasks.some(
-            (task) =>
-              task.taskId === target.taskId &&
-              (task.workspaceIdentity?.trim() || task.workspacePath) ===
-                (target.workspaceIdentity?.trim() || target.workspacePath),
-          ),
-        );
+        const ready = [...pendingCommits.current].flatMap((pending) => {
+          const task = findCreatedProjectTask(result.tree, pending.target);
+          return task ? [{ pending, task: groupTaskRef(task) }] : [];
+        });
         // 根因：把组织 RPC 放进共享读取屏障后，一个无回包请求会卡住整棵目录和所有首发。
         // 真实行确认后独立提交组织动作；目录发布、详情提升和导航取消都不等待它。
-        for (const pending of ready) {
+        for (const { pending, task } of ready) {
           if (pending.organize)
             void Promise.resolve()
-              .then(pending.organize)
+              // 缺省 identity 的 Server 任务也有真实 Host；不能在 pane 里重新猜成 local。
+              .then(() => pending.organize!(task))
               .catch((cause) => logger.error("[project-sidebar] 首发组织提交失败", cause));
         }
         const commit = () => {
@@ -151,7 +154,7 @@ export function useProjectTree(isDesktop = false) {
             areStabilizedValuesEquivalent(previous, result.directory) ? previous : result.directory,
           );
           setError(null);
-          for (const pending of ready) {
+          for (const { pending } of ready) {
             try {
               pending.commit();
               logger.info("[project-sidebar] 首发目录与详情提交", pending.target);
@@ -198,7 +201,7 @@ export function useProjectTree(isDesktop = false) {
       target: ProjectTaskRef,
       commit: () => void,
       signal?: AbortSignal,
-      organize?: () => Promise<void>,
+      organize?: (task: GroupTaskRef) => Promise<void>,
     ) => {
       if (signal?.aborted && !organize) return Promise.resolve();
       return new Promise<void>((resolve, reject) => {

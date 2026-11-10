@@ -244,3 +244,39 @@ it("CR-01：组织失败不改写目录错误或拒绝已确认首发", async ()
   expect(commit).toHaveBeenCalledOnce();
   expect(organize).toHaveBeenCalledOnce();
 });
+
+it.each([
+  { hostId: "local", workspaceIdentity: undefined },
+  { hostId: "remote:server:source", workspaceIdentity: undefined },
+  { hostId: "remote:server:source", workspaceIdentity: "remote:server:source:/same" },
+])("GRP12：目录确认传递真实 Host 引用 $hostId/$workspaceIdentity", async (address) => {
+  const real = { ...task, ...address };
+  const first = deferred<ReturnType<typeof resultOf>>();
+  mocks.read.mockReturnValueOnce(first.promise).mockResolvedValue(resultOf([real]));
+  render(createElement(App));
+  const organize = vi.fn(async () => {});
+  const abort = new AbortController();
+  await act(async () => {
+    void owner.commitCreatedTask(
+      {
+        taskId: real.taskId,
+        workspacePath: real.workspacePath,
+        workspaceIdentity: real.workspaceIdentity,
+      },
+      vi.fn(),
+      abort.signal,
+      organize,
+    );
+    // 页面已经离开，原目录 owner 仍应把创建结果的准确地址交给组织回调。
+    abort.abort();
+  });
+  await act(async () => {
+    first.resolve(resultOf([real]));
+  });
+  expect(organize).toHaveBeenCalledExactlyOnceWith({
+    taskId: real.taskId,
+    workspacePath: real.workspacePath,
+    ...(real.workspaceIdentity ? { workspaceIdentity: real.workspaceIdentity } : {}),
+    hostId: real.hostId,
+  });
+});

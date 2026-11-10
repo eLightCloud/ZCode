@@ -4,6 +4,7 @@ import {
 } from "@/project-sidebar/contract.js";
 import type {
   ProjectTask,
+  ProjectTaskRef,
   ProjectTree,
   VirtualProject,
   RemoteProjectDirectory,
@@ -20,6 +21,18 @@ import {
   areStabilizedValuesEquivalent,
   stabilizeTaskListItems,
 } from "@/v4/taskListItemStabilization.js";
+
+/** 创建引用只消费同一目录 owner 的准确行；缺失或歧义不能猜测 Host。 */
+export function findCreatedProjectTask(tree: ProjectTree, target: ProjectTaskRef) {
+  const key = target.workspaceIdentity?.trim() || target.workspacePath;
+  const matches = tree.tasks.filter(
+    (task) =>
+      task.taskId === target.taskId &&
+      task.workspacePath === target.workspacePath &&
+      (task.workspaceIdentity?.trim() || task.workspacePath) === key,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
 
 /** 活动态只覆盖已有行的 UI sidecar；Controller 快照不能替代项目树的行集合和事实。 */
 export function applyProjectTaskActivities(

@@ -3,7 +3,6 @@ import {
   ApplicationConversationContent,
   applicationShareCandidate,
 } from "@/root/ApplicationPeripherals.js";
-import { remoteHostIdFromWorkspaceIdentity } from "@zcode/shared";
 import { useRemoteConversationAvailable } from "@/v4/RemoteConversationAvailability.js";
 import {
   createRemoteWorkspaceDisconnectedError,
@@ -17,7 +16,10 @@ import { reportSessionCreate } from "@/lib/sessionCreateTelemetry.js";
 import { getLocalTtftObserver } from "@/v4/telemetry/localTtftObserver.js";
 import { BotGroupDeliveryProvider } from "@/v4/BotGroupDeliveryAction.js";
 /* oxlint-disable eslint(max-lines) -- SessionPane 是单 pane 竖切的命令编排收口（订阅/发送/停止/fork/edit/retry/queue/slash 全集），与旧 ChatView 同粒度；HEAD 已超限（693 行计数），拆散命令组会打散 dispatchCommand/snapshotRef 的闭包纪律。 */
-import { useOptionalProjectDirectory } from "@/project-sidebar/index.js";
+import {
+  useOptionalProjectDirectory,
+  useCreatedTaskGroupPlacement,
+} from "@/project-sidebar/index.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import {
   useCallback,
@@ -1937,7 +1939,7 @@ export function SessionPane({
   );
   const projectDirectory = useOptionalProjectDirectory();
   const commitCreatedTask = projectDirectory?.commitCreatedTask;
-  const refreshTaskGroups = projectDirectory?.groups.refresh;
+  const prepareTaskGroupPlacement = useCreatedTaskGroupPlacement();
   const draftNavigation = useMemo(
     () => ({ controller: new AbortController() }),
     [workspaceKey, sessionId],
@@ -1986,44 +1988,11 @@ export function SessionPane({
         promoteComposerDraft(createdSessionId);
         onSessionCreated?.(createdSessionId);
       };
-      const organize =
-        taskGroupId !== undefined
-          ? async () => {
-              const task = {
-                taskId: createdSessionId,
-                workspacePath,
-                ...(workspaceIdentity ? { workspaceIdentity } : {}),
-                hostId: remoteHostIdFromWorkspaceIdentity(workspaceIdentity ?? "") ?? "local",
-              };
-              const attempt = async () => {
-                try {
-                  if (!baseWorkspaceServices.taskGroupService)
-                    throw new Error("task-group.service-unavailable");
-                  await baseWorkspaceServices.taskGroupService.admit({
-                    tasks: [task],
-                    placement: {
-                      task,
-                      groupId: taskGroupId,
-                      creationId: messageId ?? createdSessionId,
-                    },
-                  });
-                  // 分组结构是独立投影；重读迟滞不能延长已接受首发或组织写入的完成时间。
-                  void refreshTaskGroups?.();
-                } catch (cause) {
-                  // 会话已创建；组织失败不能向发送层抛错，否则会诱导用户再发一次。
-                  // 重试闭包只持有这次创建的地址和 placement，绝不调用 createSession。
-                  logger.error("[task-groups] 新任务归属提交失败", cause);
-                  toast(intl.formatMessage({ id: "taskGroup.failed" }), {
-                    durationMs: 0,
-                    actionLabel: intl.formatMessage({ id: "taskGroup.retryPlacement" }),
-                    onAction: () => void attempt(),
-                    dedupeKey: `task-group:${createdSessionId}`,
-                  });
-                }
-              };
-              await attempt();
-            }
-          : undefined;
+      const organize = prepareTaskGroupPlacement(
+        { taskId: createdSessionId, workspacePath, workspaceIdentity },
+        taskGroupId,
+        messageId ?? createdSessionId,
+      );
       if (commitCreatedTask) {
         await commitCreatedTask(
           { taskId: createdSessionId, workspacePath, workspaceIdentity },
@@ -2038,9 +2007,7 @@ export function SessionPane({
     },
     [
       commitCreatedTask,
-      baseWorkspaceServices.taskGroupService,
-      refreshTaskGroups,
-      intl,
+      prepareTaskGroupPlacement,
       draftNavigation,
       reportDraftCreated,
       onSessionCreated,

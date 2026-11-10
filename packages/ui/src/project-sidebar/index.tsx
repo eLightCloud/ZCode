@@ -26,6 +26,7 @@ export {
   useOptionalProjectDirectory,
 } from "@/project-sidebar/ProjectDirectoryProvider.js";
 export { ProjectComposerMenu } from "@/project-sidebar/ProjectComposerMenu.js";
+export { useCreatedTaskGroupPlacement } from "@/project-sidebar/useCreatedTaskGroupPlacement.js";
 import { useProjectTaskNavigation } from "@/project-sidebar/useProjectTaskNavigation.js";
 import { useProjectFileTree } from "@/project-sidebar/useProjectFileTree.js";
 import {

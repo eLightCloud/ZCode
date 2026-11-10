@@ -566,10 +566,12 @@ function KeyboardPlugin({
           if (!(modifiedScopedEnter && onModifiedSubmit)) {
             // 与主链裸 Enter 等价的门禁：无修饰组合受 submitDisabled / 手机视口 enterSubmits；
             // 带修饰组合不受视口门禁（与主链 onModifiedSubmit 路径一致）。
-            if (submitDisabled || (!modifiedScopedEnter && !enterSubmits)) {
+            if (!modifiedScopedEnter && !enterSubmits) {
               return false;
             }
             event.preventDefault();
+            // 等待发送时重复回车不能变成换行，否则草稿版本变化会阻止成功后的清理。
+            if (submitDisabled) return true;
             if (
               shouldSubmitLexicalEnter({
                 allowSubmitWhenEmpty,
@@ -598,7 +600,6 @@ function KeyboardPlugin({
         }
 
         if (
-          !submitDisabled &&
           onModifiedSubmit &&
           shouldSubmitLexicalModifiedEnter({
             allowSubmitWhenEmpty,
@@ -610,6 +611,7 @@ function KeyboardPlugin({
           })
         ) {
           event.preventDefault();
+          if (submitDisabled) return true;
           const submitResult = onModifiedSubmit(text);
           if (shouldResetLexicalEditorAfterSubmit(submitResult)) {
             resetEditor(editor);
@@ -622,14 +624,13 @@ function KeyboardPlugin({
           return false;
         }
 
-        // 当前请求进行中时，输入框仍允许继续编辑草稿，但此时不能再次提交。
-        // 之前把状态直接映射成 disabled，导致输入和联想面板一起失效；如果只去掉 disabled，
-        // Enter 又会误触发 submit 并清空草稿。这里在 submitDisabled 时把 Enter 退回给 Lexical 处理换行。
-        if (submitDisabled || !enterSubmits) {
+        // 手机换行仍放行；发送等待只消费发送键，保留普通编辑和主动换行。
+        if (!enterSubmits) {
           return false;
         }
 
         event.preventDefault();
+        if (submitDisabled) return true;
 
         if (
           shouldSubmitLexicalEnter({
@@ -749,10 +750,10 @@ function KeyboardPlugin({
         });
         return;
       }
+      event.preventDefault();
       if (submitDisabled) {
         return;
       }
-      event.preventDefault();
       const text = getEditorMarkdown(editor.getEditorState());
       if (shouldSubmitLexicalEnter({ allowSubmitWhenEmpty, enterSubmits: true, text })) {
         const submitResult = onSubmit(text);

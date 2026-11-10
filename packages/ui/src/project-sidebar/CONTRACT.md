@@ -111,6 +111,7 @@ Root 的原项目完成 guard 从成员目录异步复验 entryId、membershipId
 视图不创建连接或 Agent，不以缺席清理成员，不修改项目或会话事实。
 旧 grouped 偏好在没有有效新版选择时映射到按分组。
 草稿 placement 独立于项目选择；普通项目选择与聊天远程目录确认均沿用原草稿分组，既有会话不读取残留草稿分组。创建 ACK 后，权威目录确认同时触发 UI 提升与独立幂等入组；组织请求不占用共享目录读取，辅助分组重读不进入首发屏障。导航取消立即结束 UI 等待，尚未确认的组织回调继续由原目录 owner 保留，确认后只执行一次；迟到结果不得重新打开详情。
+目录 owner 将匹配的真实 GroupTaskRef 传给组织回调；公开 useCreatedTaskGroupPlacement 沿此引用提交原 placement 和 creationId，不从缺省 identity 猜测 Host。无 Provider 的嵌入 pane 仅在有显式 placement 时读取同一公开项目树，精确匹配 taskId、workspace key 与 path，缺失或歧义拒绝归组。归组请求和重试共享一次在途提交，失败提示明确任务已创建；服务端继续核验真实 owner，UI 不保存第二份任务事实。
 分组手工移动提交节点/来源/锚点，Host 事务处理并广播刷新。`grouped/` 的嵌套 view 只做展示和当前手势预览，不恢复旧任务事实缓存或整表 applyOrder。吸顶浮层位于统一渐隐容器之外，Hash/收起全部操作挂在既有列表工具栏。关闭草稿行只从 Composer 草稿 owner 清除分组意图。
 
 Composer 头部通过 `ProjectComposerMenu.showEditProject` 启用当前项目 Plus 编辑入口；`children` 放置分支等既有控件，顺序为项目、children、编辑按钮。当前项目解析仍由菜单持有。复用 ProjectEditor 与目录服务，在线且非 legacySingleRoot 才能编辑；Host/project 身份、会话或草稿切换使已打开编辑器失效。保存/删除仅刷新目录，不调用导航；其他选择器默认不启用入口。

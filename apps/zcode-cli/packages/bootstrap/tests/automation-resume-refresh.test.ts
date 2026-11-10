@@ -45,14 +45,17 @@ describe("automation resume refresh", () => {
   });
 
   it.each([
-    { ...safe(), persisted: false },
-    { ...safe(), hasResidencyBlockingWork: true },
-    { ...safe(), hasPendingInteractions: true },
-    { ...safe(), hasQueuedCommands: true },
-  ])("does not interrupt accepted work or draft state", async (facts) => {
+    [{ ...safe(), persisted: false }, "not_persisted"],
+    [{ ...safe(), hasResidencyBlockingWork: true }, "runtime_work"],
+    [{ ...safe(), hasPendingInteractions: true }, "pending_interaction"],
+    [{ ...safe(), hasQueuedCommands: true }, "queued_command"],
+  ] as const)("does not interrupt accepted work or draft state", async (facts, reason) => {
     const { pool, deactivate } = fixture(facts);
     const release = await pool.acquireOperation("target");
-    await expect(pool.refreshForResume("target")).rejects.toThrow("busy");
+    await expect(pool.refreshForResume("target")).rejects.toMatchObject({
+      name: "SessionConfigurationRefreshBusyError",
+      reason,
+    });
     expect(deactivate).not.toHaveBeenCalled();
     release();
   });

@@ -10,6 +10,10 @@ import {
   type ZCodeTaskTerminalOutcome,
 } from "../src/index.js";
 import { AutomationRepo, createAutomationDispatcher } from "../src/node.js";
+import {
+  AutomationDispatchConfigurationError,
+  describeAutomationDispatchFailure,
+} from "../src/session/automationDispatchFailure.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -103,6 +107,39 @@ async function fixture(
 }
 
 describe("native shared automation dispatcher", () => {
+  it.each([
+    ["resumeTask", "session_resume_failed"],
+    ["setAutomationSessionConfig", "session_configuration_failed"],
+  ] as const)("records retryable %s failure before sending input", async (method, reason) => {
+    const f = await fixture();
+    f.service[method].mockRejectedValueOnce(new Error("synthetic-private-provider-response"));
+    const error = await f.dispatcher
+      .dispatch({ ...f.request, targetTaskId: "bound-session" })
+      .catch((error: unknown) => error);
+    expect(describeAutomationDispatchFailure(error)).toEqual({ failureKind: "transient", reason });
+    expect(String(error)).not.toContain("synthetic-private-provider-response");
+    expect(f.service.sendPrompt).not.toHaveBeenCalled();
+    await f.dispatcher.dispose();
+    expect(await f.repo.getRun(f.request.runId)).toMatchObject({
+      outcome: "failed",
+      error: reason,
+    });
+  });
+
+  it("preserves the native owner's permanent configuration failure", async () => {
+    const f = await fixture();
+    f.service.setAutomationSessionConfig.mockRejectedValueOnce(
+      new AutomationDispatchConfigurationError("model_selection_unavailable"),
+    );
+    const error = await f.dispatcher
+      .dispatch({ ...f.request, targetTaskId: "bound-session" })
+      .catch((error: unknown) => error);
+    expect(describeAutomationDispatchFailure(error)).toEqual({
+      failureKind: "permanent",
+      reason: "model_selection_unavailable",
+    });
+    expect(f.service.sendPrompt).not.toHaveBeenCalled();
+  });
   it("keeps distinct low-sensitivity diagnostics for outcome and unread writes", async () => {
     const f = await fixture();
     await f.dispatcher.dispatch(f.request);

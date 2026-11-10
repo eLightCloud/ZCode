@@ -1,4 +1,8 @@
-import { describeAutomationDispatchFailure } from "./automationDispatchFailure.js";
+import {
+  AutomationDispatchConfigurationError,
+  AutomationSessionPreparationError,
+  describeAutomationDispatchFailure,
+} from "./automationDispatchFailure.js";
 import type { IDisposable } from "@zcode/rpc";
 import {
   formatModelPickerValue,
@@ -275,6 +279,7 @@ export function createAutomationDispatcher(options: {
     const workspaceKey = resolveWorkspaceKey(request);
     const trigger = request.runId.includes(":manual:") ? "manual" : "schedule";
     const scheduledAt = parseCronRunScheduledAt(request.runId, request.automationId);
+    let preparationStage: "resume" | "configure" | undefined;
     try {
       const attachments = await options.beforeAutomationInput?.({
         automationId: request.automationId,
@@ -304,6 +309,7 @@ export function createAutomationDispatcher(options: {
       if (request.targetTaskId) {
         // 绑定会话在 app 重启或切换 workspace 后通常不处于 active；旧实现直接
         // setConfig/sendPrompt 会立即报 Session is not active，看起来像「立即运行」没有触发。
+        preparationStage = "resume";
         await zcodeTaskService.resumeTask({
           taskId: task.taskId,
           additionalDirectories: request.additionalDirectories,
@@ -313,6 +319,7 @@ export function createAutomationDispatcher(options: {
           thoughtLevel: submissionModelSelection.options?.reasoningLevel,
           automationId: request.automationId,
         });
+        preparationStage = "configure";
         await applyCronRunConfigToExistingTask({
           zcodeTaskService,
           taskId: task.taskId,
@@ -320,6 +327,7 @@ export function createAutomationDispatcher(options: {
           modelSelection: submissionModelSelection,
           mode: request.mode as ZCodeTaskMode | undefined,
         });
+        preparationStage = undefined;
       }
       const botsService = targetServices.getOptional(IBotsService);
       if (botsService) {
@@ -381,6 +389,23 @@ export function createAutomationDispatcher(options: {
       return { taskId: task.taskId, sessionId: task.taskId };
     } catch (error) {
       if (trackedKey) disposeCronRunSubscription(trackedKey);
+      const failure =
+        preparationStage && !(error instanceof AutomationDispatchConfigurationError)
+          ? new AutomationSessionPreparationError(
+              preparationStage === "resume"
+                ? "session_resume_failed"
+                : "session_configuration_failed",
+            )
+          : error;
+      if (preparationStage)
+        logger.warn(request.runId, {
+          event: "automation.session.prepare",
+          outcome: "failed",
+          stage: preparationStage,
+          reason: describeAutomationDispatchFailure(failure).reason,
+          runId: request.runId,
+          automationId: request.automationId,
+        });
       markCronRunOutcome({
         runId: request.runId,
         automationId: request.automationId,
@@ -389,9 +414,9 @@ export function createAutomationDispatcher(options: {
         trigger,
         outcome: "failed",
         // 回执与 outcome 写入可能交错；两条写路径必须使用相同的低敏原因。
-        error: describeAutomationDispatchFailure(error).reason,
+        error: describeAutomationDispatchFailure(failure).reason,
       });
-      throw error;
+      throw failure;
     }
   }
 

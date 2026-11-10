@@ -7274,6 +7274,10 @@ const zhCN: Record<string, string> = {
   "automations.runs.status.succeeded": "成功",
   "automations.runs.status.failed": "失败",
   "automations.runs.errorUnavailable": "暂无错误详情",
+  "automations.runs.sessionResumeFailed":
+    "恢复任务会话失败，任务尚未开始执行。请稍后重试；持续失败请联系管理员。",
+  "automations.runs.sessionConfigurationFailed":
+    "配置任务会话失败，任务尚未开始执行。请稍后重试；持续失败请联系管理员。",
   "automations.runs.status.stopped": "已停止",
   "automations.runs.status.skipped": "已跳过",
   "automations.runs.openSession": "跳到会话",

@@ -7803,6 +7803,10 @@ const enUS: Record<string, string> = {
   "automations.runs.status.succeeded": "Succeeded",
   "automations.runs.status.failed": "Failure",
   "automations.runs.errorUnavailable": "No error details available",
+  "automations.runs.sessionResumeFailed":
+    "Could not resume the task session. Execution has not started. Retry later; contact an administrator if the problem persists.",
+  "automations.runs.sessionConfigurationFailed":
+    "Could not configure the task session. Execution has not started. Retry later; contact an administrator if the problem persists.",
   "automations.runs.status.stopped": "Stopped",
   "automations.runs.status.skipped": "Skipped",
   "automations.runs.openSession": "Go to session",

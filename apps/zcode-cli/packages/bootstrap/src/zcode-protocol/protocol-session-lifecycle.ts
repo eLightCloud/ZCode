@@ -41,6 +41,7 @@ import {
 } from "./protocol-session-record.js";
 import { resolveSupportedAppThoughtLevel } from "./protocol-session-model.js";
 import { persistImportedSessionHistory } from "./protocol-history-import.js";
+import { SessionConfigurationRefreshBusyError } from "./session-resident-pool.js";
 
 // 原协议 host 的单一职责；复用同一 session record / Core owner，不创建第二状态。
 export async function createSession(
@@ -409,6 +410,8 @@ export async function resumeSession(context: ZCodeProtocolAgentServerContext, ra
         event: "zcode_protocol.session.automation_refresh",
         sessionId: params.sessionId,
         outcome: "blocked",
+        reason:
+          error instanceof SessionConfigurationRefreshBusyError ? error.reason : "close_failed",
       });
       throw error;
     }

@@ -11,6 +11,24 @@ export const DEFAULT_SESSION_RESIDENT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export type SessionDeactivationReason = "high_water_lru" | "idle_timeout";
 
+export class SessionConfigurationRefreshBusyError extends Error {
+  constructor(
+    readonly reason:
+      | "maintenance"
+      | "checkpoint"
+      | "rebalancing"
+      | "deactivating"
+      | "operation_lease"
+      | "not_persisted"
+      | "runtime_work"
+      | "pending_interaction"
+      | "queued_command",
+  ) {
+    super("Session configuration refresh busy");
+    this.name = "SessionConfigurationRefreshBusyError";
+  }
+}
+
 export interface SessionDeactivationDecision {
   highWaterCount: number;
   idleMs: number;
@@ -248,18 +266,26 @@ export class SessionResidentPool {
   /** Explicit automation resume owns one lease; refresh only quiescent runtime configuration. */
   async refreshForResume(sessionId: string): Promise<void> {
     const facts = this.host.readResidencyFacts(sessionId);
-    if (
-      this.maintenanceOperation ||
-      this.checkpointInProgress ||
-      this.rebalancing ||
-      this.inFlightDeactivations.has(sessionId) ||
-      this.operationLeaseCounts.get(sessionId) !== 1 ||
-      !facts?.persisted ||
-      facts.hasResidencyBlockingWork ||
-      facts.hasPendingInteractions ||
-      facts.hasQueuedCommands
-    )
-      throw new Error("Session configuration refresh busy");
+    const blockedReason = this.maintenanceOperation
+      ? "maintenance"
+      : this.checkpointInProgress
+        ? "checkpoint"
+        : this.rebalancing
+          ? "rebalancing"
+          : this.inFlightDeactivations.has(sessionId)
+            ? "deactivating"
+            : this.operationLeaseCounts.get(sessionId) !== 1
+              ? "operation_lease"
+              : !facts?.persisted
+                ? "not_persisted"
+                : facts.hasResidencyBlockingWork
+                  ? "runtime_work"
+                  : facts.hasPendingInteractions
+                    ? "pending_interaction"
+                    : facts.hasQueuedCommands
+                      ? "queued_command"
+                      : undefined;
+    if (blockedReason) throw new SessionConfigurationRefreshBusyError(blockedReason);
     // 每轮 MCP 在派发前更新；热恢复不能复用旧凭据。检查与摘除在同一同步片，
     // 并发 subscribe/resume 必须等旧 App 关闭，失败则保留拒绝屏障，不误用半关闭资源。
     const closing = this.host.deactivate(sessionId);

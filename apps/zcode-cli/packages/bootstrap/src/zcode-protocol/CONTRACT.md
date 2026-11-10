@@ -7,6 +7,7 @@
 - 原事件序号继续写在同一 session record；事件 codec / replay / live 共用原映射与合批算法。live 弱引用合批状态只在 live 模块保留一份，replay 只使用一次调用的栈内工作集，不复制接纳队列。
 - Server / Gateway / Publisher / Projection 的内部状态形状不从 owner 类反向取型；方法仍借用同一 owner，没有另一份 cache、listener、lease、receipt 或 ACK。
 - continuous 与 replayable 的时间、屏障、缺口修复和未知 ACK 仍按既有合同；会话同步的正文 / outbox / PoP 不在本模块重新裁决。
+- 自动化的 `refreshConfiguration` 是一次恢复请求的选项，不是任务定位信息。Task service 只缓存定位字段，后续模型配置后的快照读取不得再次触发刷新；resident pool 仍拒绝运行、排队或待交互工作，拒绝日志仅记录固定原因与会话标识。
 - 对外错误代码、stdout 帧与 stderr 日志、低敏字段、trace / request / session 关联、取消和 deadline 都保留。治理不改 migration、历史 checksum、技术身份、插件权利或存量数据。
 
 测试继续覆盖原 bootstrap 的真实协议 / 生命周期 / 同步 / 工具用例，并收集本模块合同测试；不得只证明 module.id 或减少原断言。

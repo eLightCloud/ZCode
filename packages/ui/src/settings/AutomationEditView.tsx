@@ -2915,10 +2915,18 @@ export function AutomationEditView({
                                       ? intl.formatMessage({
                                           id: "automations.authorization.required",
                                         })
-                                      : run.error?.trim() ||
-                                        intl.formatMessage({
-                                          id: "automations.runs.errorUnavailable",
-                                        })}
+                                      : run.error === "session_resume_failed"
+                                        ? intl.formatMessage({
+                                            id: "automations.runs.sessionResumeFailed",
+                                          })
+                                        : run.error === "session_configuration_failed"
+                                          ? intl.formatMessage({
+                                              id: "automations.runs.sessionConfigurationFailed",
+                                            })
+                                          : run.error?.trim() ||
+                                            intl.formatMessage({
+                                              id: "automations.runs.errorUnavailable",
+                                            })}
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>

@@ -984,7 +984,11 @@ export function createZCodeTaskServiceAdapter(
   function rememberTaskTarget(params: TaskTarget): void {
     const existing = taskTargets.get(params.taskId);
     taskTargets.set(params.taskId, {
-      ...params,
+      // 只缓存定位字段；refreshConfiguration 等恢复选项只属于当次请求，不能在后续快照读取时重放。
+      taskId: params.taskId,
+      workspacePath: params.workspacePath,
+      workspaceIdentity: params.workspaceIdentity,
+      remoteSessionId: params.remoteSessionId,
       // cronAutomationId 是会话的 sticky 归属标记，供 UI 展示和任务关联使用，不参与当前
       // turn 的工具权限。resume/onDynamicTaskEvent 等入口不带值时仍需保留权威归属；明确设置
       // 或清除只能走 rememberIndexedTaskMeta。
@@ -1358,7 +1362,7 @@ export function createZCodeTaskServiceAdapter(
     // 权威归属刷新：index meta 是唯一可以设置/清除 cronAutomationId 的来源，直接以 meta 为准
     // 写入（绕过 rememberTaskTarget 的 merge-preserve），以便解绑/删除 automation 后能真正清空。
     taskTargets.set(meta.taskId, {
-      ...existing,
+      remoteSessionId: existing?.remoteSessionId,
       taskId: meta.taskId,
       workspacePath: meta.workspacePath,
       workspaceIdentity: meta.workspaceIdentity,

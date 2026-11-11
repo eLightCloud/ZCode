@@ -1,5 +1,14 @@
 # Tool Change Chain Spec
 
+## Product display wording
+
+Read media limits, ReadSessionContext, Agent compatibility aliases and plan-mode
+instructions use neutral product wording. The descriptions flow through the
+existing registry/model surface; schemas, aliases, permissions, handlers,
+results, events and Desktop/Web projections are unchanged. Tests protect the
+descriptions and unchanged technical references; no runtime result-wide string
+replacement is allowed. Identity rules remain in `loop/system-prompt-contract.md`.
+
 ## 自动化复用会话的 MCP 重新装载（2026-11-06）
 
 应用在派发前登记本轮 MCP 后，原生自动化以 refreshConfiguration 的显式恢复经 resident pool 的安全屏障

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Electron Builder config keeps related packaging hooks together so build order stays explicit. */
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -20,6 +20,7 @@ import { getTargetPlatform } from "./scripts/target-platform.mjs";
 import {
   resolveDesktopArtifactSuffix,
   resolveDesktopProductIdentity,
+  resolveDesktopApplicationDisplayName,
 } from "./scripts/desktop-product-identity.mjs";
 import { createWindowsPowerShellSecurityArgs } from "./scripts/powershell-command.mjs";
 import {
@@ -44,6 +45,12 @@ import {
 } from "./scripts/patch-nsis-install-section.mjs";
 
 const buildMetadata = getBuildMetadata();
+// 仅显示元数据组合双语名称；安装名、app ID 和数据目录仍沿原生产品身份。
+const applicationDisplayName = process.env.ZCODE_APPLICATION_BRAND_MANIFEST
+  ? resolveDesktopApplicationDisplayName(
+      JSON.parse(await readFile(process.env.ZCODE_APPLICATION_BRAND_MANIFEST, "utf8")),
+    )
+  : undefined;
 const targetPlatform = getTargetPlatform();
 // 修复原因：Windows Chrome 导入入口已暂时隐藏，默认安装包不应继续携带、签名或校验原生 helper。
 // 代码和完整供应链保留在显式 opt-in 后，便于未来恢复而不影响当前发布流程。
@@ -574,7 +581,7 @@ export default {
           // 安装包产品说明属于显示身份；原作者、NOTICE 与技术名称继续保留来源。
           description: `${desktopProductIdentity.productName} Desktop App`,
           applicationBrand: {
-            name: desktopProductIdentity.productName,
+            name: applicationDisplayName ?? desktopProductIdentity.productName,
             id: desktopProductIdentity.appId,
             attribution: process.env.ZCODE_APPLICATION_ATTRIBUTION,
           },

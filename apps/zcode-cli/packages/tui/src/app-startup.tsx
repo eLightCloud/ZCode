@@ -24,8 +24,12 @@ export function TuiStartupScreen({
   return h(
     "box",
     { style: { flexDirection: "column", width: "100%", height: "100%", padding: 1 } },
-    h(EmptyTranscriptLogo),
+    h(EmptyTranscriptLogo, { applicationName: options.applicationName }),
     h("text", { style: { fg: palette.muted } }, options.workspaceDirectory),
-    h("text", { style: { fg: palette.text } }, getZCodeCopy(options.locale).tui.terminal.starting),
+    h(
+      "text",
+      { style: { fg: palette.text } },
+      getZCodeCopy(options.locale).tui.terminal.starting(options.applicationName),
+    ),
   );
 }

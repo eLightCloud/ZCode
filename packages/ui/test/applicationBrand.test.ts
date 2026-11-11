@@ -139,6 +139,10 @@ it.each(["zh-CN", "en-US"])(
         installed: true,
         restorable: false,
         orphaned: false,
+        listing: {
+          examplePrompts: ["How do I configure MCP servers in ZCode?"],
+          examplePromptsI18n: { "zh-CN": ["如何配置 ZCode 的 MCP 服务？"] },
+        },
       };
       const personal = { ...native, id: "zcode-guide@personal", marketplace: "personal" };
       return createElement(
@@ -146,6 +150,22 @@ it.each(["zh-CN", "en-US"])(
         null,
         createElement("span", null, presentation.resolveItemDisplayName(native, locale)),
         createElement("p", null, presentation.resolveItemDescription(native, locale)),
+        createElement(
+          "label",
+          { "data-plugin-id": native.id },
+          presentation.resolveItemExamplePrompts(native, locale).join(" "),
+        ),
+        createElement(
+          "i",
+          null,
+          String(
+            presentation.storeItemMatches(
+              native,
+              locale === "zh-CN" ? "翼辉睿观" : "eLight Vantage",
+              locale,
+            ),
+          ),
+        ),
         createElement("aside", null, presentation.resolveItemDisplayName(personal, locale)),
       );
     }
@@ -157,6 +177,8 @@ it.each(["zh-CN", "en-US"])(
     );
     expect(branded).toContain(locale === "zh-CN" ? "翼辉睿观 使用指南" : "eLight Vantage Guide");
     expect(branded).toContain("<aside>ZCode Guide</aside>");
+    expect(branded).toContain('data-plugin-id="zcode-guide@zcode-plugins-official"');
+    expect(branded).toContain("<i>true</i>");
     expect(branded.split("<aside>")[0]).not.toMatch(/ZCode/);
     expect(renderToStaticMarkup(createElement(GuidePresentation))).toContain("ZCode Guide");
   },

@@ -12,6 +12,18 @@ import {
 const SEED_ONLY_PLUGIN_NAMES = new Set<string>([OFFICIAL_NODE_REPL_HOST_PLUGIN_NAME]);
 
 describe("bundled Plugin Creator", () => {
+  it("keeps ordinary market descriptions neutral in both seed and localized listings", async () => {
+    for (const name of ["browser-use", "plugin-creator", "skill-creator", "restore-legacy-sessions"]) {
+      const definition = OFFICIAL_PLUGIN_DEFINITIONS.find((item) => item.name === name);
+      expect(definition, name).toBeDefined();
+      expect(definition?.listing?.description_i18n?.["zh-CN"], name).not.toMatch(/zcode/i);
+      const root = fileURLToPath(new URL(`../../${name}-plugin/`, import.meta.url));
+      const manifest = JSON.parse(await readFile(join(root, ".zcode-plugin/plugin.json"), "utf8"));
+      expect(manifest.description, name).not.toMatch(/zcode/i);
+      expect(manifest.name).toBe(name);
+    }
+  });
+
   it("ships a default-enabled creator with every referenced resource and localized description", async () => {
     const definition = OFFICIAL_PLUGIN_DEFINITIONS.find((item) => item.name === "plugin-creator");
     expect(definition).toMatchObject({

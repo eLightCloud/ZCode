@@ -299,6 +299,8 @@ export type TuiModeOption = {
 };
 
 export type TuiOptions = {
+  /** Trusted startup display name, available before asynchronous runtime loading. */
+  applicationName?: string;
   /** Called after the startup screen has painted; runtime ownership stays in CLI. */
   loadStartupOptions?: () => Promise<TuiStartupOptions>;
   initialMode?: CollaborationMode;

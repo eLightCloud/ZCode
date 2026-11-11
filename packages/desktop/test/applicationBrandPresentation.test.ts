@@ -32,4 +32,14 @@ describe("application branding in system surfaces", () => {
     expect(messages.documentTitle).toBe("示例产品 Computer Use 权限");
     expect(messages.permissionLabel).toBe("辅助功能");
   });
+  it.each(["zh-CN", "en-US"] as const)(
+    "uses bilingual identity in independent %s surfaces",
+    (locale) => {
+      const name = "翼辉睿观（eLight Vantage）";
+      const messages = resolveCuaPermissionPanelMessages(locale, "accessibility", name);
+      expect(messages.documentTitle).toContain(name);
+      expect(messages.documentTitle).not.toContain("ZCode");
+      expect(indicatorHtml(locale, name)).toContain(name);
+    },
+  );
 });

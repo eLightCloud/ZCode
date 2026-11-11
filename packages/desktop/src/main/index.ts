@@ -680,7 +680,7 @@ const cuaPipFocusRouter = createCuaPipFocusRouter({
 });
 const hostRunningTaskCountMap = new Map<ElectronUtilityProcess, number>();
 const windowsCuaOperationIndicator = createWindowsCuaOperationIndicator({
-  getApplicationName: () => app.getName(),
+  getApplicationName: () => process.env.ZCODE_APPLICATION_NAME ?? app.getName(),
   platform: process.platform,
   getLocale: () => currentApplicationLocale,
   logger,

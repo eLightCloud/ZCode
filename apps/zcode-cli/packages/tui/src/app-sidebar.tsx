@@ -34,11 +34,11 @@ const SIDEBAR_ROW_VALUE_WIDTH = SIDEBAR_CONTENT_WIDTH - SIDEBAR_LABEL_WIDTH - 1;
 const SIDEBAR_TODO_CONTENT_WIDTH = SIDEBAR_CONTENT_WIDTH - 4;
 const SIDEBAR_TEXT_ROW_STYLE = { flexShrink: 0, height: 1, truncate: true, wrapMode: "none" };
 const PRODUCT_NAME = "ZCode";
-const PRODUCT_NAME_WIDTH = displayWidth(PRODUCT_NAME);
 const DEFAULT_PRODUCT_VERSION = "0.0.0";
 const DEFAULT_MCP_STATUS = { loading: false, servers: {} };
 
 type SidebarProps = SidebarState & {
+  applicationName?: string;
   subagents?: SubagentsController;
   onOpenSubagent?: (item: SubagentItem) => void;
   copy?: TuiCopy;
@@ -64,7 +64,7 @@ export function Sidebar(props: SidebarProps): React.ReactElement {
         width: SIDEBAR_WIDTH,
       },
     },
-    productVersionHeader(props.version),
+    productVersionHeader(props.version, props.applicationName),
     ...(developerMode
       ? [
           h(
@@ -122,7 +122,16 @@ export function Sidebar(props: SidebarProps): React.ReactElement {
   );
 }
 
-function productVersionHeader(version: string | undefined): React.ReactElement {
+function productVersionHeader(
+  version: string | undefined,
+  applicationName = PRODUCT_NAME,
+): React.ReactElement {
+  const versionLabel = ` ${version ?? DEFAULT_PRODUCT_VERSION}`;
+  const name = truncateDisplay(
+    applicationName,
+    Math.max(1, SIDEBAR_CONTENT_WIDTH - displayWidth(versionLabel)),
+  );
+  const nameWidth = displayWidth(name);
   return h(
     "box",
     {
@@ -142,10 +151,10 @@ function productVersionHeader(version: string | undefined): React.ReactElement {
           ...SIDEBAR_TEXT_ROW_STYLE,
           attributes: TextAttributes.BOLD,
           fg: palette.accent,
-          width: PRODUCT_NAME_WIDTH,
+          width: nameWidth,
         },
       },
-      PRODUCT_NAME,
+      name,
     ),
     h(
       "text",
@@ -154,10 +163,10 @@ function productVersionHeader(version: string | undefined): React.ReactElement {
         style: {
           ...SIDEBAR_TEXT_ROW_STYLE,
           fg: palette.muted,
-          width: SIDEBAR_CONTENT_WIDTH - PRODUCT_NAME_WIDTH,
+          width: SIDEBAR_CONTENT_WIDTH - nameWidth,
         },
       },
-      ` ${version ?? DEFAULT_PRODUCT_VERSION}`,
+      versionLabel,
     ),
   );
 }

@@ -36,7 +36,17 @@ function buildIdentityPrompt(outputStyle?: OutputStylePromptConfig, productName?
     ? `You respond to the user according to the active Output Style below while using ${name}'s tools and instructions.`
     : `You are an interactive ${name} agent that helps users with software engineering tasks.`;
 
-  const identityLines = ["", intro, "", SECURITY_NOTICE].join("\n");
+  const identityLines = [
+    "",
+    intro,
+    ...(name !== "ZCode"
+      ? [
+          "Use the supplied product display name when introducing yourself, choosing the appropriate supplied alias for the user's language. Product identity is distinct from the actual model/provider and upstream or legal attribution; preserve those facts and real technical paths.",
+        ]
+      : []),
+    "",
+    SECURITY_NOTICE,
+  ].join("\n");
 
   return [identityLines, "", buildHarnessBlock()].join("\n");
 }

@@ -20,6 +20,7 @@ const USER_MESSAGE_VERTICAL_PADDING = 1;
 
 export function ContentPane({
   animateEmptyLogo = false,
+  applicationName,
   copy = DEFAULT_TUI_COPY,
   expandedWorkflowRunIds,
   emptyText,
@@ -30,6 +31,7 @@ export function ContentPane({
   workflowCardsByToolCallId,
 }: {
   animateEmptyLogo?: boolean;
+  applicationName?: string;
   copy?: TuiCopy;
   expandedWorkflowRunIds?: ReadonlySet<string>;
   emptyText?: string;
@@ -76,7 +78,11 @@ export function ContentPane({
       ? [
           emptyText
             ? h("text", { key: "empty", style: { fg: palette.muted } }, emptyText)
-            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, key: "empty-transcript-logo" }),
+            : h(EmptyTranscriptLogo, {
+                animated: animateEmptyLogo,
+                applicationName,
+                key: "empty-transcript-logo",
+              }),
         ]
       : messages.map((message, index) =>
           h(MessageRow, {

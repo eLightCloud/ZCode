@@ -1,5 +1,19 @@
 # TUI Copy Registry
 
+## Trusted startup display name
+
+The CLI resolves and validates the existing `ZCODE_APPLICATION_NAME` before
+calling `runTui`. Optional `TuiOptions.applicationName` is a process-local display
+parameter available on the first startup frame, including before login/runtime
+loading. `terminal.starting(applicationName?)` owns localized sentence structure
+and defaults to the native name. i18n never reads environment variables or
+mutates its catalogs. A bilingual display name is preserved as one string;
+command names, cwd, permissions and execution identities remain unchanged.
+The same name replaces the native ASCII wordmark in startup/empty transcripts
+and the sidebar title. Long sidebar labels use the existing display-width
+truncation while retaining space for the version. Unconfigured native builds
+retain their original wordmark; product names never replace workspace paths.
+
 > Superseded by the typed locale catalog described in
 > `docs/design/v2/i18n.md`. This file remains the historical TUI copy boundary
 > and still defines which TUI strings are presentation copy.

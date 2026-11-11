@@ -1641,6 +1641,38 @@ describe("context builder — workflow actor identity", () => {
 });
 
 describe("trusted application identity", () => {
+  it("carries bilingual identity through the assembled desktop prompt without rewriting paths", () => {
+    const productName = "翼辉睿观（eLight Vantage）";
+    const result = createContextBuilder({
+      workingDirectory: "/workspace/zcode",
+      envInfo: {
+        cwd: "/workspace/zcode",
+        platform: "linux",
+        shell: "bash",
+        osVersion: "fixture",
+        nodeVersion: "24",
+      },
+      productName,
+      presentationSurface: "zcode_desktop",
+      genUiOutputDirectory: "/workspace/.zcode/output",
+    }).build();
+    const text = result.systemMessages.map((message) => String(message.content)).join("\n");
+    expect(text).toContain(`You are ${productName}, an interactive coding agent`);
+    expect(text).toContain(`interactive ${productName} agent`);
+    expect(text).toContain(`# ${productName} Desktop Context`);
+    expect(text).toContain("appropriate supplied alias for the user's language");
+    expect(text).toContain("actual model/provider and upstream or legal attribution");
+    expect(text).toContain("/workspace/.zcode/output");
+    expect(text).not.toMatch(/interactive ZCode|ZCode Desktop Context/);
+  });
+
+  it.each(["", "   ", "x".repeat(81), "<identity>", "name\u0000", "name\u200b"])(
+    "rejects unsafe product identity %j",
+    (productName) => {
+      expect(() => buildCliPrefixSection(productName)).toThrow("Invalid application product name");
+    },
+  );
+
   it("brands only built-in identity and preserves caller-authored content", () => {
     expect(buildCliPrefixSection("Vantage").content).toBe(
       "You are Vantage, an interactive coding agent",

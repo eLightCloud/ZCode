@@ -1,5 +1,18 @@
 # Optional application admission
 
+## Distribution display identity
+
+The existing brand manifest's `displayName` and `applicationName` may be combined
+as a single bilingual display name in packaged `applicationBrand.name`.
+The Electron productName, app ID, executable and data directories remain governed
+by the existing desktop product identity. Development/Server launchers supply
+the same display string through `ZCODE_APPLICATION_NAME`. No new Agent identity
+field or protocol is introduced. CUA panel titles use this trusted display name;
+the draggable Helper keeps its real operating-system permission name.
+Official product-owned listing descriptions may be neutralized at their source.
+Guide display names and examples continue through the existing brand projection;
+third-party listings, authors, licenses, stable plugin IDs and paths are preserved.
+
 Trusted application catalogs may reuse the public `PluginStoreAvatar` beside the
 existing shared catalog row. Icon resolution, trusted custom artwork, decorative
 accessibility and the neutral Blocks default remain native-owned. Missing artwork

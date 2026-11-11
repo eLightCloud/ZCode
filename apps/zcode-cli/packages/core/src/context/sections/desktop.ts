@@ -1,12 +1,18 @@
 import type { ContextSection } from "../types.js";
 import { estimateTokens } from "../utils.js";
+import { resolveContextProductName } from "./cli-prefix.js";
 
-export function buildDesktopContextSection(genUiOutputDirectory?: string): ContextSection {
+export function buildDesktopContextSection(
+  genUiOutputDirectory?: string,
+  productName?: string,
+): ContextSection {
+  // Desktop 段与主身份使用同一可信显示名，避免辅助上下文重新引入原生产品自称。
+  const title = `${resolveContextProductName(productName)} Desktop Context`;
   return createDesktopSection(
-    "ZCode Desktop Context",
+    title,
     "desktop_context",
     [
-      "# ZCode Desktop Context",
+      `# ${title}`,
       "",
       "### Interactive views",
       ...(genUiOutputDirectory

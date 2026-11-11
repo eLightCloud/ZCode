@@ -69,6 +69,38 @@ function createMainOnlyConfigResult() {
 }
 
 describe("resolveAppRuntimeConfig", () => {
+  it.each([
+    { env: {}, explicit: undefined, expected: "ZCode", marker: "native" },
+    {
+      env: { ZCODE_APPLICATION_NAME: "翼辉睿观（eLight Vantage）" },
+      explicit: undefined,
+      expected: "翼辉睿观（eLight Vantage）",
+      marker: "application",
+    },
+    {
+      env: { ZCODE_APPLICATION_NAME: "environment" },
+      explicit: "trusted override",
+      expected: "trusted override",
+      marker: "application",
+    },
+  ])(
+    "resolves trusted display identity and records only its category: %j",
+    ({ env, explicit, expected, marker }) => {
+      const { runtimeConfig } = resolveAppRuntimeConfig({
+        cliStorageRoot: "/tmp/.zcode",
+        configResult: createConfigResult(),
+        options: { env, runtimeConfig: { productName: explicit } },
+        subagentOutputRootDir: "/tmp/.zcode/agents",
+        workingDirectory,
+      });
+      expect(runtimeConfig.productName).toBe(expected);
+      const log = runtimeConfigLogContext(runtimeConfig, workingDirectory);
+      expect(log.productIdentity).toBe(marker);
+      expect(log).not.toHaveProperty("productName");
+      expect(runtimeConfig.subagents?.outputRootDir).toBe("/tmp/.zcode/agents");
+    },
+  );
+
   it.each([undefined, [], ["/workspace/backend", "C:\\work\\shared folder"]])(
     "passes the current additional directories into runtime context: %j",
     (additionalDirectories) => {

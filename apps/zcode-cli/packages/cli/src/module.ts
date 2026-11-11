@@ -7,6 +7,7 @@ export const cliProcessEntryModule = {
   requires: [
     "cli-adapters",
     "cli-arguments",
+    "cli-tui",
     "provider-node",
     "shared",
     "sqlite-migrations",

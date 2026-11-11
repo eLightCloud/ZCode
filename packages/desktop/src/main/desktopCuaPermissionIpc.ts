@@ -275,7 +275,8 @@ function createDragPanelForSession(
     getSettingsBounds: () => watcher.latest(),
     stopSettingsBounds: () => watcher.stop(),
     getLocale,
-    getApplicationName: () => app.getName(),
+    // Main 已从可信发行元数据恢复显示名；不要为了浮窗标题更改系统应用身份。
+    getApplicationName: () => process.env.ZCODE_APPLICATION_NAME ?? app.getName(),
     // tile 用真实 ZCode 图标，与系统设置权限列表里那一行的图标对得上，用户才能把
     // 「要拖的东西」和「要出现在列表里的条目」对应起来。
     getIconDataUrl: () =>

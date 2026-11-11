@@ -228,7 +228,7 @@ export interface TuiCopy {
   };
   terminal: {
     requiresInteractive: string;
-    starting: string;
+    starting: (applicationName?: string) => string;
   };
   transcript: {
     compact: {

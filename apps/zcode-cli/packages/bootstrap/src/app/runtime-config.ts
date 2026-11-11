@@ -286,6 +286,8 @@ export function runtimeConfigLogContext(
       )
     : undefined;
   return {
+    productIdentity:
+      runtimeConfig.productName && runtimeConfig.productName !== "ZCode" ? "application" : "native",
     mcpEnabled: runtimeConfig.mcp?.enabled !== false,
     memoryEnabled: runtimeConfig.memory?.enabled !== false,
     memoryExtractionEnabled: runtimeConfig.memory?.extractionEnabled !== false,

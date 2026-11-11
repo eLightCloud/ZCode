@@ -130,7 +130,9 @@ export class ContextBuilder {
     // guidance——契约里已把 Report outcomes faithfully 搬过去），保留 memory 与其后各段。
     if (!hasCustomSystemPrompt) {
       if (!isWorkflowActor && this.config.presentationSurface === "zcode_desktop") {
-        sections.push(buildDesktopContextSection(this.config.genUiOutputDirectory));
+        sections.push(
+          buildDesktopContextSection(this.config.genUiOutputDirectory, this.config.productName),
+        );
       }
 
       // behaviour part right after stable sp...

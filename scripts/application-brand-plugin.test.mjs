@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 import { applicationBrandPlugin } from "./application-brand-plugin.mjs";
 import {
   resolveDesktopProductIdentity,
+  resolveDesktopApplicationDisplayName,
   resolveWindowsAppUserModelIdForFlavor,
 } from "../packages/desktop/scripts/desktop-product-identity.mjs";
 const fixture = await mkdtemp(resolve(tmpdir(), "application-brand-test-"));
@@ -130,10 +131,49 @@ test("application shell is selected at build time before Intl and remains option
     "\0zcode-application-root",
   );
   assert.match(code, /export \{ ApplicationShell \}/);
-  assert.ok(code.includes(manifest));
+  // 虚拟模块输出 JavaScript 字符串，Windows 反斜杠须按源码转义后核对。
+  assert.ok(code.includes(JSON.stringify(manifest)));
   assert.throws(
     () => applicationRootPlugin({ ZCODE_APPLICATION_SHELL_MODULE: "relative.tsx" }),
     /shell-unavailable/,
+  );
+});
+
+test("packaged bilingual display name preserves installation identity", async () => {
+  const bilingualManifest = resolve(fixture, "bilingual.json");
+  await writeFile(
+    bilingualManifest,
+    JSON.stringify({
+      schemaVersion: 1,
+      displayName: "翼辉睿观",
+      applicationName: "eLight Vantage",
+    }),
+  );
+  const script = `const c = (await import('./packages/desktop/electron-builder.config.js')).default; process.stdout.write(JSON.stringify({ productName: c.productName, brand: c.extraMetadata.applicationBrand }));`;
+  const value = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: new URL("..", import.meta.url),
+    env: {
+      ...process.env,
+      ZCODE_APPLICATION_NAME: "eLight Vantage",
+      ZCODE_APPLICATION_BRAND_MANIFEST: bilingualManifest,
+      ZCODE_APPLICATION_ID: "com.example.product",
+      ZCODE_APPLICATION_EXECUTABLE: "vantage",
+      ZCODE_APPLICATION_PACKAGE: "vantage",
+      ZCODE_ENV: "production",
+    },
+    encoding: "utf8",
+  });
+  const result = JSON.parse(value);
+  assert.equal(result.productName, "eLight Vantage");
+  assert.equal(result.brand.name, "翼辉睿观（eLight Vantage）");
+  assert.equal(
+    resolveDesktopApplicationDisplayName({ schemaVersion: 1, applicationName: "Example" }),
+    "Example",
+  );
+  assert.throws(
+    () =>
+      resolveDesktopApplicationDisplayName({ schemaVersion: 1, applicationName: "unsafe\nname" }),
+    /invalid-display-name/,
   );
 });
 

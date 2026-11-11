@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildExploreAgentPrompt } from "../src/subagent/explore.js";
 import {
   createBuiltInExploreAgentProfile,
   createBuiltInGeneralPurposeAgentProfile,
@@ -407,6 +408,17 @@ Review carefully.`,
 });
 
 describe("trusted product name for built-in agents", () => {
+  it("carries both display names into built-in subagents", () => {
+    const productName = "翼辉睿观（eLight Vantage）";
+    for (const prompt of [
+      buildExploreAgentPrompt({ productName }),
+      createBuiltInGeneralPurposeAgentProfile({ productName }).systemPrompt,
+    ]) {
+      expect(prompt).toContain(productName);
+      expect(prompt).not.toContain("for ZCode CLI");
+    }
+  });
+
   it("brands built-ins and keeps user overrides byte-for-byte", () => {
     expect(
       createBuiltInGeneralPurposeAgentProfile({ productName: "Vantage" }).systemPrompt,

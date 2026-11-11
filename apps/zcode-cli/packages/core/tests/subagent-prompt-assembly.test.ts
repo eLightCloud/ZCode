@@ -163,110 +163,114 @@ function expectNoInjectedAgentsMd(request: any): void {
 }
 
 describe("subagent provider-visible prompt assembly", () => {
-  it("assembles Explore child system messages with ZCode prefix, agent prompt, notes, and environment context", async () => {
-    const sessionId = createSessionId("subagent-prompt-explore");
-    const eventStore = createTestSessionEventStore();
-    const childRequests: any[] = [];
-    let parentCallCount = 0;
+  it.each([undefined, "翼辉睿观（eLight Vantage）"])(
+    "assembles Explore child identity %s with prompt, notes, and environment context",
+    async (productName) => {
+      const sessionId = createSessionId("subagent-prompt-explore");
+      const eventStore = createTestSessionEventStore();
+      const childRequests: any[] = [];
+      let parentCallCount = 0;
 
-    const runtime = createTestAgentRuntime(
-      sessionId,
-      {
-        mode: "build",
-        modelSelection: createTestModelSelection(createMainModelSelection()),
-        bashShellSelection: {
-          dialect: "git-bash",
-          display: { name: "Git Bash" },
-          path: "C:\\Program Files\\Git\\bin\\bash.exe",
-          source: "user-config",
+      const runtime = createTestAgentRuntime(
+        sessionId,
+        {
+          mode: "build",
+          productName,
+          modelSelection: createTestModelSelection(createMainModelSelection()),
+          bashShellSelection: {
+            dialect: "git-bash",
+            display: { name: "Git Bash" },
+            path: "C:\\Program Files\\Git\\bin\\bash.exe",
+            source: "user-config",
+          },
+          workingDirectory: "/Users/dev/Desktop/Z/z-code/apps/zcode-cli",
+          currentDate: "2026-06-04",
+          envInfo: {
+            cwd: "/Users/dev/Desktop/Z/z-code/apps/zcode-cli",
+            platform: "darwin",
+            shell: "zsh",
+            osVersion: "Darwin 24.3.0",
+            nodeVersion: "24.14.0",
+            isGitRepository: true,
+          },
         },
-        workingDirectory: "/Users/dev/Desktop/Z/z-code/apps/zcode-cli",
-        currentDate: "2026-06-04",
-        envInfo: {
-          cwd: "/Users/dev/Desktop/Z/z-code/apps/zcode-cli",
-          platform: "darwin",
-          shell: "zsh",
-          osVersion: "Darwin 24.3.0",
-          nodeVersion: "24.14.0",
-          isGitRepository: true,
-        },
-      },
-      {
-        contextSourcePort: createParentContextSourcePort(),
-        eventStore,
-        modelFactory: createTestModelFactory({
-          properties: { supportsNativeWebSearch: true },
-          async generateText(request: any) {
-            const toolNames = (request.tools ?? []).map((tool: any) => tool.name);
-            if (toolNames.includes("Agent")) {
-              parentCallCount++;
-              if (parentCallCount === 1) {
-                return {
-                  finishReason: "tool-calls",
-                  text: "",
-                  toolCalls: [
-                    {
-                      id: "call_explore",
-                      name: "Agent",
-                      input: {
-                        description: "Find runtime loop",
-                        prompt: "Find where the runtime injects tool results.",
-                        subagent_type: "Explore",
+        {
+          contextSourcePort: createParentContextSourcePort(),
+          eventStore,
+          modelFactory: createTestModelFactory({
+            properties: { supportsNativeWebSearch: true },
+            async generateText(request: any) {
+              const toolNames = (request.tools ?? []).map((tool: any) => tool.name);
+              if (toolNames.includes("Agent")) {
+                parentCallCount++;
+                if (parentCallCount === 1) {
+                  return {
+                    finishReason: "tool-calls",
+                    text: "",
+                    toolCalls: [
+                      {
+                        id: "call_explore",
+                        name: "Agent",
+                        input: {
+                          description: "Find runtime loop",
+                          prompt: "Find where the runtime injects tool results.",
+                          subagent_type: "Explore",
+                        },
                       },
-                    },
-                  ],
-                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    ],
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  };
+                }
+                return {
+                  finishReason: "stop",
+                  text: "parent used explore result",
+                  usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
                 };
               }
+              childRequests.push(request);
               return {
                 finishReason: "stop",
-                text: "parent used explore result",
-                usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+                text: "Explore found the runtime path.",
+                usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
               };
-            }
-            childRequests.push(request);
-            return {
-              finishReason: "stop",
-              text: "Explore found the runtime path.",
-              usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
-            };
-          },
-        } as never),
-      },
-    );
+            },
+          } as never),
+        },
+      );
 
-    await runtime.executeTurn("Use an explore agent for this question");
+      await runtime.executeTurn("Use an explore agent for this question");
 
-    expect(childRequests).toHaveLength(1);
-    expectSystemMessagesCached(childRequests[0]);
-    const systems = systemContents(childRequests[0]);
-    expect(systems.map((content) => content.endsWith("\n"))).toEqual([false, false]);
-    expect(systems[0]).toBe("You are ZCode, an interactive coding agent");
-    expect(systems[1]).toMatch(/^\nYou are ZCode Explore/u);
-    expect(systems[1]).toContain("READ-ONLY MODE");
-    expect(systems[1]).toContain("\n\nNotes:");
-    expect(systems[1]).toContain("Agent threads always have their cwd reset between bash calls");
-    expect(systems[1]).toContain("the parent agent reads your text output");
-    expect(systems[1]).toContain(
-      "\n\nHere is useful information about the environment you are running in:",
-    );
-    expect(systems[1]).toContain("Working directory: /Users/dev/Desktop/Z/z-code/apps/zcode-cli");
-    expect(systems[1]).toContain("Is directory a git repo: Yes");
-    expect(systems[1]).toContain("Platform: darwin");
-    expect(systems[1]).toContain("Shell: Git Bash");
-    expect(systems[1]).toContain("OS Version: Darwin 24.3.0");
-    expect(systems[1]).toContain(
-      "You are powered by the model named anthropic/claude-haiku-4-5-20251001-cc.",
-    );
+      expect(childRequests).toHaveLength(1);
+      expectSystemMessagesCached(childRequests[0]);
+      const systems = systemContents(childRequests[0]);
+      expect(systems.map((content) => content.endsWith("\n"))).toEqual([false, false]);
+      expect(systems[0]).toBe(`You are ${productName ?? "ZCode"}, an interactive coding agent`);
+      expect(systems[1].startsWith(`\nYou are ${productName ?? "ZCode"} Explore`)).toBe(true);
+      expect(systems[1]).toContain("READ-ONLY MODE");
+      expect(systems[1]).toContain("\n\nNotes:");
+      expect(systems[1]).toContain("Agent threads always have their cwd reset between bash calls");
+      expect(systems[1]).toContain("the parent agent reads your text output");
+      expect(systems[1]).toContain(
+        "\n\nHere is useful information about the environment you are running in:",
+      );
+      expect(systems[1]).toContain("Working directory: /Users/dev/Desktop/Z/z-code/apps/zcode-cli");
+      expect(systems[1]).toContain("Is directory a git repo: Yes");
+      expect(systems[1]).toContain("Platform: darwin");
+      expect(systems[1]).toContain("Shell: Git Bash");
+      expect(systems[1]).toContain("OS Version: Darwin 24.3.0");
+      expect(systems[1]).toContain(
+        "You are powered by the model named anthropic/claude-haiku-4-5-20251001-cc.",
+      );
 
-    const text = allMessageText(childRequests[0]);
-    expect(text).not.toContain(
-      "You help the user with software engineering work in the current workspace.",
-    );
-    expect(text).not.toContain("# user_instructions");
-    expect(text).not.toContain("Project context:");
-    expectNoInjectedAgentsMd(childRequests[0]);
-  });
+      const text = allMessageText(childRequests[0]);
+      expect(text).not.toContain(
+        "You help the user with software engineering work in the current workspace.",
+      );
+      expect(text).not.toContain("# user_instructions");
+      expect(text).not.toContain("Project context:");
+      expectNoInjectedAgentsMd(childRequests[0]);
+    },
+  );
 
   it("adds common notes and environment context to general-purpose child prompts", async () => {
     const sessionId = createSessionId("subagent-prompt-general-purpose");

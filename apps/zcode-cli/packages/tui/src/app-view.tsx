@@ -127,6 +127,7 @@ export function AppView(props: {
   const actionSelection = props.selection && !composerSelection ? props.selection : undefined;
   const sidebar = props.sidebarLayout.visible
     ? h(Sidebar, {
+        applicationName: props.options.applicationName,
         subagents: props.subagents,
         onOpenSubagent: (item: SubagentItem) => {
           props.subagents?.open(item);
@@ -180,6 +181,7 @@ export function AppView(props: {
         style: { flexDirection: "column", flexGrow: 1, minHeight: 0 },
       },
       h(ContentPane, {
+        applicationName: props.options.applicationName,
         id: "main-transcript",
         animateEmptyLogo: !props.options.noColor,
         copy: props.copy,

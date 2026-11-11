@@ -83,6 +83,30 @@ export function resolveDesktopProductIdentity(env = process.env) {
   });
 }
 
+/** Display metadata is independent of the package name and its data directory. */
+export function resolveDesktopApplicationDisplayName(manifest) {
+  const { applicationName } = manifest;
+  const displayName = manifest.displayName ?? applicationName;
+  if (
+    manifest.schemaVersion !== 1 ||
+    typeof displayName !== "string" ||
+    typeof applicationName !== "string"
+  ) {
+    throw new Error("application-brand.invalid-display-name");
+  }
+  const name =
+    displayName === applicationName ? applicationName : `${displayName}（${applicationName}）`;
+  if (
+    !displayName.trim() ||
+    !applicationName.trim() ||
+    name.length > 80 ||
+    /[\p{Cc}\p{Cf}<>]/u.test(name)
+  ) {
+    throw new Error("application-brand.invalid-display-name");
+  }
+  return name;
+}
+
 /**
  * 产物文件名后缀标记的是后端环境而不是身份：`_TEST` 只出现在测试后端的安装包上。
  * 生产后端的 Preview 包靠 productName（`ZCode Preview-<version>-...`）与正式包区分。

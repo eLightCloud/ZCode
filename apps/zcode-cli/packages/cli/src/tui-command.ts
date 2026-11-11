@@ -1,4 +1,5 @@
 import type { ToolSearchMode } from "@zcode/contracts";
+import { resolveContextProductName } from "@zcode/core";
 import type { RunContext, GlobalOptions } from "@zcode/shared-types";
 import { resolveZCodeRuntimeEnv, type DynamicWorkflowMode } from "@zcode/shared";
 import { createNodeClipboardImageReader } from "./clipboard-image.js";
@@ -32,6 +33,8 @@ export const runTuiCommand = async (
     const runTui = deps.runTui ?? (await loadTuiRuntime()).runTui;
     const workspaceDirectory = (deps.cwd ?? process.cwd)();
     const env = deps.env ?? process.env;
+    // 首屏先于 runtime 加载；在入口校验品牌，避免登录前仍显示原生名称。
+    const applicationName = resolveContextProductName(env.ZCODE_APPLICATION_NAME);
     const developerMode = resolveZCodeRuntimeEnv(env) === "development";
     const startupLocale = resolveTuiStartupLocale({
       deps,
@@ -85,6 +88,7 @@ export const runTuiCommand = async (
           };
         },
         locale: startupLocale,
+        applicationName,
         developerMode,
         version,
         workspaceDirectory,

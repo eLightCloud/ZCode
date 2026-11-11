@@ -284,7 +284,7 @@ Slash Commands:
       turnFailed: "本轮失败。",
     },
     terminal: {
-      starting: "正在启动 ZCode… Ctrl+C 退出",
+      starting: (applicationName = "ZCode") => `正在启动 ${applicationName}… Ctrl+C 退出`,
       requiresInteractive: "TUI 需要交互式终端。",
     },
     transcript: {

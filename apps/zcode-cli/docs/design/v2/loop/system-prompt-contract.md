@@ -6,13 +6,13 @@ to make repository work evidence-first without mirroring runtime tool schemas.
 
 ## Goals
 
-- Fix the agent identity to `zcode-agent`; callers must not compose identity
-  text through runtime agent metadata.
+- Keep execution identities unchanged. Trusted bootstrap metadata may supply
+  `productName` for display identity; user input and agent metadata cannot set it.
 - Make "read before deciding" the default behavior for repository tasks.
 - Define clear safety, validation, communication, and scope boundaries with
   concrete examples.
-- Keep stable prompt copy English-only so prompt behavior is consistent across
-  locales.
+- Keep stable behavioral instructions in English so prompt behavior is consistent
+  across locales; trusted product display names may include bilingual aliases.
 - Keep tool schemas, project instructions, skills, and current date outside the
   default system blocks; keep the static/global-cache body separate from the
   dynamic/org-cache body.
@@ -24,8 +24,16 @@ to make repository work evidence-first without mirroring runtime tool schemas.
 | Static Default Body  | ZCode role, authorized-security boundary, and compact harness guidance.                                                            |
 | Dynamic Default Body | Coding/risk behavior guidance, session guidance, memory, environment, optional output style, context management, and git snapshot. |
 
-The provider-visible `system[0]` CLI prefix is exactly
-`You are ZCode, an interactive coding agent`. The provider-visible static
+The provider-visible `system[0]` CLI prefix is
+`You are <productName>, an interactive coding agent`, with `ZCode` as the native
+default. Explicit runtime configuration precedes `ZCODE_APPLICATION_NAME`.
+Names may contain Unicode and bilingual aliases in one string, but must be
+nonempty after trimming, at most 80 characters, and contain no control/format
+characters or angle brackets. Invalid names fail bootstrap. Display identity is
+not a model/provider identity, an authorization claim, or a filesystem path.
+The same validated name reaches built-in subagents and Desktop context headings.
+Product-owned auxiliary reminders use neutral wording; custom prompts, history,
+technical names, legal text and actual paths are not rewritten. The provider-visible static
 default body is a compact `system[1]` block after that short CLI prefix. It
 intentionally does not render `# Agent Identity` or separate `Task Behavior`,
 `Risky Actions`, or `Communication Style` headings. The legacy `task_behavior`,
@@ -33,7 +41,7 @@ intentionally does not render `# Agent Identity` or separate `Task Behavior`,
 active context contract. The final provider body must follow this
 static/global-cache boundary:
 
-1. Short ZCode software-engineering-agent intro with no heading.
+1. Short software-engineering-agent intro using the trusted display name, with no heading.
 2. Authorized security boundary.
 3. `# Harness` section for terminal markdown, permission denial handling,
    system-controlled mid-conversation updates and hook feedback, dedicated tool

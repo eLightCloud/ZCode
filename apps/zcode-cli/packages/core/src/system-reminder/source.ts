@@ -48,6 +48,7 @@ export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "runtime_mode",
   "plan_mode_exit",
   "output_style",
+  "product_identity",
   "date_change",
   "referenced_session_context",
   "model_anomaly",
@@ -113,6 +114,7 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   runtime_mode: descriptor("current_turn", "per_current_turn", true, "sr.runtime_mode"),
   plan_mode_exit: descriptor("current_turn", "runtime_local", true, "sr.plan_mode_exit"),
   output_style: descriptor("current_turn", "per_current_turn", true, "sr.output_style"),
+  product_identity: descriptor("current_turn", "per_current_turn", true, "sr.product_identity"),
   date_change: descriptor("current_turn", "runtime_local", true, "sr.date_change"),
   referenced_session_context: descriptor(
     "current_turn",

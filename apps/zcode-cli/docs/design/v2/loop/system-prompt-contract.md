@@ -32,6 +32,23 @@ nonempty after trimming, at most 80 characters, and contain no control/format
 characters or angle brackets. Invalid names fail bootstrap. Display identity is
 not a model/provider identity, an authorization claim, or a filesystem path.
 The same validated name reaches built-in subagents and Desktop context headings.
+For a branded application, the current trusted display name is authoritative on
+both new and resumed turns. It names the assistant itself, not only its host
+application or repository. Earlier assistant self-introductions and reasoning
+are historical output, not current system instructions; repository descriptions,
+directory names and upstream frameworks cannot redefine that identity.
+Ordinary self-introductions use the supplied name without volunteering
+an upstream product name; explicit technical, provenance and legal questions
+remain factual. Resume keeps the original transcript intact and rebuilds the
+current identity in system context instead of rewriting historical messages.
+The main runtime also attaches the same branded identity rules through the existing
+`product_identity` current-turn system reminder at the first model step of each
+turn. This supplies current identity after older conversation/ reasoning output;
+it is model-only, stays in turn-local request entries without accumulating in
+canonical history or session persistence, and uses the existing reminder
+lifecycle and `sr.product_identity` evidence label. No separate identity state is
+stored. Native default runs, custom system prompts, workflow actors and profile
+subagents retain their existing identity contracts without this reminder.
 Product-owned auxiliary reminders use neutral wording; custom prompts, history,
 technical names, legal text and actual paths are not rewritten. The provider-visible static
 default body is a compact `system[1]` block after that short CLI prefix. It

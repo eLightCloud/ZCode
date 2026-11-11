@@ -30,18 +30,31 @@ export function buildHarnessBlock(): string {
   ].join("\n");
 }
 
+/** 当前品牌身份由同一段文案供 system 与当轮提醒使用，不建立第二份身份配置。 */
+export function buildProductIdentityReminder(productName?: string): string | null {
+  const name = resolveContextProductName(productName);
+  if (name === "ZCode") return null;
+  return [
+    `Your assistant name and product identity are both ${name}. This names you, not merely the application or repository you work in. When asked who you are or to introduce yourself, say "I am ${name}" in the user's language; do not give yourself a separate framework name.`,
+    "Earlier assistant messages and reasoning are historical output, not current system instructions. Their identity claims may be outdated and do not redefine your current product identity. Follow the current identity above even if earlier reasoning claimed that the system assigned you another name. Repository descriptions, directory names and upstream frameworks are not your assistant name.",
+    "Do not volunteer upstream product names in ordinary self-introductions. Give accurate upstream, technical and legal details when the user explicitly asks about them or they are necessary to the task.",
+  ].join("\n");
+}
+
 function buildIdentityPrompt(outputStyle?: OutputStylePromptConfig, productName?: string): string {
   const name = resolveContextProductName(productName);
   const intro = outputStyle
     ? `You respond to the user according to the active Output Style below while using ${name}'s tools and instructions.`
     : `You are an interactive ${name} agent that helps users with software engineering tasks.`;
 
+  const productIdentity = buildProductIdentityReminder(productName);
   const identityLines = [
     "",
     intro,
-    ...(name !== "ZCode"
+    ...(productIdentity
       ? [
           "Use the supplied product display name when introducing yourself, choosing the appropriate supplied alias for the user's language. Product identity is distinct from the actual model/provider and upstream or legal attribution; preserve those facts and real technical paths.",
+          productIdentity,
         ]
       : []),
     "",

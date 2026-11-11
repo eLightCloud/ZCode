@@ -38,6 +38,7 @@ import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
 import { filterOutputTokenContinuationEntries } from "./turn-output-token-continuation.js";
 import { refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
 import { buildToolSearchAnnouncement } from "../../tool/model-surface-api.js";
+import { buildProductIdentityReminder } from "../../context/index.js";
 
 export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,
@@ -186,6 +187,20 @@ async function runRegularTurnLoopIteration(
     // 需要进入内存历史参与后续 request 的增量轨迹；但不把它落 session。
     commitTurnRequestEntries(this, state.turnRequestState, [
       systemReminderAttachmentEntry("output_style", outputStyleReminderBody),
+    ]);
+  }
+  const productIdentityReminder =
+    state.modelStepCount === 0 &&
+    !this.config.systemPrompt?.trim() &&
+    this.config.workflowActor === undefined &&
+    !this.config.subagentContext
+      ? buildProductIdentityReminder(this.config.productName)
+      : null;
+  if (productIdentityReminder) {
+    // 实测旧会话即使收到新 system 仍沿用历史自称；复用当轮提醒在旧历史之后重申可信身份。
+    // 仅加入 turn-local 请求，不写 canonical history，避免每轮累积同一提醒。
+    appendTurnRequestEntries(state.turnRequestState, [
+      systemReminderAttachmentEntry("product_identity", productIdentityReminder),
     ]);
   }
   if (!outputTokenRecoveryActive) {

@@ -69,6 +69,11 @@ Renderer：未提交草稿 + pending optimistic overlay
 
 ## 运行时证据
 
+自动化私有 Host 准入可返回 `{ state: "admitted", context, refreshConfiguration: true }`，
+仅在本次资源准备要求重装配置时使用。dispatcher 将此一次性选项传给已有会话的 resumeTask；
+仅有 automationId、无 Host 或只有附件均不强制刷新。选项不得进入任务定位缓存或规则持久化，
+不得从 prompt 推断。新会话按当前配置创建；已有会话继续遵守 resident pool 的独占、空闲和关闭失败屏障。
+
 - RPC 通道使用 [LoggingChannelServer / LoggingChannelClient](../../packages/rpc/src/logging-middleware.ts) 记录频道、命令和耗时；优先利用已有日志定位调用链。
 - 独立 Server Core 的低敏 Application Host / RPC 故障诊断保存在 `<serverRoot>/run/core.log`，每份最多 1 MiB，保留 `.1` / `.2` 两份轮转；队列上限 64 KiB，溢出计数可见，退出尝试有界 flush。Core 只接收事件字段白名单，不开放任意 stdout/stderr、参数、结果或异常正文。RPC 失败提升为 warning，普通成功仍为 debug；Host 开始 / 完成 / 失败使用同一关联 ID，包含方法、结果、耗时及准确 UUID 格式的原 commandId / sessionId。详见 [Core 诊断规范](../../specs/server-core-diagnostics.md)。
 - Agent session 轨迹在 `~/.zcode/cli/rollout` 或 `~/.zcode/cli/debug`，CLI 日志在 `~/.zcode/cli/log`。

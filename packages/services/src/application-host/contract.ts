@@ -11,6 +11,8 @@ export type ApplicationAutomationAdmission =
   | { state: "blocked"; reason: "authorization_required" }
   | {
       state: "admitted";
+      /** One-use preparation hint from the trusted Host, never inferred from automationId. */
+      refreshConfiguration?: true;
       context: { filename: string; text: string };
     };
 export interface ApplicationHostControlPort {

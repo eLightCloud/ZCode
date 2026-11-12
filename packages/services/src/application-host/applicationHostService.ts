@@ -26,7 +26,7 @@ export function createApplicationHostService(options: {
   runtime?: ConversationRuntimePort;
   projects?: Pick<IProjectService, "readProjects">;
   models?: Pick<IModelSelectionService, "getView">;
-  mcp?: Pick<IMcpSyncService, "saveMcpToUserDirectory">;
+  mcp?: Pick<IMcpSyncService, "saveMcpToUserDirectory" | "loadMcpFromUserDirectory">;
   credentials: ICredentialService;
   storageRoot: string;
   modulePath?: string;
@@ -180,6 +180,7 @@ export function createApplicationHostService(options: {
           typeof result === "object" &&
           result !== null &&
           result.state === "admitted" &&
+          (result.refreshConfiguration === undefined || result.refreshConfiguration === true) &&
           result.context &&
           typeof result.context.filename === "string" &&
           /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$/.test(result.context.filename) &&
@@ -202,6 +203,10 @@ export function createApplicationHostService(options: {
           outcome: typeof result === "string" ? result : result.state,
           runId: input.inputId,
           automationId: input.automationId,
+          refreshConfiguration:
+            typeof result === "object" &&
+            result.state === "admitted" &&
+            result.refreshConfiguration === true,
         });
         return result;
       } catch {

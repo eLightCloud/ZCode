@@ -188,6 +188,8 @@ describe("Application Host lifecycle", () => {
       async control(method){return {state:method};},
       async beforeAutomationInput(input){
         if(input.automationId==='context') return {state:'admitted',context:{filename:'business.json',text:'{"fixed":true}'}};
+        if(input.automationId==='refresh') return {state:'admitted',refreshConfiguration:true,context:{filename:'business.json',text:'{}'}};
+        if(input.automationId==='invalid-refresh') return {state:'admitted',refreshConfiguration:'true',context:{filename:'business.json',text:'{}'}};
         if(input.automationId==='authorization') return {state:'blocked',reason:'authorization_required'};
         if(input.automationId==='unsafe') return {state:'blocked',reason:'private details'};
         if(input.automationId==='large') return {state:'admitted',context:{filename:'business.json',text:'x'.repeat(16385)}};
@@ -234,6 +236,16 @@ describe("Application Host lifecycle", () => {
       expect(await privatePort.beforeAutomationInput({ ...input, automationId: "invalid" })).toBe(
         "unavailable",
       );
+      expect(
+        await privatePort.beforeAutomationInput({ ...input, automationId: "refresh" }),
+      ).toEqual({
+        state: "admitted",
+        refreshConfiguration: true,
+        context: { filename: "business.json", text: "{}" },
+      });
+      expect(
+        await privatePort.beforeAutomationInput({ ...input, automationId: "invalid-refresh" }),
+      ).toBe("unavailable");
     } finally {
       await service.dispose();
       await rm(root, { recursive: true, force: true });

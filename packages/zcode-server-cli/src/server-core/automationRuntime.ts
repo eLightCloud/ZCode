@@ -39,15 +39,18 @@ export function startServerAutomationRuntime(
         throw new AutomationDispatchConfigurationError("application_admission_denied");
       if (outcome === "unavailable") throw new Error("Application admission unavailable");
       if (outcome && typeof outcome === "object" && outcome.state === "admitted")
-        return [
-          {
-            kind: "file" as const,
-            filename: outcome.context.filename,
-            mimeType: "application/json",
-            sizeBytes: Buffer.byteLength(outcome.context.text),
-            textContent: outcome.context.text,
-          },
-        ];
+        return {
+          ...(outcome.refreshConfiguration === true ? { refreshConfiguration: true as const } : {}),
+          attachments: [
+            {
+              kind: "file" as const,
+              filename: outcome.context.filename,
+              mimeType: "application/json",
+              sizeBytes: Buffer.byteLength(outcome.context.text),
+              textContent: outcome.context.text,
+            },
+          ],
+        };
     },
     resolveServices(request) {
       // Server Core 没有 Desktop 的 RemoteConnectionRegistry；远端目标不能退到本机。

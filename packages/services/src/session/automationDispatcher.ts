@@ -45,9 +45,10 @@ export function createAutomationDispatcher(options: {
   repo: AutomationRepo;
   resolveServices(request: AutomationDispatchRequest): ServiceCollection;
   clientMode: ZCodeTaskClientMode;
-  beforeAutomationInput?(
-    input: AutomationInputAdmission,
-  ): Promise<readonly ZCodePromptAttachment[] | void>;
+  beforeAutomationInput?(input: AutomationInputAdmission): Promise<{
+    attachments?: readonly ZCodePromptAttachment[];
+    refreshConfiguration?: true;
+  } | void>;
   logWarn(message: string, error: unknown, diagnostic?: AutomationDiagnostic): void;
   onSessionCreated?(event: {
     sessionId: string;
@@ -281,7 +282,7 @@ export function createAutomationDispatcher(options: {
     const scheduledAt = parseCronRunScheduledAt(request.runId, request.automationId);
     let preparationStage: "resume" | "configure" | undefined;
     try {
-      const attachments = await options.beforeAutomationInput?.({
+      const prepared = await options.beforeAutomationInput?.({
         automationId: request.automationId,
         inputId: request.runId,
         workspacePath: request.workspacePath,
@@ -290,6 +291,7 @@ export function createAutomationDispatcher(options: {
         modelSelection: submissionModelSelection,
         mode: request.mode,
       });
+      const attachments = prepared?.attachments;
       const task = request.targetTaskId
         ? { taskId: request.targetTaskId }
         : await zcodeTaskService.createTask({
@@ -311,6 +313,7 @@ export function createAutomationDispatcher(options: {
         // setConfig/sendPrompt 会立即报 Session is not active，看起来像「立即运行」没有触发。
         preparationStage = "resume";
         await zcodeTaskService.resumeTask({
+          ...(prepared?.refreshConfiguration === true ? { refreshConfiguration: true } : {}),
           taskId: task.taskId,
           additionalDirectories: request.additionalDirectories,
           workspacePath: request.workspacePath,

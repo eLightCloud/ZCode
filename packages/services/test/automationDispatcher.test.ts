@@ -362,7 +362,7 @@ it("passes admitted context through native attachments without changing the fixe
       sizeBytes: 14,
     },
   ];
-  const f = await fixture(false, "controlled", async () => attachments);
+  const f = await fixture(false, "controlled", async () => ({ attachments }));
   await f.dispatcher.dispatch(f.request);
   expect(f.service.sendPrompt).toHaveBeenCalledWith(
     expect.objectContaining({

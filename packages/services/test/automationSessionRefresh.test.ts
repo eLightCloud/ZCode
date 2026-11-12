@@ -19,7 +19,11 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function fixture(warm: boolean, clientMode: "desktop-continuous" | "web-remote-replayable") {
+async function fixture(
+  warm: boolean,
+  clientMode: "desktop-continuous" | "web-remote-replayable",
+  refresh = true,
+) {
   const directory = await mkdtemp(join(tmpdir(), "automation-refresh-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const repo = new AutomationRepo(join(directory, "tasks-index.sqlite"));
@@ -150,7 +154,7 @@ async function fixture(warm: boolean, clientMode: "desktop-continuous" | "web-re
     resolveServices: () => services,
     clientMode,
     logWarn: vi.fn(),
-    beforeAutomationInput: async () => [],
+    beforeAutomationInput: async () => (refresh ? { refreshConfiguration: true } : undefined),
   });
   cleanups.push(() => dispatcher.dispose());
   async function dispatch(manual = false) {
@@ -191,6 +195,17 @@ async function fixture(warm: boolean, clientMode: "desktop-continuous" | "web-re
 }
 
 describe("automation session refresh request lifetime", () => {
+  it.each(["desktop-continuous", "web-remote-replayable"] as const)(
+    "does not refresh ordinary automation on %s, even when resident refresh is busy",
+    async (mode) => {
+      const f = await fixture(true, mode, false);
+      f.busy();
+      await f.dispatch();
+      await f.dispatch(true);
+      expect(f.resume.mock.calls.every(([p]) => p.refreshConfiguration === undefined)).toBe(true);
+      expect(f.command.mock.calls.filter(([p]) => p.envelope.type === "sendText")).toHaveLength(2);
+    },
+  );
   it.each([
     [false, "desktop-continuous"],
     [true, "desktop-continuous"],

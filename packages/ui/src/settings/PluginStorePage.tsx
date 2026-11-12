@@ -735,6 +735,7 @@ export function PluginStorePage({
                 id: "settings.plugins.store.manageInstalled",
               })}
             </Button>
+            {applicationSection?.headerActions}
           </div>
         </div>
       ) : null}

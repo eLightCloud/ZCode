@@ -2457,7 +2457,7 @@ export function createZCodeTaskServiceAdapter(
       const model = explicitModel || indexHints.model;
       const thoughtLevel = explicitThoughtLevel || indexHints.thoughtLevel;
       const restored = await resumeSnapshotOrLegacy({
-        ...(params.automationId ? { refreshConfiguration: true } : {}),
+        ...(params.refreshConfiguration === true ? { refreshConfiguration: true } : {}),
         taskId: params.taskId,
         workspacePath: params.workspacePath,
         workspaceIdentity: params.workspaceIdentity,

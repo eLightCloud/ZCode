@@ -29,6 +29,15 @@ group; native remains the only owner of installation, enablement and runtime.
 Regression evidence covers managed hide / republish, community grouping, private
 source preservation, no assembly, installed management and acquisition rejection.
 
+## Optional storefront header actions
+
+Trusted assembly may provide `ApplicationPluginStoreSection.headerActions` as a
+React node. The storefront renders it after the native management button for all
+segments, independently of application-segment visibility or workspace readiness.
+The assembly owns its content and actions; the slot grants no native install,
+execution or resource authority. Without this optional node the native toolbar
+is unchanged. Details and installed-management views do not render the slot.
+
 ## Bilingual display names
 
 Application catalog entries may carry `nameZh` and `nameEn`, distinct from native

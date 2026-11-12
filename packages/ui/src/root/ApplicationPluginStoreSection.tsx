@@ -22,6 +22,8 @@ export interface ApplicationPluginDiscoveryCatalog {
 }
 
 export interface ApplicationPluginStoreSection {
+  /** Optional storefront actions, independent of application-segment visibility. */
+  headerActions?: ReactNode;
   /** Presentation only; the application server still authorizes every request. */
   visible?: boolean;
   beforeCreate?: (

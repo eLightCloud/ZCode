@@ -410,6 +410,8 @@ export interface IZCodeTaskService {
 
   /** 恢复已有 task（复用 workspace 级 agent 进程，如无则创建，再执行 session/load） */
   resumeTask(params: {
+    /** One-use configuration preparation; never cached as task identity. */
+    refreshConfiguration?: true;
     taskId: string;
     workspacePath: string;
     workspaceIdentity?: string;

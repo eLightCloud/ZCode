@@ -38,8 +38,12 @@ application or repository. Earlier assistant self-introductions and reasoning
 are historical output, not current system instructions; repository descriptions,
 directory names and upstream frameworks cannot redefine that identity.
 Ordinary self-introductions use the supplied name without volunteering
-an upstream product name; explicit technical, provenance and legal questions
-remain factual. Resume keeps the original transcript intact and rebuilds the
+an upstream product name, including as a host, workbench, framework or engine
+attribution such as "running in ZCode". Describe the environment as "this
+workspace" or "this application"; product names found in tools, skills, memory
+and project instructions do not require attribution in an ordinary introduction.
+Explicit technical, provenance and legal questions remain factual, as do the
+actual model/provider identity and technical paths. Resume keeps the original transcript intact and rebuilds the
 current identity in system context instead of rewriting historical messages.
 The main runtime also attaches the same branded identity rules through the existing
 `product_identity` current-turn system reminder at the first model step of each

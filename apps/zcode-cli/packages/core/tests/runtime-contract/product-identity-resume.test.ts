@@ -22,14 +22,20 @@ describe("trusted product identity after resume", () => {
     { productName: undefined, systemPrompt: undefined },
     { productName: "ZCode", systemPrompt: undefined },
     { productName: "翼辉睿观（eLight Vantage）", systemPrompt: undefined },
+    {
+      productName: "翼辉睿观（eLight Vantage）",
+      systemPrompt: undefined,
+      legacyIntroduction:
+        "你好，我是翼辉睿观（eLight Vantage），运行在 ZCode 里的交互式软件工程代理。",
+    },
     { productName: "翼辉睿观（eLight Vantage）", systemPrompt: "You are a custom helper." },
   ])(
     "assembles current identity $productName with custom prompt $systemPrompt while preserving history",
-    async ({ productName, systemPrompt }) => {
+    async ({ productName, systemPrompt, legacyIntroduction: introduction }) => {
       const sessionId = createSessionId("product-identity-resume");
       const userId = createMessageId("identity-question");
       const assistantId = createMessageId("legacy-introduction");
-      const legacyIntroduction = "我是 ZCode，当前在翼辉睿观项目中协助你。";
+      const legacyIntroduction = introduction ?? "我是 ZCode，当前在翼辉睿观项目中协助你。";
       const legacyReasoning = "The system says You are ZCode, an interactive coding agent.";
       const session: SessionInfo = {
         id: sessionId,
@@ -161,6 +167,13 @@ describe("trusted product identity after resume", () => {
           conversation.lastIndexOf(legacyReasoning),
         );
         expect(conversation.split(identityRule)).toHaveLength(2);
+        // MiniMax 曾在正确名称后追加宿主名称；系统段与当轮提醒都必须覆盖这种归因。
+        for (const projectedText of [systemText, conversation]) {
+          expect(projectedText).toContain("host, workbench, framework, engine");
+          expect(projectedText).toContain("this workspace");
+          expect(projectedText).toContain("running in ZCode");
+          expect(projectedText).toContain("when the user explicitly asks");
+        }
       } else {
         expect(conversation).not.toContain(identityRule);
       }

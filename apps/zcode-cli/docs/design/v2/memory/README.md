@@ -596,6 +596,12 @@ tools 不因受限执行策略被裁剪。工具在执行前按以下窄策略�
 tool calls 仍执行，但不再发起第 6 次模型请求。每次 provider attempt 前刷新 runtime headers。
 失败不重试。
 
+每次实际开始执行的 Extraction 有 5 分钟总时限（manifest、模型和工具共用），不计 latest-pending
+等待时间。到期通过本次专属 AbortController 取消，沿原 adapter 收口后由 scheduler 释放 running；
+不直接清除 residency 标记，不关闭整个 scheduler，也不推进失败快照的 cursor。之后的 latest-pending
+仍可正常消费。记录带原 session/trace 的 `memory.extraction` started/completed/failed/cancelled 事件，
+超时原因固定为 `deadline_exceeded`，不记录正文。session close 的取消优先于期限归因。
+
 prompt 的 no-op 响应逐字为 `Nothing to save.`。scheduler 不解析该文本来推导额外状态。
 
 ZCode 关闭单个 session 后 app-server 仍继续承载其他 session，session close 不等于进程退出，

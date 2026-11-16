@@ -107,6 +107,55 @@ async function fixture(
 }
 
 describe("native shared automation dispatcher", () => {
+  it("reserves the run session before creation and reuses it after a lost create reply", async () => {
+    const f = await fixture();
+    const ids: string[] = [];
+    f.service.createTask.mockImplementation(async (...args: unknown[]) => {
+      const params = args[0] as { sessionId: string };
+      expect((await f.repo.getRun(f.request.runId))?.sessionId).toBe(params.sessionId);
+      ids.push(params.sessionId);
+      if (ids.length === 1) throw new Error("lost create reply");
+      return { taskId: params.sessionId };
+    });
+    await expect(f.dispatcher.dispatch(f.request)).rejects.toThrow("lost create reply");
+    const recovered = await f.dispatcher.dispatch(f.request);
+    expect(ids).toEqual([recovered.sessionId, recovered.sessionId]);
+    expect(f.service.sendPrompt).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        taskId: recovered.sessionId,
+        traceId: f.request.runId,
+      }),
+    );
+    expect(f.report).not.toHaveBeenCalled();
+  });
+
+  it("keeps the fixed session through cold repo reopen and gives a new run a new identity", async () => {
+    const f = await fixture();
+    const firstId = await f.repo.fixRunSessionId(f.request.runId, "session_first");
+    const otherHost = new AutomationRepo(join(f.request.workspacePath, "tasks-index.sqlite"));
+    try {
+      expect(
+        await Promise.all([
+          f.repo.fixRunSessionId(f.request.runId, "session_host_a"),
+          otherHost.fixRunSessionId(f.request.runId, "session_host_b"),
+        ]),
+      ).toEqual([firstId, firstId]);
+    } finally {
+      await otherHost.close();
+    }
+    await f.repo.close();
+    expect(await f.repo.fixRunSessionId(f.request.runId, "session_replacement")).toBe(firstId);
+    const next = f.request.runId + ":next";
+    await f.repo.upsertRunClaimed({
+      runId: next,
+      automationId: f.automation.automationId,
+      workspaceKey: f.request.workspacePath,
+      scheduledAt: Date.now(),
+      trigger: "schedule",
+    });
+    expect(await f.repo.fixRunSessionId(next, "session_next")).not.toBe(firstId);
+  });
+
   it.each([
     ["resumeTask", "session_resume_failed"],
     ["setAutomationSessionConfig", "session_configuration_failed"],

@@ -30,8 +30,10 @@ async function fixture() {
     options: { reasoningLevel: "medium" },
   };
   const task = {
-    createTask: vi.fn(async () => ({ taskId: "controlled-native-session" })),
-    sendPrompt: vi.fn(async () => {}),
+    createTask: vi.fn(async (_params: Parameters<IZCodeTaskService["createTask"]>[0]) => ({
+      taskId: "controlled-native-session",
+    })),
+    sendPrompt: vi.fn(async (_params: Parameters<IZCodeTaskService["sendPrompt"]>[0]) => {}),
     setTaskUnread: vi.fn(async () => ({})),
     onDynamicTaskTerminalOutcome: () => terminal.event,
   };
@@ -75,6 +77,62 @@ async function fixture() {
 }
 
 describe("Server Core native automation wiring", () => {
+  it.each(["mail", "publication", "legacy"] as const)(
+    "preserves trusted attachment adaptation for %s admission",
+    async (kind) => {
+      const f = await fixture();
+      const rule = await f.create(Date.now() + 3600_000);
+      const text =
+        "mail_request_base_id: synthetic-base" +
+        (kind === "publication" ? "\npublication: synthetic-scope" : "");
+      const runtime = f.start(async () =>
+        kind === "legacy"
+          ? "admitted"
+          : {
+              state: "admitted",
+              context: { filename: "automation-resources.txt", text },
+              ...(kind === "publication" ? { refreshConfiguration: true as const } : {}),
+            },
+      );
+      await runtime.ready;
+      const claim = (await f.repo.runNow(rule.automationId, { now: Date.now() }))!;
+      await runtime.runManual(claim);
+      expect(f.task.sendPrompt).toHaveBeenCalledWith(
+        expect.objectContaining(
+          kind === "legacy"
+            ? {}
+            : {
+                attachments: [
+                  expect.objectContaining({
+                    filename: "automation-resources.txt",
+                    textContent: text,
+                    sizeBytes: Buffer.byteLength(text),
+                  }),
+                ],
+              },
+        ),
+      );
+      expect(f.task.createTask.mock.calls[0]?.[0]).toMatchObject(
+        kind === "publication" ? { refreshConfiguration: true } : {},
+      );
+      if (kind !== "publication")
+        expect(f.task.createTask.mock.calls[0]?.[0]?.refreshConfiguration).toBeUndefined();
+      if (kind === "legacy")
+        expect(f.task.sendPrompt.mock.calls[0]?.[0]?.attachments).toBeUndefined();
+    },
+  );
+
+  it("does not create or send when trusted preparation is unavailable", async () => {
+    const f = await fixture();
+    const rule = await f.create(Date.now() + 3600_000);
+    const runtime = f.start(async () => "unavailable");
+    await runtime.ready;
+    const claim = (await f.repo.runNow(rule.automationId, { now: Date.now() }))!;
+    await expect(runtime.runManual(claim)).rejects.toThrow();
+    expect(f.task.createTask).not.toHaveBeenCalled();
+    expect(f.task.sendPrompt).not.toHaveBeenCalled();
+  });
+
   it("preserves authorization mismatch for scheduled and manual failures without creating a task", async () => {
     const f = await fixture();
     const scheduled = await f.create(Date.now() - 1000);

@@ -98,12 +98,14 @@ async function fixture(
     return snapshot;
   });
   const send = vi.fn<IZCodeAgentService["sendPrompt"]>(async () => snapshot);
+  const create = vi.fn<IZCodeAgentService["createSession"]>(async () => snapshot);
   const command = vi.fn<IZCodeAgentService["sendConversationCommandV4"]>(async (params) => ({
     commandId: params.envelope.commandId,
     status: "accepted",
     revisionAtDecision: 1,
   }));
   const agent = {
+    createSession: create,
     resumeSession: resume,
     sendPrompt: send,
     sendConversationCommandV4: command,
@@ -119,6 +121,7 @@ async function fixture(
     },
   } as unknown as TaskIndexRepo;
   const syncer = {
+    emitWorkspaceTaskListChanged: vi.fn(),
     getWorkspaceEmitter: () => new Emitter(),
     ensureSessionSubscription: vi.fn(),
     syncSnapshotAndBroadcast: async () => meta,
@@ -178,6 +181,7 @@ async function fixture(
     });
   }
   return {
+    create,
     resume,
     send,
     command,
@@ -195,6 +199,77 @@ async function fixture(
 }
 
 describe("automation session refresh request lifetime", () => {
+  it.each(["desktop-continuous", "web-remote-replayable"] as const)(
+    "restores a reserved hot session instead of creating another on %s",
+    async (mode) => {
+      const f = await fixture(true, mode, false);
+      expect(
+        await f.service.createTask({
+          sessionId: f.taskId,
+          workspacePath: f.directory,
+          model: "test/test",
+          thoughtLevel: "high",
+        }),
+      ).toMatchObject({ taskId: f.taskId });
+      expect(f.resume).toHaveBeenCalledOnce();
+      expect(f.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("materializes only the exact missing reserved identity and reuses it after a lost reply", async () => {
+    const f = await fixture(false, "web-remote-replayable", false);
+    f.resume.mockRejectedValueOnce(new Error(`Session not found: ${f.taskId}`));
+    f.create.mockRejectedValueOnce(new Error("lost create reply"));
+    const args = {
+      sessionId: f.taskId,
+      workspacePath: f.directory,
+      model: "test/test",
+      thoughtLevel: "high",
+      automationId: "synthetic",
+    };
+    await expect(f.service.createTask(args)).rejects.toThrow("lost create reply");
+    expect(f.create).toHaveBeenCalledWith(expect.objectContaining({ sessionId: f.taskId }));
+    await expect(f.service.createTask(args)).resolves.toMatchObject({ taskId: f.taskId });
+    expect(f.create).toHaveBeenCalledOnce();
+  });
+
+  it.each(["Session configuration refresh busy", "request timeout", "Session not found: other"])(
+    "does not create on ambiguous resume failure: %s",
+    async (reason) => {
+      const f = await fixture(false, "web-remote-replayable", false);
+      f.resume.mockRejectedValueOnce(new Error(reason));
+      await expect(
+        f.service.createTask({
+          sessionId: f.taskId,
+          workspacePath: f.directory,
+          model: "test/test",
+          thoughtLevel: "high",
+        }),
+      ).rejects.toThrow(reason);
+      expect(f.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps ordinary creation off the reserved-session recovery path", async () => {
+    const f = await fixture(false, "desktop-continuous", false);
+    await f.service.createTask({ workspacePath: f.directory, model: "test/test" });
+    expect(f.resume).not.toHaveBeenCalled();
+    expect(f.create).toHaveBeenCalledOnce();
+    expect(f.create.mock.calls[0][0].sessionId).toBeUndefined();
+  });
+
+  it("refreshes a recovered reserved session only for an actual external configuration change", async () => {
+    const f = await fixture(false, "web-remote-replayable", false);
+    await f.service.createTask({
+      sessionId: f.taskId,
+      workspacePath: f.directory,
+      model: "test/test",
+      refreshConfiguration: true,
+    });
+    expect(f.resume).toHaveBeenCalledWith(expect.objectContaining({ refreshConfiguration: true }));
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
   it.each(["desktop-continuous", "web-remote-replayable"] as const)(
     "does not refresh ordinary automation on %s, even when resident refresh is busy",
     async (mode) => {

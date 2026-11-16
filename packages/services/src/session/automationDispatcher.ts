@@ -3,6 +3,7 @@ import {
   AutomationSessionPreparationError,
   describeAutomationDispatchFailure,
 } from "./automationDispatchFailure.js";
+import { randomUUID } from "node:crypto";
 import type { IDisposable } from "@zcode/rpc";
 import {
   formatModelPickerValue,
@@ -292,9 +293,21 @@ export function createAutomationDispatcher(options: {
         mode: request.mode,
       });
       const attachments = prepared?.attachments;
+      const sessionId =
+        request.targetTaskId ??
+        (await options.repo.fixRunSessionId(request.runId, `session_${randomUUID()}`));
+      logger.info(request.runId, {
+        event: "automation.session.identity",
+        outcome: existingRun?.sessionId || request.targetTaskId ? "reused" : "reserved",
+        automationId: request.automationId,
+        runId: request.runId,
+        sessionId,
+      });
       const task = request.targetTaskId
         ? { taskId: request.targetTaskId }
         : await zcodeTaskService.createTask({
+            sessionId,
+            ...(prepared?.refreshConfiguration === true ? { refreshConfiguration: true } : {}),
             projectId: request.projectId,
             additionalDirectories: request.additionalDirectories,
             workspacePath: request.workspacePath,
@@ -382,7 +395,7 @@ export function createAutomationDispatcher(options: {
         ...(attachments?.length ? { attachments: [...attachments] } : {}),
       });
       // prompt 创建的定时任务带 targetTaskId，追加原会话不能计成 session_create。
-      if (!request.targetTaskId) {
+      if (!request.targetTaskId && !existingRun?.sessionId) {
         options.onSessionCreated?.({
           sessionId: task.taskId,
           messageId: promptTraceId,

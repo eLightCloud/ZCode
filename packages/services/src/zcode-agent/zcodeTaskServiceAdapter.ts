@@ -1754,6 +1754,30 @@ export function createZCodeTaskServiceAdapter(
 
     async createTask(params): Promise<ZCodeTaskCreateResult> {
       const target = normalizeWorkspaceParams(params);
+      if (params.sessionId) {
+        if (params.v4Create) throw new Error("fixed_session_id_requires_native_create");
+        try {
+          return await service.resumeTask({
+            ...target,
+            taskId: params.sessionId,
+            ...(params.refreshConfiguration === true ? { refreshConfiguration: true } : {}),
+            additionalDirectories: params.additionalDirectories,
+            model: params.modelSelection
+              ? formatModelPickerValue(params.modelSelection)
+              : params.model,
+            thoughtLevel: params.modelSelection?.options?.reasoningLevel ?? params.thoughtLevel,
+            automationId: params.automationId,
+          });
+        } catch (error) {
+          // 只有准确身份不存在才允许物化；超时、busy 和任意 provider 错误都不能换建。
+          // resume 也覆盖尚未持久化的热 deferred 会话，listSessions 的持久查询不能替代它。
+          if (
+            !(error instanceof Error) ||
+            !error.message.endsWith(`Session not found: ${params.sessionId}`)
+          )
+            throw error;
+        }
+      }
       const requestedSelection =
         params.modelSelection ??
         (params.model
@@ -1808,6 +1832,7 @@ export function createZCodeTaskServiceAdapter(
       } else {
         snapshot = await options.zcodeAgentService.createSession({
           ...target,
+          ...(params.sessionId ? { sessionId: params.sessionId } : {}),
           projectId: params.projectId ?? null,
           additionalDirectories: params.additionalDirectories,
           sessionTraceId: createSessionTraceId(),

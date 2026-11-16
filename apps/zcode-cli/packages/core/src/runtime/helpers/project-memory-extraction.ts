@@ -1,16 +1,28 @@
 import { type ProjectMemoryExtractionSnapshot } from "./project-memory-extraction-types.js";
 export type { ProjectMemoryExtractionScheduler } from "./project-memory-extraction-types.js";
-import { selectActiveConversationBranch, type TraceContext } from "../deps.js";
-import { buildMemoryExtractionPrompt, createMemoryExtractionScheduler } from "../../memory/extraction.js";
+import {
+  selectActiveConversationBranch,
+  traceContextToLogContext,
+  type TraceContext,
+} from "../deps.js";
+import {
+  buildMemoryExtractionPrompt,
+  createMemoryExtractionScheduler,
+} from "../../memory/extraction.js";
 import { runMemoryAgentLoop } from "../../memory/memory-agent-loop.js";
 import { scanMemoryManifest } from "../../memory/recall/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import { prepareProjectMemoryAgentRequest, captureProjectMemoryAgentContext, createProjectMemoryAgentToolExecutor } from "./project-memory-agent.js";
+import {
+  prepareProjectMemoryAgentRequest,
+  captureProjectMemoryAgentContext,
+  createProjectMemoryAgentToolExecutor,
+} from "./project-memory-agent.js";
 import { type ProjectMemoryAgentContext } from "./project-memory-agent-types.js";
 import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
 
 const EXTRACTION_MAX_TURNS = 5;
 const EXTRACTION_DRAIN_TIMEOUT_MS = 60_000;
+const EXTRACTION_EXECUTION_TIMEOUT_MS = 5 * 60_000;
 
 export function isProjectMemoryEnabled(this: AgentRuntimeInternal): boolean {
   return resolveEnabledProjectMemoryRoot(this.config, this.workspaceRoot) !== undefined;
@@ -111,16 +123,27 @@ async function executeProjectMemoryExtraction(
   });
 
   return telemetry.run(async () => {
+    // 非流式模型请求可能永不 settle；轮数限制不能收口这类等待，导致 idle 会话永久拒绝配置刷新。
+    // 期限只取消本次 Extraction，仍等 adapter 的取消收口，不能直接清空 scheduler/residency 事实。
+    const deadline = new AbortController();
+    const abortSignal = AbortSignal.any([input.abortSignal, deadline.signal]);
+    const timer = setTimeout(() => {
+      deadline.abort(new DOMException("Memory extraction deadline exceeded", "TimeoutError"));
+    }, EXTRACTION_EXECUTION_TIMEOUT_MS);
+    timer.unref?.();
+    const diagnostic = {
+      ...traceContextToLogContext(input.snapshot.traceContext),
+      event: "memory.extraction",
+      module: "core.runtime",
+    };
+    runtime.logger?.info("Memory extraction started", { ...diagnostic, outcome: "started" });
     try {
       const manifest = await scanMemoryManifest({
         fileSystem: runtime.fileSystemPort!,
         rootDir: input.snapshot.memoryRoot,
-        signal: input.abortSignal,
+        signal: abortSignal,
       });
-      if (input.abortSignal.aborted) {
-        telemetry.finishCancelled("abort_signal");
-        return "aborted" as const;
-      }
+      abortSignal.throwIfAborted();
       const prompt = buildMemoryExtractionPrompt({
         manifest,
         messageCount: input.messageCount,
@@ -129,7 +152,7 @@ async function executeProjectMemoryExtraction(
       const executor = createProjectMemoryAgentToolExecutor(runtime, input.snapshot);
 
       await runMemoryAgentLoop({
-        abortSignal: input.abortSignal,
+        abortSignal,
         executeTool: (toolCall, options) =>
           executor.execute(toolCall, {
             signal: options.abortSignal,
@@ -142,15 +165,29 @@ async function executeProjectMemoryExtraction(
         workingDirectory: input.snapshot.workingDirectory,
         workspaceRoot: input.snapshot.workspaceRoot,
       });
+      abortSignal.throwIfAborted();
       telemetry.finishCompleted();
+      runtime.logger?.info("Memory extraction completed", { ...diagnostic, outcome: "completed" });
       return "success" as const;
     } catch (error) {
-      if (input.abortSignal.aborted || isAbortError(error)) {
+      if (input.abortSignal.aborted || (!deadline.signal.aborted && isAbortError(error))) {
         telemetry.finishCancelled("abort_signal");
+        runtime.logger?.info("Memory extraction cancelled", {
+          ...diagnostic,
+          outcome: "cancelled",
+          reason: "abort_signal",
+        });
         return "aborted" as const;
       }
       telemetry.finishFailed("execute", "internal", error);
+      runtime.logger?.warn("Memory extraction failed", {
+        ...diagnostic,
+        outcome: "failed",
+        reason: deadline.signal.aborted ? "deadline_exceeded" : "execution_failed",
+      });
       return "error" as const;
+    } finally {
+      clearTimeout(timer);
     }
   });
 }

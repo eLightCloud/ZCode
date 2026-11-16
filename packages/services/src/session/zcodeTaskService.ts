@@ -202,6 +202,10 @@ export interface IZCodeTaskService {
 
   /** 创建 ZCode session 并同步 task 索引。 */
   createTask(params: {
+    /** 调用方已持久固定的身份；存在则恢复，不存在则以该身份创建。不能与 v4Create 同用。 */
+    sessionId?: string;
+    /** Recover a reserved session after its external configuration actually changed. */
+    refreshConfiguration?: true;
     projectId?: string | null;
     additionalDirectories?: string[];
     workspacePath: string;

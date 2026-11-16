@@ -1316,6 +1316,21 @@ export class AutomationRepo {
     return fixed;
   }
 
+  /** 创建前固定身份；失败和冷恢复都不得为同一 run 换建另一会话。 */
+  async fixRunSessionId(runId: string, sessionId: string): Promise<string> {
+    await this.ensureReady();
+    const db = this.getDatabase();
+    db.prepare(
+      `UPDATE automation_runs SET session_id = COALESCE(session_id, @session_id),
+       updated_at = @now WHERE run_id = @run_id`,
+    ).run({ run_id: runId, session_id: sessionId, now: Date.now() });
+    const row = db.prepare(`SELECT session_id FROM automation_runs WHERE run_id = ?`).get(runId) as
+      | Pick<AutomationRunRow, "session_id">
+      | undefined;
+    if (!row?.session_id) throw new Error("automation_run_session_unavailable");
+    return row.session_id;
+  }
+
   /** 派发结果回写 run（dispatched 回填 session_id / failed_to_dispatch 记 error）。 */
   async markRunDispatch(params: {
     runId: string;

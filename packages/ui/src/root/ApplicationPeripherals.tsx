@@ -44,6 +44,8 @@ export interface ApplicationPeripherals {
   }) => ReactNode;
   renderDeliverables?: (files: readonly NativeDeliverable[], workspacePath: string) => ReactNode;
   openHelp: () => void;
+  /** Additional help items; the application owns their content and action state. */
+  renderHelpMenuItems?: () => ReactNode;
   openFeedback: () => void;
   openShare: (candidate: ApplicationShareCandidate) => void;
   renderAutomationSupplement?: () => ReactNode;

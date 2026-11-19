@@ -103,6 +103,7 @@ export function WorkspaceHelpMenuButton({
           <BookOpenIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.docs" })}
         </DropdownMenuItem>
+        {peripherals?.renderHelpMenuItems?.()}
         {nativeHelpEnabled && (
           <DropdownMenuItem onSelect={handleOpenCommunity}>
             <UsersIcon className="size-4" />

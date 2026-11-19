@@ -5,6 +5,7 @@ export { AppErrorBoundary, ScopedErrorBoundary } from "./ErrorBoundary.js";
 export type { ScopedErrorBoundaryVariant } from "./ErrorBoundary.js";
 export { Button, buttonVariants } from "./components/ui/button.js";
 export { Popover, PopoverTrigger, PopoverContent } from "./components/ui/popover.js";
+export { DropdownMenuItem } from "./components/ui/dropdown-menu.js";
 export { Tooltip, TooltipTrigger, TooltipContent } from "./components/ui/tooltip.js";
 export { DesktopWindowFrame } from "./DesktopWindowFrame.js";
 export { WebRemoteControlDialog } from "@/web-remote-control/index.js";

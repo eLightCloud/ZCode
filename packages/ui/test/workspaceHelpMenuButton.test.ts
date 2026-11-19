@@ -19,6 +19,7 @@ const captured = vi.hoisted(() => ({
     | {
         nativeCloudEnabled: boolean;
         openHelp: () => void;
+        renderHelpMenuItems?: () => ReactNode;
         openFeedback: () => void;
       }
     | undefined,
@@ -129,6 +130,32 @@ describe("WorkspaceHelpMenuButton", () => {
     const { WorkspaceHelpMenuButton } = await import("@/WorkspaceHelpMenuButton.js");
     return renderToStaticMarkup(createElement(WorkspaceHelpMenuButton, { isDesktop }));
   }
+
+  it("装配附加帮助项位于产品文档之后，Web 和 Desktop 共用原生菜单语义", async () => {
+    const select = vi.fn();
+    const { DropdownMenuItem } = await import("@/components/ui/dropdown-menu.js");
+    captured.peripherals = {
+      nativeCloudEnabled: false,
+      openHelp: vi.fn(),
+      openFeedback: vi.fn(),
+      renderHelpMenuItems: () =>
+        createElement(DropdownMenuItem, { onSelect: select }, "Application guide"),
+    };
+    try {
+      for (const desktop of [true, false]) {
+        await render(desktop);
+        expect(captured.menuItems.slice(0, 3).map((item) => item.label)).toEqual([
+          "workspaceHeader.help.docs",
+          "Application guide",
+          "workspaceHeader.help.issueReport",
+        ]);
+        await captured.menuItems[1]?.onSelect?.();
+      }
+      expect(select).toHaveBeenCalledTimes(2);
+    } finally {
+      captured.peripherals = undefined;
+    }
+  });
 
   it("自有装配只保留文档与问题反馈，分别调用注入入口，不打开原生外链", async () => {
     const openHelp = vi.fn();

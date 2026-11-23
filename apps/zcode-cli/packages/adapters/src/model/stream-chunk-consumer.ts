@@ -20,7 +20,8 @@ import { observeVisibleStreamEvent } from "./stream-status.js";
 import { statusPublishOptions } from "./stream-status.js";
 import { handleStreamChunk } from "./stream-chunk-handling.js";
 import { compactDirectToolCallCommitEvent } from "./stream-retry-boundaries.js";
-import { createEmptyContextExceededError } from "./runner-diagnostics.js";
+import { createEmptyFinishError } from "./runner-diagnostics.js";
+import { rejectStreamBusinessFailure } from "./stream-business-failure.js";
 
 export async function* consumeStreamChunks(
   iteratorState: StreamIteratorState,
@@ -121,7 +122,7 @@ export async function* consumeStreamChunks(
       throw error;
     }
     if (event.visibleEvents.some((visibleEvent) => visibleEvent.type === "finish")) {
-      const contextError = createEmptyContextExceededError({
+      const finishError = createEmptyFinishError({
         finishReason: diagnostics.finishReason,
         rawFinishReason: diagnostics.rawFinishReason,
         hasAssistantContent: diagnostics.textDeltaChars > 0 || diagnostics.hasReasoningContent,
@@ -129,7 +130,10 @@ export async function* consumeStreamChunks(
         usage: diagnostics.usage,
       });
       // 先于 yield finish 进入既有 catch，每个请求只发布一个失败终态。
-      if (contextError) throw contextError;
+      if (finishError) {
+        rejectStreamBusinessFailure(statusState, diagnostics, input, attempt);
+        throw finishError;
+      }
     }
     const shouldHoldEmptyCompletionEvents =
       !event.emittedError &&

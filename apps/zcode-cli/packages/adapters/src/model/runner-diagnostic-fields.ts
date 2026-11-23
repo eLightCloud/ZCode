@@ -118,15 +118,32 @@ const EMPTY_COMPLETION_RETRY_EXCLUSIONS = new Set([
   "content_filter",
 ]);
 
-export function createEmptyContextExceededError(input: {
+export function createEmptyFinishError(input: {
   finishReason?: string;
   rawFinishReason?: unknown;
   hasAssistantContent: boolean;
   toolCallCount: number;
   usage?: ModelUsage;
 }): AiSdkModelAdapterError | undefined {
-  // 只转换无有效输出的明确超窗；任何 partial 都保留给原调用方，不能迁移 Core 的续写策略。
+  // 有效正文、推理和工具调用继续交由原调用方处理。
   if (input.hasAssistantContent || input.toolCallCount > 0) return undefined;
+  // 有输入用量的无原因空流曾被当作正常回合；走单次失败结算，避免自动重放已计量输入。
+  if (
+    input.finishReason === "other" &&
+    input.rawFinishReason == null &&
+    (input.usage?.inputTokens ?? 0) > 0 &&
+    input.usage?.outputTokens === 0 &&
+    (input.usage.reasoningTokens ?? 0) === 0
+  ) {
+    return new AiSdkModelAdapterError(
+      ModelErrorCode.InvalidModelResponse,
+      "Model returned no text or tool calls after reporting input usage.",
+      {
+        usage: input.usage,
+        context: { reason: "empty_model_response", source: "provider", retryable: false },
+      },
+    );
+  }
   if (
     ![input.finishReason, input.rawFinishReason].some(
       (reason) =>

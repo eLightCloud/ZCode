@@ -118,6 +118,22 @@ it("normalizes context overflow when a streamed tool call never passed its compl
 });
 
 describe.each(["stream", "generate"] as const)("%s empty completion finish semantics", (mode) => {
+  it("reports an input-only empty response exactly once and keeps its usage", async () => {
+    const usage = { inputTokens: 28774, outputTokens: 0, totalTokens: 28774 };
+    const run = harness("other", undefined, "direct", "", { usage });
+    await expect(run.read(mode)).rejects.toMatchObject({
+      code: ModelErrorCode.InvalidModelResponse,
+      context: { reason: "empty_model_response", source: "provider", retryable: false },
+      usage,
+    });
+    expect(run.attempts).toBe(1);
+    expect(run.status.filter((event) => event.type === "model_request_failed")).toMatchObject([
+      { retryable: false, usage },
+    ]);
+    expect(run.status.some((event) => event.type === "model_request_completed")).toBe(false);
+    expect(run.events.some((event) => event.type === "finish")).toBe(false);
+  });
+
   it.each([
     { finishReason: "other", rawFinishReason: "prompt_too_long", text: "Valid title" },
     { finishReason: "other", rawFinishReason: "context_exceeded", text: '{"passed":false}' },

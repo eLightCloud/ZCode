@@ -4,6 +4,34 @@
   "spec": "./test/e2e/conversation-session/conversation-session-empty-completion-retry.test.ts",
   "fixtures": [
     {
+      "id": "input-only-empty-chat",
+      "description": "仅输入计量的空 Chat Completions 流",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "回放只有 usage 的 SSE，验证一次请求、失败结算以及刷新后的可见错误。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/chat/completions",
+        "lastUserMessageIncludes": [
+          "E2E_PAID_EMPTY_RESPONSE"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"chatcmpl-empty\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"empty-replay\",\"choices\":[],\"usage\":{\"prompt_tokens\":28774,\"completion_tokens\":0,\"total_tokens\":28774}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
       "id": "empty-completion-retry-title",
       "description": "空 completion retry case 的标题 sidecar 固定响应。",
       "metadata": {

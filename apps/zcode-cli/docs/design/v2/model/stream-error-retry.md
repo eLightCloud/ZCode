@@ -8,6 +8,8 @@ app-server 模式默认开启模型流式输出。Vercel AI SDK 的 `streamText(
 
 ## 契约
 
+- 当结束原因为 `other`、缺少提供方原始原因、没有正文、有效推理或工具调用，且明确报告了正数输入和零输出时，模型适配器按 `empty_model_response` 拒绝本次响应。流式和非流式均只产生一个带原用量的失败终态，由用户手动重试。具体供应商错误优先，零用量重试仍沿下述规则。
+
 - 对普通主请求（`preserveProviderStreamBoundaries` 未开启），如果一次模型 attempt
   正常结束但同时满足：`finishReason` 非 `stop`/`tool-calls`、text 为 0、reasoning
   为 0、tool call 为 0、usage 为 0，则 adapter 将其识别为 generic empty

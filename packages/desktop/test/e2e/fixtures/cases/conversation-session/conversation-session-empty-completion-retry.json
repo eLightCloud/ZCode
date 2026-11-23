@@ -9,6 +9,14 @@
   "fileFixtures": [],
   "requests": [
     {
+      "id": "input-only-empty-chat",
+      "description": "仅输入计量的空 Chat Completions 流",
+      "kind": "main",
+      "timingPolicy": "fast-text",
+      "source": "synthetic",
+      "syntheticReason": "回放只有 usage 的 SSE，验证一次请求、失败结算以及刷新后的可见错误。"
+    },
+    {
       "id": "empty-completion-retry-title",
       "description": "空 completion retry case 的标题 sidecar 固定响应。",
       "kind": "common",

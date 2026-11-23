@@ -1,5 +1,11 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { TID_CHAT_ERROR_BANNER } from "@zcode/shared/test-ids";
+import { sel } from "../helpers/selectors.js";
+import {
+  seedCustomOpenAIChatCompletionsProvider,
+  refreshSeededOpenAIProvidersThroughSettings,
+} from "../helpers/custom-openai-provider.js";
 import { clearAppData, getE2EAppDataPaths } from "../helpers/desktop-app.js";
 import { expandAssistantHistoriesWithContent } from "../helpers/conversation-session-tool-diagnostics.js";
 import { skipOccupationOnboardingIfPresent } from "../helpers/occupation-onboarding.js";
@@ -16,10 +22,12 @@ import {
   UPSTREAM_MODEL,
   ensureUpstreamProviderForE2E,
   selectUpstreamModel,
+  selectUpstreamProviderModelById,
 } from "../helpers/upstream-provider.js";
 import {
   getV4Messages,
   getV4ConversationState,
+  selectV4TaskById,
   sendV4Prompt,
   startNewV4Draft,
   waitForV4AssistantMessageContaining,
@@ -98,6 +106,42 @@ describe("generic empty completion retry E2E", () => {
     const assistantMessages = await getV4Messages("assistant");
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]?.text).toContain(EMPTY_COMPLETION_REPLY);
+  });
+
+  it("仅报告输入用量的空流只请求一次，错误在刷新后仍可见", async function () {
+    this.timeout(180000);
+    const marker = "E2E_PAID_EMPTY_RESPONSE";
+    const modelId = "empty-replay";
+    const provider = await seedCustomOpenAIChatCompletionsProvider({
+      providerId: "custom:empty-replay",
+      providerName: "Empty replay",
+      modelId,
+    });
+    await refreshSeededOpenAIProvidersThroughSettings([provider.name]);
+    await selectUpstreamProviderModelById(modelId, {
+      providerId: provider.id,
+      providerName: provider.name,
+    });
+    await sendV4Prompt(marker);
+    const banner = $(sel(TID_CHAT_ERROR_BANNER));
+    await banner.waitForDisplayed({ timeout: 45000 });
+    expect(await banner.getText()).toMatch(/未返回.*内容|returned no (text|content)/i);
+    const { sessionId } = await getV4ConversationState();
+    if (!sessionId) throw new Error("空响应回合缺少 sessionId");
+    await browser.waitUntil(() => readRecoveryUsage(sessionId).turn?.status === "error", {
+      timeout: 10000,
+      timeoutMsg: "空响应回合没有记录失败用量",
+    });
+    const usage = readRecoveryUsage(sessionId);
+    expect(usage.models).toMatchObject([{ status: "error", totalTokens: 28774 }]);
+    expect(usage.turn).toMatchObject({ status: "error", totalTokens: 28774 });
+    await browser.refresh();
+    await selectV4TaskById(sessionId, 45000);
+    await banner.waitForDisplayed({ timeout: 45000 });
+    expect(await banner.getText()).toMatch(/未返回.*内容|returned no (text|content)/i);
+    expect(
+      await countUpstreamRequests({ includes: [marker], excludes: ["Generate a concise title"] }),
+    ).toBe(1);
   });
 
   it("明确上下文限制的空流先 Reactive Compact，再重试当前请求且不追加 Continue", async function () {

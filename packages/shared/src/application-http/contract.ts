@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const APPLICATION_HTTP_CHANNEL = "zcode:application-http-request";
 export const APPLICATION_HTTP_CANCEL_CHANNEL = "zcode:application-http-cancel";
-export const APPLICATION_HTTP_MAX_BYTES = 16 * 1024 * 1024;
+export const APPLICATION_HTTP_MAX_BYTES = 28 * 1024 * 1024;
 export const applicationHttpRequestSchema = z
   .object({
     requestId: z.string().uuid(),

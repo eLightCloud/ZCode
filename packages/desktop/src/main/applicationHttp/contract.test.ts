@@ -18,6 +18,26 @@ const input = {
   method: "GET" as const,
 };
 describe("Main fixed application HTTP boundary", () => {
+  it.each([
+    [28 * 1024 * 1024, 200],
+    [28 * 1024 * 1024 + 1, 502],
+  ])("bounds a response of %i bytes", async (size, expectedStatus) => {
+    const response = await performApplicationHttp(
+      configuration,
+      input,
+      {
+        cookies: { get: async () => [] },
+        fetch: async () => new Response(new ArrayBuffer(size)),
+      },
+      new AbortController().signal,
+    );
+    expect(response.status).toBe(expectedStatus);
+    if (expectedStatus === 200) expect(response.body.byteLength).toBe(size);
+    else
+      expect(JSON.parse(new TextDecoder().decode(response.body)).detail).toBe(
+        "application_http_response_too_large",
+      );
+  });
   it("reads only configured current application cookies across the development proxy host boundary", async () => {
     const get = vi
       .fn()

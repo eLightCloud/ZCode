@@ -1,6 +1,7 @@
 # Application HTTP platform port
 
 The application renderer supplies only a relative API path, method, bounded bytes and request ID.
+Request and response bodies each have a 28 MiB wire limit, including encoding and metadata.
 Main owns the fixed startup destination, allowed API prefixes, current cookie jar and CSRF metadata.
 Neither requests nor responses contain a credential/header override. Response headers are a
 reviewed public subset, never Set-Cookie. Cancellation is scoped to the originating sender and ID.

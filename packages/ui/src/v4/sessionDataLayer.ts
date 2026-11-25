@@ -43,6 +43,7 @@ interface SessionEntry {
   store: ConversationProjectionStore;
   refCount: number;
   keepWarmTimer: ReturnType<typeof setTimeout> | null;
+  inputRecovery?: Promise<boolean>;
 }
 
 function monotonicNow(): number {
@@ -124,6 +125,74 @@ export class SessionDataLayer {
   /** 当前活跃（含 keep-warm 中）的 session 数，测试与调试观测点。 */
   get size(): number {
     return this.entries.size;
+  }
+
+  async sendCommand(...args: Parameters<ConversationTransport["sendCommand"]>) {
+    const [envelope] = args;
+    const entry =
+      envelope.type === "sendText" && envelope.sessionId
+        ? this.entries.get(conversationTopic(envelope.sessionId))
+        : undefined;
+    const before = entry?.store.getState();
+    const ack = await this.transport.sendCommand(...args);
+    // 同步登记可能回收仍在显示的会话。只有明确未准入的 ACK 才允许沿用原命令重投。
+    if (
+      ack.status !== "rejected" ||
+      ack.reasonCode !== "proto.sessionNotFound" ||
+      !entry?.refCount ||
+      before?.status !== "live" ||
+      !before.subscriptionId ||
+      !before.snapshot ||
+      this.disposed
+    )
+      return ack;
+    if (!entry.inputRecovery && entry.store.getState().subscriptionId === before.subscriptionId) {
+      entry.inputRecovery = this.restoreInputSubscription(entry, before).finally(() => {
+        delete entry.inputRecovery;
+      });
+    }
+    const ready = await entry.inputRecovery;
+    logger.lifecycle.info("v4 input subscription recovery", {
+      event: "v4.session_data.input_recovery",
+      sessionId: envelope.sessionId,
+      commandId: envelope.commandId,
+      status: ready ? "completed" : "failed",
+    });
+    return ready && entry.refCount && !this.disposed ? this.transport.sendCommand(...args) : ack;
+  }
+
+  private async restoreInputSubscription(
+    entry: SessionEntry,
+    before: ReturnType<ConversationProjectionStore["getState"]>,
+  ) {
+    await entry.store.retry();
+    const subscription = entry.store.getState().subscriptionId;
+    if (!subscription || subscription === before.subscriptionId) return false;
+    // 历史首帧可早于 CLI 恢复。等新订阅的就绪投影再发送，失败时让原输入框保留草稿。
+    return new Promise<boolean>((resolve) => {
+      const finish = (ready: boolean) => {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(ready);
+      };
+      const check = () => {
+        const { status, subscriptionId, snapshot } = entry.store.getState();
+        if (
+          !entry.refCount ||
+          this.disposed ||
+          status !== "live" ||
+          subscriptionId !== subscription
+        )
+          return finish(false);
+        if (!snapshot || snapshot === before.snapshot) return;
+        const initialization = snapshot.runtimeInitialization?.status;
+        if (initialization === "failed") finish(false);
+        else if (!initialization || initialization === "ready") finish(true);
+      };
+      const unsubscribe = entry.store.subscribe(check);
+      const timer = setTimeout(() => finish(false), 30_000);
+      check();
+    });
   }
 
   /** renderer pending-command registry 的只读对账入口；仍复用本 layer 的同一 host connection。 */

@@ -33,18 +33,39 @@ export function ConversationInlineContinuation({
   const [navigationError, setNavigationError] = useState(false);
   const prepared = useRef(false);
   const opened = useRef(false);
-  const selected = preferredLocation
-    ? state.options?.targets.find((row) => row.location === preferredLocation)
-    : (state.options?.targets.find((row) => row.location === target) ??
-      (state.options?.targets.length === 1 ? state.options.targets[0] : undefined));
+  const options = state.options;
+  const active = options?.active;
+  const direct =
+    !preferredLocation &&
+    !offline &&
+    options?.candidates.length === 1 &&
+    !options.pending &&
+    !options.inflight &&
+    !["requested", "granted"].includes(options.handoff?.phase ?? "")
+      ? options.targets.find((row) => row.location === active?.location)
+      : undefined;
+  const selected =
+    options?.targets.find((row) => row.location === (preferredLocation ?? target)) ??
+    (!preferredLocation && !active && options?.targets.length === 1
+      ? options.targets[0]
+      : undefined);
   const changed = Boolean(
     state.options &&
-    expectedCandidates &&
-    JSON.stringify([...state.options.candidates].sort()) !==
-      JSON.stringify([...expectedCandidates].sort()),
+    (!state.options.candidates.includes(version) ||
+      (expectedCandidates &&
+        JSON.stringify([...state.options.candidates].sort()) !==
+          JSON.stringify([...expectedCandidates].sort()))),
   );
   useEffect(() => {
-    if (state.busy || state.error || state.pending || state.result || !state.options || changed)
+    if (
+      state.busy ||
+      state.error ||
+      state.pending ||
+      state.result ||
+      !state.options ||
+      changed ||
+      direct
+    )
       return;
     if (
       !preferredLocation &&
@@ -56,19 +77,16 @@ export function ConversationInlineContinuation({
       void state.prepareTarget();
     } else if (selected) {
       // 唯一目标沿已确认版本接续；跨位置在线来源先交接，不能用离线分支偷偷接管。
-      const active = state.options.active;
-      if (!state.options.candidates.includes(version)) return;
+      const handoff =
+        !offline &&
+        state.options.candidates.length === 1 &&
+        active &&
+        active.location !== selected.location;
+      // 读的是最新保存正文，交接必须以当前代次获准的基线开始，源端会在屏障内捕获最终正文。
       void state.start(
-        offline
-          ? "offline"
-          : state.options.candidates.length === 1 &&
-              active &&
-              active.version === version &&
-              active.location !== selected.location
-            ? "handoff"
-            : "select",
+        offline ? "offline" : handoff ? "handoff" : "select",
         selected.location,
-        version,
+        handoff ? active.version : version,
       );
     }
   });
@@ -82,11 +100,16 @@ export function ConversationInlineContinuation({
       } else onCancelled?.();
       return;
     }
-    if (result?.status !== "ready" || !result.location || opened.current) return;
-    const exact = state.options?.targets.find((row) => row.location === result.location);
+    if (opened.current || state.busy || state.error) return;
+    const exact =
+      result?.status === "ready"
+        ? options?.targets.find((row) => row.location === result.location)
+        : !changed && !result && !state.pending
+          ? direct
+          : undefined;
     if (!exact) return;
     opened.current = true;
-    void Promise.resolve(onReady(session, result.location, exact.instanceId)).catch(() => {
+    void Promise.resolve(onReady(session, exact.location, exact.instanceId)).catch(() => {
       logger.warn("conversation.navigation", { sessionId: session, outcome: "unavailable" });
       setNavigationError(true);
     });
@@ -106,7 +129,24 @@ export function ConversationInlineContinuation({
     return () => clearTimeout(timer);
   }, [state.result, state.busy, state.error, state.retry]);
   const reason = state.result?.reason;
-  const missingTarget = Boolean(state.options && preferredLocation && !selected);
+  const needsReview =
+    changed || state.result?.status === "stale" || reason === "changed" || state.error === "stale";
+  const choosingTarget =
+    !preferredLocation &&
+    !state.busy &&
+    !state.pending &&
+    !state.error &&
+    !state.result &&
+    !direct &&
+    !selected &&
+    !changed &&
+    Boolean(options?.targets.length);
+  const missingTarget = Boolean(
+    options &&
+    (preferredLocation
+      ? !selected
+      : !options.targets.length && !reader.continuation?.prepareTarget),
+  );
   const canOfferOffline =
     reason === "unavailable" &&
     Boolean(state.options?.active) &&
@@ -117,7 +157,7 @@ export function ConversationInlineContinuation({
     ? chinese
       ? "当前位置暂时无法继续，请稍后重试。会话尚未更改。"
       : "The current location cannot continue yet. Retry shortly. The conversation is unchanged."
-    : changed
+    : needsReview
       ? chinese
         ? "会话又有了更新，请重新查看最新内容后选择。输入仍保留。"
         : "The conversation changed again. Review the latest content before choosing. Your draft is retained."
@@ -137,51 +177,49 @@ export function ConversationInlineContinuation({
               ? chinese
                 ? "所需文件还未完整同步，请恢复文件后重试。输入尚未发送。"
                 : "Required files are not fully saved. Restore them and retry. Your input has not been sent."
-              : state.result?.status === "stale" || reason === "changed"
+              : state.error || reason === "unavailable" || reason === "capability"
                 ? chinese
-                  ? "会话又有了更新，请重新查看最新内容后选择。输入仍保留。"
-                  : "The conversation changed again. Review the latest content before choosing. Your draft is retained."
-                : state.error || reason === "unavailable"
+                  ? "暂时无法确认会话状态，请稍后重试。输入仍保留，尚未发送。"
+                  : "Conversation status is unconfirmed. Retry shortly. Your draft is retained and has not been sent."
+                : reason === "busy"
                   ? chinese
-                    ? "暂时无法确认会话状态，请稍后重试。输入仍保留，尚未发送。"
-                    : "Conversation status is unconfirmed. Retry shortly. Your draft is retained and has not been sent."
-                  : reason === "busy"
-                    ? chinese
-                      ? "原位置还有工作正在完成，我会等待它结束。输入尚未发送。"
-                      : "Work at the original location is still finishing. Your input has not been sent."
-                    : chinese
-                      ? "正在准备继续这段会话，输入尚未发送。"
-                      : "Preparing to continue this conversation. Your input has not been sent.";
+                    ? "原位置还有工作正在完成，我会等待它结束。输入尚未发送。"
+                    : "Work at the original location is still finishing. Your input has not been sent."
+                  : chinese
+                    ? "正在准备继续这段会话，输入尚未发送。"
+                    : "Preparing to continue this conversation. Your input has not been sent.";
   return (
     <div className="space-y-3 text-ui-base" aria-busy={state.busy}>
-      <p role={state.error || navigationError ? "alert" : "status"}>{message}</p>
-      {changed && (
+      {!choosingTarget && (
+        <p role={state.error || navigationError ? "alert" : "status"}>{message}</p>
+      )}
+      {needsReview && (
         <Button variant="outline" onClick={onChanged}>
           {chinese ? "查看最新内容" : "Review latest content"}
         </Button>
       )}
-      {!preferredLocation &&
-        !state.busy &&
-        !state.pending &&
-        !state.error &&
-        !selected &&
-        (state.options?.targets.length ?? 0) > 1 && (
-          <div
-            role="group"
-            aria-label={chinese ? "选择继续位置" : "Choose where to continue"}
-            className="flex flex-wrap gap-2"
-          >
-            <p className="w-full">
-              {chinese ? "你希望在哪里继续？" : "Where would you like to continue?"}
-            </p>
-            {state.options!.targets.map((row) => (
-              <Button key={row.location} variant="outline" onClick={() => setTarget(row.location)}>
-                {row.label}
-              </Button>
-            ))}
-          </div>
-        )}
-      {!canOfferOffline &&
+      {choosingTarget && (
+        <div
+          role="group"
+          aria-label={chinese ? "选择继续位置" : "Choose where to continue"}
+          className="flex flex-wrap gap-2"
+        >
+          <p className="w-full">
+            {chinese ? "你希望在哪里继续？" : "Where would you like to continue?"}
+          </p>
+          {state.options!.targets.map((row) => (
+            <Button key={row.location} variant="outline" onClick={() => setTarget(row.location)}>
+              {active && active.location !== row.location
+                ? chinese
+                  ? `在${row.label}继续`
+                  : "Continue on " + row.label
+                : row.label}
+            </Button>
+          ))}
+        </div>
+      )}
+      {!needsReview &&
+        !canOfferOffline &&
         !state.busy &&
         (state.error || state.pending || state.result || navigationError || missingTarget) && (
           <Button

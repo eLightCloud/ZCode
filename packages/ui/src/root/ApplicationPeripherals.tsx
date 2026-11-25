@@ -21,10 +21,16 @@ export interface ApplicationConversationContext {
 /** Trusted optional assembly; owns no session, credential or publication facts. */
 export interface ApplicationPeripherals {
   nativeCloudEnabled: boolean;
+  /** Visible saved transcript before its native session is opened. */
+  conversationPreview?: { sessionId: string; title: string };
+  /** Direct workspace assembly can start ordinary tasks in its native conversation namespace. */
+  prepareIndependentTask?: () => Promise<{ path: string }>;
   renderConversationContent?: (
     context: Pick<import("./ApplicationPages.js").ApplicationPageContext, "openConversation">,
   ) => ReactNode;
   closeConversationContent?: () => void;
+  /** Recheck the visible session's saved location without starting another execution. */
+  refreshConversationLocation?: (sessionId: string) => void;
   /** Open an existing native task from a read-only host index before workspace attachment. */
   openEntryProjectTask?: (taskId: string) => void;
   /** Authenticated home can attach on an explicit sidebar click. */

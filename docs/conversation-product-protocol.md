@@ -202,6 +202,8 @@ UI local intent
 
 所有会改变 conversation 的 command 必须具备幂等身份：`commandId`、`clientId`、`sessionId`、可选 `baseRevision` 和业务 target。`clientMode` 由 host attachment 可信注入，UI 不得自行选择。Web 秒级链路下，允许 UI stale；不要求每个 renderer 本地状态都实时同步。正确性边界是 `revision + eventSeq + snapshot/projection` 能把 UI 重新收口到权威状态。
 
+已打开且仍在查看的会话，如果发送文字时收到准入前的 `rejected / proto.sessionNotFound`，视图可重新订阅该会话。收到新订阅的就绪投影后，使用原 commandId、原输入和原工作区再提交一次。恢复失败时保留草稿；其他拒绝和结果未知的传输错误沿各自原有处理流程。
+
 ### Connection、Subscription 与恢复边界
 
 桌面窗口（包括 SSH/WSL/Docker）固定使用 `desktop-continuous`；手机 `/remote` 和 Web remote 固定使用 `web-remote-replayable`。两者可以订阅同一个 session，但每个 attachment 都有 host 分配的独立 `connectionId` 和独立 subscription registry，UI-facing subscribe 不能覆盖 profile。

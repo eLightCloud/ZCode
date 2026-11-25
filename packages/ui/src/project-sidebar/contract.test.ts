@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectTask, ProjectTree } from "@/project-sidebar/contract.js";
 import {
   selectProjectRows,
+  isDirectIndependentTask,
   mergeProjectTrees,
   projectKey,
   resolveEntryProject,
@@ -20,6 +21,18 @@ const task = (id: string, projectId: string | null, updatedAt: number): ProjectT
   updatedAt,
 });
 describe("project-sidebar read contract", () => {
+  it("shows qualified independent tasks of the directly connected Server without admitting remote aliases", () => {
+    const ordinary = {
+      ...task("session", null, 1),
+      hostId: "remote:server:member",
+      workspacePurpose: "conversation" as const,
+    };
+    expect(isDirectIndependentTask(ordinary)).toBe(true);
+    expect(
+      isDirectIndependentTask({ ...ordinary, workspaceIdentity: "remote:server:member:/work" }),
+    ).toBe(false);
+    expect(isDirectIndependentTask({ ...ordinary, workspacePurpose: undefined })).toBe(false);
+  });
   it("leaves an old cwd entry unresolved when two projects share that root", () => {
     const project = {
       id: "one",

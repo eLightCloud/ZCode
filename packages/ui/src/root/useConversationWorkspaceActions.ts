@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { IServiceAccessor } from "@zcode/services";
 import { logger } from "@/logger.js";
 import type { TabStoreState } from "@/store/tabStore.js";
+import { useApplicationPeripherals } from "./ApplicationPeripherals.js";
 
 export function useConversationWorkspaceActions({
   services,
@@ -14,6 +15,7 @@ export function useConversationWorkspaceActions({
   createTask: (source: string) => Promise<void>;
   setWorkspaceActionError: (error: string | null) => void;
 }) {
+  const prepareIndependentTask = useApplicationPeripherals()?.prepareIndependentTask;
   const handleSelectConversationWorkspace = useCallback(
     (path: string) => {
       // 对话工作区是 app 管理的独立 cwd，不属于用户项目：不走跨窗口项目激活，
@@ -27,6 +29,11 @@ export function useConversationWorkspaceActions({
 
   const handleResolveConversationWorkspace = useCallback(async () => {
     try {
+      if (prepareIndependentTask) {
+        const { path } = await prepareIndependentTask();
+        setWorkspaceActionError(null);
+        return path;
+      }
       if (!services.projectService) throw new Error("project.service-unavailable");
       const result = await services.projectService.prepareSession();
       setWorkspaceActionError(null);
@@ -37,7 +44,7 @@ export function useConversationWorkspaceActions({
       setWorkspaceActionError(message);
       throw error;
     }
-  }, [services.projectService, setWorkspaceActionError]);
+  }, [services.projectService, prepareIndependentTask, setWorkspaceActionError]);
 
   const handleEnsureConversationWorkspace = useCallback(async () => {
     const path = await handleResolveConversationWorkspace();

@@ -42,6 +42,7 @@ import {
   usePaneLayoutStore,
 } from "@/v4/paneLayoutStore.js";
 import { resolveWorkbenchNewTaskTarget } from "@/conversation-workspace-target/workbenchTarget.js";
+import { useApplicationPeripherals } from "./ApplicationPeripherals.js";
 import type { WorkbenchNewTaskTarget } from "@/conversation-workspace-target/workbenchTarget.js";
 import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
 import {
@@ -135,6 +136,7 @@ export function useRootWorkspaceActions({
   workbenchGroupClientMode?: ZCodeTaskClientMode;
 }) {
   const navigationSequence = useRef(0);
+  const prepareIndependentTask = useApplicationPeripherals()?.prepareIndependentTask;
   const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
   const requestConfirmation = useConfirmDialog();
   // Root 的远端装配依赖本 hook 返回的动作，函数引用每轮都会变化；它只用于点击执行，
@@ -290,6 +292,8 @@ export function useRootWorkspaceActions({
               )?.groupId ?? null)
             : (draftGroupId ?? null);
         }
+        // 保留分组意图后再决定归属；只有直连工作台的全局新建默认在项目外工作。
+        if (prepareIndependentTask && request === undefined) requestOptions.projectId = null;
         request = requestOptions;
         let projectId =
           typeof request === "string"
@@ -358,14 +362,24 @@ export function useRootWorkspaceActions({
           !projectId && (!hostId || hostId === "local")
             ? ensurePendingTaskDraft(resolveComposerScope(null, undefined, composerClientNamespace))
             : null;
-        const target = await services.projectService.prepareSession({
-          ...(projectId ? { projectId } : {}),
-          ...(hostId ? { hostId } : {}),
-          // 显式 local 与省略 Host 是同一入口，不能漏掉待发送身份而另建目录。
-          ...(pendingDraft
-            ? { draftId: pendingDraft.draftId, reuseDraft: Boolean(pendingDraft.workspacePath) }
-            : {}),
-        });
+        const target =
+          prepareIndependentTask && !projectId && !hostId && !requestOptions.targetWorkspace
+            ? {
+                workspacePath: (await prepareIndependentTask()).path,
+                projectId: null,
+                workspaceIdentity: undefined,
+              }
+            : await services.projectService.prepareSession({
+                ...(projectId ? { projectId } : {}),
+                ...(hostId ? { hostId } : {}),
+                // 显式 local 与省略 Host 是同一入口，不能漏掉待发送身份而另建目录。
+                ...(pendingDraft
+                  ? {
+                      draftId: pendingDraft.draftId,
+                      reuseDraft: Boolean(pendingDraft.workspacePath),
+                    }
+                  : {}),
+              });
         if (!isCurrent()) return;
         if (hostId && hostId !== "local") {
           if (!target.workspaceIdentity || !openRemoteProjectWorkspace)
@@ -405,6 +419,7 @@ export function useRootWorkspaceActions({
     },
     [
       services.projectService,
+      prepareIndependentTask,
       composerClientNamespace,
       activeWorkspacePath,
       activeWorkspaceIdentity,

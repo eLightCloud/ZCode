@@ -1,4 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import { ConversationRuntimeError } from "@zcode/shared";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { TID_V4_RETRY_SUBSCRIBE } from "@zcode/shared/test-ids";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
@@ -12,6 +14,7 @@ export interface SessionSubscriptionErrorPanelProps {
   workspacePath: string;
   onReconnect: () => void;
 }
+const admissionClosedMessage = new ConversationRuntimeError("admission_closed").message;
 
 export function SessionSubscriptionErrorPanel({
   error,
@@ -21,6 +24,12 @@ export function SessionSubscriptionErrorPanel({
 }: SessionSubscriptionErrorPanelProps) {
   const { intl } = useZCodeIntl();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const refreshLocation = useApplicationPeripherals()?.refreshConversationLocation;
+  useEffect(() => {
+    // 订阅失败只触发只读位置核对；是否已经交接完全由中心决定。
+    refreshLocation?.(sessionId);
+  }, [refreshLocation, sessionId, error]);
+  const checkSaved = refreshLocation && error === admissionClosedMessage;
   const handleOpenFeedback = useCallback(async () => {
     openFeedbackSubmit({
       title: error.slice(0, 80),
@@ -48,7 +57,9 @@ export function SessionSubscriptionErrorPanel({
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-ui-base">
-      <p className="max-w-full break-words text-center font-mono text-destructive">{error}</p>
+      <p className="max-w-full break-words text-center font-mono text-destructive">
+        {checkSaved ? intl.formatMessage({ id: "chat.error.connectionLost" }) : error}
+      </p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button type="button" variant="outline" onClick={handleOpenFeedback}>
           {intl.formatMessage({ id: "chat.error.feedback" })}
@@ -56,6 +67,11 @@ export function SessionSubscriptionErrorPanel({
         <Button type="button" data-testid={TID_V4_RETRY_SUBSCRIBE} onClick={onReconnect}>
           {intl.formatMessage({ id: "workspaceSidebar.reconnect" })}
         </Button>
+        {checkSaved && (
+          <Button type="button" variant="outline" onClick={() => refreshLocation(sessionId)}>
+            {intl.formatMessage({ id: "common.refresh" })}
+          </Button>
+        )}
       </div>
     </div>
   );

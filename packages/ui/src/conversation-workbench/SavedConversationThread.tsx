@@ -2,7 +2,10 @@ import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
 import { ConversationConflictChoice } from "./ConversationConflictChoice.js";
 import { useEffect, useRef, useState } from "react";
 import type { ConversationHistoryReader } from "@zcode/shared";
-import type { useConversationHistory } from "../hooks/useConversationHistory.js";
+import {
+  savedConversationVersion,
+  type useConversationHistory,
+} from "../hooks/useConversationHistory.js";
 import { ConversationUserInputBubble } from "@/v4/ConversationUserInputBubble.js";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
@@ -53,11 +56,16 @@ export function SavedConversationThread({
   const needsChoice = conflict && (!approved || approvedCandidates.current !== signature);
   const readAttempt = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (history.loading || history.failed || viewed || !item?.version) return;
-    const key = item.revision + ":" + item.version;
+    history.pinCurrentRead?.(requested || conflict);
+    return () => history.pinCurrentRead?.(false);
+  }, [history.pinCurrentRead, requested, conflict]);
+  useEffect(() => {
+    const version = item && savedConversationVersion(item);
+    if (history.loading || history.failed || viewed || !version) return;
+    const key = item.revision + ":" + version;
     if (readAttempt.current === key) return;
     readAttempt.current = key;
-    void history.open(session, item.version);
+    void history.open(session, version);
   });
   const reload = () => {
     readAttempt.current = undefined;
@@ -84,6 +92,14 @@ export function SavedConversationThread({
             </div>
           )}
           {status}
+          {viewed && history.candidatesChanged && (
+            <p role="status">
+              {chinese ? "已保存的版本已更新。" : "The saved versions have changed."}
+              <Button variant="ghost" onClick={reload}>
+                {chinese ? "重新核对版本" : "Review latest versions"}
+              </Button>
+            </p>
+          )}
           {viewed?.messages.map((message) => (
             <Message key={message.id} from={message.role}>
               {message.role === "user" ? (
@@ -159,6 +175,7 @@ export function SavedConversationThread({
           disabled={!viewed || viewed.deleted || history.failed || requested}
           avoidIosInputFocusZoom
           onSubmit={(text) => {
+            if (!text.trim() || requested || !viewed || viewed.deleted) return false;
             setDraft(text);
             onDraftChange?.(text);
             draftText.current = text;

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { ApplicationPeripheralsProvider, type ApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readV4ComposerDraft,
@@ -28,6 +30,7 @@ function fixture(
     hostId: string;
   }) => Promise<void>,
   openMobileProjectDraft?: (request: CreateTaskOptions) => Promise<void>,
+  peripherals?: ApplicationPeripherals,
 ) {
   let next = 0;
   const prepared = new Map<string, string>();
@@ -84,7 +87,11 @@ function fixture(
   };
   const { result, rerender } = renderHook(
     ({ opener }) => useRootWorkspaceActions({ ...options, openRemoteProjectWorkspace: opener }),
-    { initialProps: { opener: openRemoteProjectWorkspace } },
+    {
+      initialProps: { opener: openRemoteProjectWorkspace },
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(ApplicationPeripheralsProvider, { value: peripherals, children }),
+    },
   );
   return { result, rerender, prepareSession, readTree, addTab, state };
 }
@@ -430,6 +437,20 @@ it.each(["desktop-continuous", "web-remote-replayable"] as const)(
     }
   },
 );
+
+it("direct Web starts outside the active project while explicit project actions keep their owner", async () => {
+  useZCodeSessionStore.getState().startDraft("/old", undefined, undefined, { projectId: "p" });
+  const ordinary = vi.fn(async () => ({ path: "/member/conversation" }));
+  const { result, prepareSession, addTab } = fixture(undefined, undefined, undefined, {
+    prepareIndependentTask: ordinary,
+  } as unknown as ApplicationPeripherals);
+  await act(async () => { await result.current.handleCreateTask(); });
+  expect(ordinary).toHaveBeenCalledOnce();
+  expect(prepareSession).not.toHaveBeenCalled();
+  expect(addTab).toHaveBeenCalledWith("/member/conversation", { workspacePurpose: "conversation" });
+  await act(async () => { await result.current.handleCreateTask({ projectId: "p" }); });
+  expect(prepareSession).toHaveBeenCalledExactlyOnceWith({ projectId: "p" });
+});
 
 it("D3 inherits draft project without reading task history; explicit null opts out", async () => {
   useZCodeSessionStore

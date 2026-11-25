@@ -54,7 +54,7 @@ export const ProjectTaskRow = memo(function Row({
         // pinnedTasks 只负责标识样式；TaskList 的真实渲染集合始终是 tasks。
         tasks={rows}
         pinnedTasks={task.pinned ? rows : EMPTY}
-        activeTaskId={activeId}
+        activeTaskId={peripherals?.conversationPreview?.sessionId ?? activeId}
         isWorkspaceActive={presentation.activeWorkspaceKey === workspaceKey}
         mobileActiveTaskKey={presentation.mobileActiveTaskKey}
         onOpenFileTree={

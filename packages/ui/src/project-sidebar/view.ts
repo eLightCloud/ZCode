@@ -127,6 +127,13 @@ export function projectHasUnread(
   );
 }
 
+export function isDirectIndependentTask(task: ProjectTask): boolean {
+  // 直连成员 Host 有自己的 hostId；明确登记且没有远端别名的普通会话属于当前树。
+  return (
+    task.hostId === "local" || (task.workspacePurpose === "conversation" && !task.workspaceIdentity)
+  );
+}
+
 /**
  * 任务栏/托盘角标的未读总数：与侧栏蓝点同源（host readTree 的权威树），
  * 过滤条件与 projectHasUnread 一致（非归档 + 有 unreadAt），按 host+workspace+task 去重。
@@ -147,11 +154,10 @@ export function countProjectTreeUnreadTasks(tree: ProjectTree): number {
       continue;
     }
 
-    // 可见性对齐渲染分区：置顶区跨项目渲染；本地无项目任务区只渲染
-    // host=local 的 null-project 任务；其余任务必须归属渲染项目。
+    // 角标只汇总可见的置顶任务、当前 Host 普通任务及已显示项目内的任务。
     const visible =
       task.pinned ||
-      (task.projectId == null && task.hostId === "local") ||
+      (task.projectId == null && isDirectIndependentTask(task)) ||
       renderedProjectKeys.has(`${task.hostId}::${task.projectId}`);
     if (!visible) {
       continue;

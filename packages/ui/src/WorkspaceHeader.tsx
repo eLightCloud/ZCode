@@ -8,7 +8,8 @@ import type {
   UserInfo,
 } from "@zcode/shared";
 import { useState } from "react";
-import { TID_WORKSPACE_HEADER } from "@zcode/shared/test-ids";
+import { TID_WORKSPACE_HEADER, TID_WORKSPACE_TITLE } from "@zcode/shared/test-ids";
+import { useApplicationPeripherals } from "@/root/ApplicationPeripherals.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { cn } from "@/components/lib/utils.js";
 import {
@@ -146,6 +147,8 @@ export function WorkspaceHeader({
   allowOpenWorkspace?: boolean;
 }) {
   const [selectedEditor, setSelectedEditor] = useState<EditorInfo | null>(null);
+  const application = useApplicationPeripherals();
+  const preview = application?.conversationPreview;
   // Linux 与 Windows 共用内联窗控，不再预留旧悬浮窗控的标题栏区域。
   const usesInlineWindowControls = Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop));
   const headerWindowControlsPaddingClass = resolveTopOverlayLeadingPaddingClass({
@@ -182,7 +185,18 @@ export function WorkspaceHeader({
           headerWindowControlsPaddingClass,
         )}
       >
-        {variant === "task" || remoteTarget || workspaceIdentity || remoteSessionId ? (
+        {preview ? (
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden [app-region:no-drag]">
+            <h1
+              data-testid={TID_WORKSPACE_TITLE}
+              className="truncate text-ui-base font-semibold"
+              title={preview.title}
+            >
+              {preview.title}
+            </h1>
+            {application.renderConversationListStatus?.(preview.sessionId)}
+          </div>
+        ) : variant === "task" || remoteTarget || workspaceIdentity || remoteSessionId ? (
           <WorkspaceHeaderTitleSection
             variant={variant}
             readOnlyReason={readOnlyReason}
@@ -225,11 +239,11 @@ export function WorkspaceHeader({
           <div className="min-w-0 flex-1" aria-hidden="true" />
         )}
         <WorkspaceHeaderActionSection
-          variant={variant}
-          activeTaskId={activeTaskId}
+          variant={preview ? "draft" : variant}
+          activeTaskId={preview ? null : activeTaskId}
           user={user}
           readOnlyReason={readOnlyReason}
-          workspaceAbsPath={workspaceAbsPath}
+          workspaceAbsPath={preview ? "" : workspaceAbsPath}
           workspaceIdentity={workspaceIdentity}
           remoteSessionId={remoteSessionId}
           remoteTarget={remoteTarget}

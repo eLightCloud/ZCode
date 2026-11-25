@@ -6,7 +6,7 @@ import type {
   RemoteProjectDirectory,
   VirtualProject,
 } from "@/project-sidebar/contract.js";
-import { selectProjectRows } from "@/project-sidebar/view.js";
+import { isDirectIndependentTask, selectProjectRows } from "@/project-sidebar/view.js";
 import { ProjectTaskRows } from "@/project-sidebar/ProjectTaskRows.js";
 import { PurposeSections } from "@/project-sidebar/PurposeSections.js";
 export function ProjectSections({
@@ -44,7 +44,7 @@ export function ProjectSections({
 }) {
   const foreignHosts = new Set(directory.hosts.map((host) => host.id));
   const localTasks = selectProjectRows(tree, { kind: "project", projectId: null }).filter(
-    (task) => task.hostId === "local" && !foreignHosts.has(task.hostId),
+    (task) => isDirectIndependentTask(task) && !foreignHosts.has(task.hostId),
   );
   return (
     <PurposeSections

@@ -6,7 +6,11 @@
 
 同一 useConversationHistory owner 可同时服务 ConversationSidebar 和 ConversationHistory 的准确 session 详情。侧栏只补充 nativeSessionIds 尚未呈现的中心记录，不伪造 ZCodeTaskMeta、时间、cwd 或项目。只读点击打开正文，不申请执行；版本和继续动作沿原 reader。详情接受共享 history 时不得建立第二读取 owner。
 
-选中 session 复用原生消息与 ChatPromptEditor，不增加版本管理页。多候选在会话中读取实际内容并供必要选择；后续输入是未接纳草稿，只有明确提交 / 当前会话明确选择才挂载既有 continuation hook。候选变化拒绝旧决定，唯一目标自动沿原 owner 准备 / 恢复；离线风险仍需明确确认。目标与输入导航经公开端口，草稿由既有 composer owner 保存，不创建 accepted queue、不自动发送。失败可重查原 operation；确认取消之前不能新开离线操作。
+选中 session 复用原生消息与 ChatPromptEditor。只有一个候选版本时，侧栏和详情读取该版本的正文。存在多个候选时由用户查看内容并选择。提交追问后，当前执行位置可打开且没有待决操作时沿用该位置。在线原位置和所选位置不同时，用户明确选择目标，交接请求使用当前代次的执行基线和用户查看过的候选集合。候选变更后重新展示最新内容。目标仅包含调用窗口可打开的位置。服务端确认就绪后，按同一 session 的实际原生工作区打开，草稿由原生输入框保留，用户确认发送。失败可重查原 operation，离线接续须另行确认。
+
+工作台通过 ApplicationPeripherals.conversationPreview 提供当前查看的已保存会话标识和标题。标题、保存图标与侧栏选中项共同指向该会话。接续成功后，原生工作台恢复展示目标任务自己的操作。
+
+原位置查看已交接任务时，由当前任务 ID 定位中心已保存正文。可见的单一候选随中心版本更新。刷新时保留输入框和滚动容器，比较或确认期间固定已展示版本。读取既不供给位置也不提交输入；失去身份时清除旧正文，切换任务后丢弃晚到的读取结果。
 
 ConversationHistoryLabels.sidebarUnavailable 可提供侧栏简短失败摘要；侧栏摘要与刷新保持同一行，不渲染 readError 排障长文。其它会话视图及日志继续使用已有类型化错误。
 

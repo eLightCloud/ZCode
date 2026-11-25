@@ -175,7 +175,7 @@ function ReadyV4ConversationProvider({
     return {
       layer,
       sendCommand: (envelope: CommandEnvelope, context?: { projectId?: string | null }) =>
-        transport.sendCommand(envelope, context),
+        layer.sendCommand(envelope, context),
       fileChanges: (params: V4ConversationFileChangesParams) => transport.fileChanges(params),
       fileRewindPreview: (params: V4ConversationFileRewindPreviewParams) =>
         transport.fileRewindPreview(params),
@@ -367,7 +367,7 @@ function ReadyV4PaneConversationProvider({
       value: {
         layer: lease.layer,
         sendCommand: (envelope: CommandEnvelope, context?: { projectId?: string | null }) =>
-          lease.transport.sendCommand(envelope, context),
+          lease.layer.sendCommand(envelope, context),
         fileChanges: (params: V4ConversationFileChangesParams) =>
           lease.transport.fileChanges(params),
         fileRewindPreview: (params: V4ConversationFileRewindPreviewParams) =>

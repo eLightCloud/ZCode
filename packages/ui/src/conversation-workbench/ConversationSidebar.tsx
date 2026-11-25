@@ -2,7 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button.js";
 import { ConversationSaveIndicator } from "./ConversationSaveIndicator.js";
 import type { ConversationHistoryLabels } from "../components/ConversationHistory.js";
-import type { useConversationHistory } from "../hooks/useConversationHistory.js";
+import {
+  savedConversationVersion,
+  type useConversationHistory,
+} from "../hooks/useConversationHistory.js";
 
 /** Read projection of unattached saved sessions in the native task section; no fake cwd/meta. */
 export function ConversationSidebar({
@@ -55,7 +58,7 @@ export function ConversationSidebar({
       )}
       <ul className="space-y-0.5">
         {items.map((item) => {
-          const version = item.version ?? item.candidates[0];
+          const version = savedConversationVersion(item);
           return (
             <li key={item.session}>
               <button

@@ -2,12 +2,72 @@
 import { createElement } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ConversationInlineContinuation } from "../../src/conversation-workbench/ConversationInlineContinuation.js";
 import {
   ConversationConflict,
   useConversationHistory,
   type ConversationHistoryReader,
 } from "../../src/conversation-workbench/contract.js";
 afterEach(cleanup);
+it("hands off the active baseline after a newer snapshot is saved, only after the user chooses this computer", async () => {
+  const f = fixture();
+  f.reader.continuation!.options = vi.fn(async () => ({
+    session: "s",
+    revision: 3,
+    candidates: ["latest"],
+    active: { location: "server", version: "original", generation: 1 },
+    pending: null,
+    handoff: null,
+    inflight: null,
+    targets: [{ location: "desktop", label: "This computer" }],
+  }));
+  const open = vi.fn();
+  render(
+    createElement(ConversationInlineContinuation, {
+      reader: f.reader,
+      session: "s",
+      version: "latest",
+      chinese: true,
+      onReady: open,
+      expectedCandidates: ["latest"],
+    }),
+  );
+  const transfer = await screen.findByRole("button", { name: /This computer/ });
+  expect(f.run).not.toHaveBeenCalled();
+  fireEvent.click(transfer);
+  await waitFor(() => expect(open).toHaveBeenCalledOnce());
+  expect(f.run.mock.calls[0][0]).toMatchObject({
+    kind: "handoff",
+    target: "desktop",
+    version: "original",
+    candidates: ["latest"],
+  });
+});
+it("opens an already active reachable location without starting another operation", async () => {
+  const f = fixture();
+  f.reader.continuation!.options = vi.fn(async () => ({
+    session: "s",
+    revision: 3,
+    candidates: ["latest"],
+    active: { location: "desktop", version: "original", generation: 1 },
+    pending: null,
+    handoff: null,
+    inflight: null,
+    targets: [{ location: "desktop", label: "This computer" }],
+  }));
+  const open = vi.fn();
+  render(
+    createElement(ConversationInlineContinuation, {
+      reader: f.reader,
+      session: "s",
+      version: "latest",
+      chinese: true,
+      onReady: open,
+    }),
+  );
+  await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith("s", "desktop", undefined));
+  expect(f.run).not.toHaveBeenCalled();
+});
 function fixture(changed = false) {
   const run = vi.fn(async (input) => ({
     session: "s",

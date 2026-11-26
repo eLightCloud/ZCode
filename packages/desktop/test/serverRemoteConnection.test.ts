@@ -436,6 +436,8 @@ describe("server remote connection", () => {
       deliveryProfile: "replayable",
     });
     browserSocket?.close();
+    expect(browserServices.windowControllerService === undefined).toBe(true);
+    expect(connection.services.windowControllerService === undefined).toBe(true);
 
     const legacyHeaderConnection = await connectNodeRpc(`ws://127.0.0.1:${address.port}/ws`, {
       "x-zcode-rpc-client-mode": "desktop-continuous",

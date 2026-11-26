@@ -226,7 +226,9 @@ function registerRemoteWorkspaceServicePort(params: RemoteWorkspaceServicePortRe
     return;
   }
 
-  const remoteConnection = createMessagePortServiceConnection(params.port);
+  const remoteConnection = createMessagePortServiceConnection(params.port, {
+    windowControllerService: true,
+  });
   const remoteServices = remoteConnection.services;
   const services = buildRemoteWorkspaceSessionServicesForRegistration({
     baseServices: baseServicesForRemoteSessions,
@@ -322,6 +324,7 @@ function initializeBusinessRoot(port: MessagePort): void {
   appInitialized = true;
   const services = connectViaMessagePort(port, {
     sourceServerManagementService: true,
+    windowControllerService: true,
   });
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);

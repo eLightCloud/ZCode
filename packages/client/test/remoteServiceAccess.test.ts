@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IChannel, IChannelClient } from "@zcode/rpc";
 import { ISourceServerManagementService } from "@zcode/services";
+import { createMessagePortServiceConnection } from "../src/messageport.js";
 import { RemoteServiceAccess } from "../src/remoteServiceAccess.js";
 
 const channel: IChannel = {
@@ -27,6 +28,19 @@ describe("RemoteServiceAccess", () => {
 });
 
 describe("RemoteServiceAccess optional channels", () => {
+  it("only exposes the window controller on a desktop workspace port", () => {
+    const { port1, port2 } = new MessageChannel();
+    const workspace = createMessagePortServiceConnection(port1, { windowControllerService: true });
+    const settings = createMessagePortServiceConnection(port2);
+    try {
+      expect(workspace.services.windowControllerService).toBeDefined();
+      expect(settings.services.windowControllerService === undefined).toBe(true);
+    } finally {
+      workspace.dispose();
+      settings.dispose();
+    }
+  });
+
   it("does not construct a Source management proxy for scopes that do not publish it", () => {
     const getChannel = vi.fn(() => channel);
     const services = new RemoteServiceAccess({ getChannel } as IChannelClient, {

@@ -2672,6 +2672,7 @@ const zhCN: Record<string, string> = {
   "taskList.rename": "重命名任务",
   "taskList.archive": "归档任务",
   "taskList.archiveFailed": "归档任务失败",
+  "taskList.openWorkspaceToManage": "请先打开工作区，再管理任务。",
   "taskList.unarchive": "取消归档任务",
   "taskList.renamePlaceholder": "任务名称",
   "taskList.renameFailed": "重命名任务失败",

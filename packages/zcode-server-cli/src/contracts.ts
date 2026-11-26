@@ -63,6 +63,7 @@ export const serverStatusSchema = z
         idleStop: z.literal(true),
         dataRootLock: z.literal("kernel-sqlite-v1"),
         liveStatus: z.literal(true).optional(),
+        gracefulStop: z.literal(true).optional(),
         idleMaintenance: z.literal(true).optional(),
       })
       .optional(),
@@ -123,6 +124,7 @@ export const controlRequestSchema = z.discriminatedUnion("command", [
   requestBase.extend({ command: z.literal("ping") }),
   requestBase.extend({ command: z.literal("status"), includeCapabilities: z.boolean().optional() }),
   requestBase.extend({ command: z.literal("stop") }),
+  requestBase.extend({ command: z.literal("graceful-stop") }),
   requestBase.extend({ command: z.literal("stop-if-idle") }),
   requestBase.extend({ command: z.literal("maintenance"), input: runtimeMaintenanceParamsSchema }),
   requestBase.extend({ command: z.literal("restart") }),

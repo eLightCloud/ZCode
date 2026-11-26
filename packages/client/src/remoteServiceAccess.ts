@@ -62,6 +62,12 @@ import {
   type IServiceAccessor,
 } from "@zcode/services";
 
+export interface RemoteServiceAccessOptions {
+  sourceServerManagementService?: boolean;
+  windowControllerService?: boolean;
+  windowProjectDirectory?: boolean;
+}
+
 /**
  * RemoteServiceAccess — 通过 ChannelClient 自动创建类型安全的服务代理
  *
@@ -81,7 +87,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly credentialService: ICredentialService;
   readonly broadcastService: IBroadcastService;
   readonly zcodeTaskService: IZCodeTaskService;
-  readonly windowControllerService: IWindowControllerService;
+  readonly windowControllerService?: IWindowControllerService;
   readonly zcodeAgentService: IZCodeAgentService;
   readonly zcodeSessionService: IZCodeSessionService;
   readonly taskGroupService: ITaskGroupService;
@@ -128,10 +134,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly feedbackService: IFeedbackService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
 
-  constructor(
-    channelClient: IChannelClient,
-    options: { sourceServerManagementService?: boolean; windowProjectDirectory?: boolean } = {},
-  ) {
+  constructor(channelClient: IChannelClient, options: RemoteServiceAccessOptions = {}) {
     // 远端工作区的 project 必须保留 Source 语义；只有显式能力才创建完整窗口目录组。
     if (options.windowProjectDirectory) {
       this.windowProjectDirectory = {
@@ -181,9 +184,12 @@ export class RemoteServiceAccess implements IServiceAccessor {
     this.zcodeTaskService = ProxyChannel.toService<IZCodeTaskService>(
       channelClient.getChannel(IZCodeTaskService.channelName),
     );
-    this.windowControllerService = ProxyChannel.toService<IWindowControllerService>(
-      channelClient.getChannel(IWindowControllerService.channelName),
-    );
+    // 直连 Server 只有任务服务。无条件创建窗口代理会把归档发往未注册的频道。
+    if (options.windowControllerService) {
+      this.windowControllerService = ProxyChannel.toService<IWindowControllerService>(
+        channelClient.getChannel(IWindowControllerService.channelName),
+      );
+    }
     this.applicationHostService = ProxyChannel.toService<IApplicationHostService>(
       channelClient.getChannel(IApplicationHostService.channelName),
     );

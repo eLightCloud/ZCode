@@ -78,6 +78,7 @@ it("MRO02：真实 relay 的能力回包在服务公开前到达，不因仅派�
     });
     expect(f.activateTransport).toHaveBeenCalledOnce();
     expect(services.windowProjectDirectory).toBeDefined();
+    expect(services.windowControllerService).toBeDefined();
   } finally {
     f.dispose();
   }

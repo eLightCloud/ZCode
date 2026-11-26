@@ -148,6 +148,7 @@ export async function runServerCli(
         "running-tasks",
         "runtime-identity",
         "stop",
+        "graceful-stop",
         "stop-if-idle",
         "restart",
         "update",
@@ -192,6 +193,7 @@ export async function runServerCli(
       case "running-tasks":
       case "runtime-identity":
       case "stop":
+      case "graceful-stop":
       case "stop-if-idle":
       case "restart":
         return await runControl(
@@ -568,7 +570,7 @@ async function runControl(
       const persisted = await readPersistedStatusDetailed(layout);
       result = persisted.status ?? createStoppedServerStatus(ZCODE_VERSION);
     } else if (
-      (command === "stop" || command === "stop-if-idle") &&
+      (command === "stop" || command === "stop-if-idle" || command === "graceful-stop") &&
       isControlEndpointUnavailable(error)
     ) {
       const persisted = await readPersistedStatusDetailed(layout);
@@ -582,7 +584,7 @@ async function runControl(
       ) {
         throw error;
       }
-      if (command === "stop-if-idle") {
+      if (command === "stop-if-idle" || command === "graceful-stop") {
         // 缺失 socket 不是停止证明；条件停止的离线重试同时核验两份内核互斥。
         await waitForServerStopped(layout);
         const writer = await new DataRootLock(join(layout.runDir, "core.lock")).inspect();

@@ -8,9 +8,13 @@ import { useArchiveManagement } from "@/project-sidebar/useArchiveManagement.js"
 
 const mocks = vi.hoisted(() => ({
   directory: {} as any,
+  openEntryProjectTask: undefined as (() => void) | undefined,
   mutateTask: vi.fn(),
   confirm: vi.fn(),
   removeTaskState: vi.fn(),
+}));
+vi.mock("@/root/ApplicationPeripherals.js", () => ({
+  useApplicationPeripherals: () => ({ openEntryProjectTask: mocks.openEntryProjectTask }),
 }));
 vi.mock("@/project-sidebar/ProjectDirectoryProvider.js", () => ({
   useProjectDirectory: () => mocks.directory,
@@ -72,6 +76,7 @@ const tree = (): ProjectTree => ({
 });
 afterEach(() => {
   cleanup();
+  mocks.openEntryProjectTask = undefined;
   vi.clearAllMocks();
 });
 
@@ -147,6 +152,13 @@ function setup() {
   mocks.mutateTask.mockResolvedValue(null);
   return renderHook(() => useArchiveManagement());
 }
+it("does not report a successful restore through the read-only home index", async () => {
+  mocks.openEntryProjectTask = vi.fn();
+  const { result } = setup();
+  await act(async () => result.current.run([tree().tasks[0]!], "unarchive"));
+  expect(mocks.mutateTask).not.toHaveBeenCalled();
+  expect(result.current.result).toBeNull();
+});
 it("cancelled deletion does not mutate; one in-flight batch rejects duplicate clicks and preserves failures", async () => {
   const { result } = setup();
   mocks.confirm.mockResolvedValueOnce(false);

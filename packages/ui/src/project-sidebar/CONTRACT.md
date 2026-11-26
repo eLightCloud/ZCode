@@ -42,6 +42,8 @@ UI 纠偏：分区复用 WorkspacePurposeSection 和原折叠/顺序偏好；项
 
 ## 当前任务与归档
 
+未附着首页展示已授权 Host 的只读项目索引时，项目和独立任务均可选中进入工作区。此投影中的任务行与归档管理禁用写操作；进入工作区后，归档和恢复由所属 Host 的原生服务执行。
+
 项目树读取 owner 接受新快照后，仅对同 Host + workspaceKey + taskId 的未归档到已归档转换调用既有 removeTaskState。归档后的当前详情退出到原工作区草稿，不自动选择下一条同名任务；首次已归档、离线缺行、不同 attachment、失败/迟到结果不触发清理。标题由 active-task hook 经已有 scoped TaskService.getTaskMeta 读取同一 Host 索引，正文冷恢复不参与标题 authority。
 
 ## 输入框项目选择器

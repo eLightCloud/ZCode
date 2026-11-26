@@ -43,6 +43,7 @@ function ArchiveManagementContent() {
     [state.tree, query, sort, project],
   );
   const rows = useMemo(() => groups.flatMap((g) => g.tasks), [groups]);
+  const actionsDisabled = state.busy || Boolean(state.error || state.readOnlyReason);
   const name = (group: ArchiveGroup) => {
     const title = group.project?.name ?? msg(group.projectId ? "removedProject" : "unclassified");
     const source = state.directory.hosts.find((h) => h.id === group.hostId);
@@ -56,7 +57,7 @@ function ArchiveManagementContent() {
         <Button
           data-testid="archive-delete-all"
           variant="ghost"
-          disabled={state.busy || state.loading || Boolean(state.error) || !rows.length}
+          disabled={actionsDisabled || state.loading || !rows.length}
           className="bg-destructive-surface text-destructive-surface-foreground hover:bg-destructive-surface"
           onClick={() => void state.run(rows, "delete")}
         >
@@ -64,6 +65,9 @@ function ArchiveManagementContent() {
           {msg("deleteAll")}
         </Button>
       </div>
+      {state.readOnlyReason && (
+        <p className="text-ui-sm text-foreground-subtle">{state.readOnlyReason}</p>
+      )}
       <div
         data-testid="archive-filters"
         className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,13rem)]"
@@ -167,7 +171,7 @@ function ArchiveManagementContent() {
             group={group}
             name={name(group)}
             sort={sort}
-            disabled={state.busy || Boolean(state.error)}
+            disabled={actionsDisabled}
             onAction={state.run}
           />
         ))

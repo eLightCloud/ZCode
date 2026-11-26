@@ -1,6 +1,6 @@
 import { MessagePortProtocol, ChannelClient } from "@zcode/rpc";
 import type { IServiceAccessor } from "@zcode/services";
-import { RemoteServiceAccess } from "./remoteServiceAccess.js";
+import { RemoteServiceAccess, type RemoteServiceAccessOptions } from "./remoteServiceAccess.js";
 import { isRendererProductionBuild } from "./rendererLoggingEnv.js";
 
 function logMessagePortDebug(message: string): void {
@@ -16,6 +16,11 @@ export interface MessagePortServiceConnection {
   dispose: (reason?: Error) => void;
 }
 
+type MessagePortServiceOptions = Pick<
+  RemoteServiceAccessOptions,
+  "sourceServerManagementService" | "windowControllerService"
+>;
+
 /**
  * 创建一个带明确生命周期的 MessagePort service connection。
  *
@@ -24,7 +29,7 @@ export interface MessagePortServiceConnection {
  */
 export function createMessagePortServiceConnection(
   port: MessagePort,
-  options: { sourceServerManagementService?: boolean } = {},
+  options: MessagePortServiceOptions = {},
 ): MessagePortServiceConnection {
   logMessagePortDebug("[messageport] creating protocol and client...");
   const protocol = new MessagePortProtocol(port);
@@ -57,7 +62,7 @@ export function createMessagePortServiceConnection(
  */
 export function connectViaMessagePort(
   port: MessagePort,
-  options: { sourceServerManagementService?: boolean } = {},
+  options: MessagePortServiceOptions = {},
 ): IServiceAccessor {
   return createMessagePortServiceConnection(port, options).services;
 }

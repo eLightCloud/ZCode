@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { ProjectTask } from "@/project-sidebar/contract.js";
+import { useProjectedTaskReadOnlyReason } from "@/project-sidebar/ProjectTaskListContext.js";
 import { useProjectDirectory } from "@/project-sidebar/ProjectDirectoryProvider.js";
 import { mutateProjectTask } from "@/project-sidebar/task-mutation.js";
 import { archiveTaskKey } from "@/project-sidebar/archive-view.js";
@@ -14,6 +15,7 @@ import { logger } from "@/logger.js";
 export type ArchiveOperation = "unarchive" | "delete";
 export function useArchiveManagement() {
   const directory = useProjectDirectory();
+  const readOnlyReason = useProjectedTaskReadOnlyReason();
   const { zcodeTaskService: service, windowControllerService: controller } =
     useBaseWorkspaceServices();
   const removeTaskState = useZCodeSessionStore((s) => s.removeTaskState);
@@ -29,7 +31,7 @@ export function useArchiveManagement() {
   const latest = useRef(directory);
   latest.current = directory;
   const run = async (tasks: ProjectTask[], operation: ArchiveOperation) => {
-    if (locked.current || !tasks.length) return;
+    if (readOnlyReason || locked.current || !tasks.length) return;
     // 固定确认时的身份集合；搜索变化、新归档和重复点击不能扩充已经确认的批次。
     const candidates = [
       ...new Map(tasks.filter((t) => t.archived).map((t) => [archiveTaskKey(t), t])).values(),
@@ -91,5 +93,5 @@ export function useArchiveManagement() {
       setBusy(false);
     }
   };
-  return { ...directory, busy, result, run };
+  return { ...directory, readOnlyReason, busy, result, run };
 }

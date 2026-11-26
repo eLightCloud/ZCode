@@ -453,8 +453,8 @@ export async function runServerCore(
       clearInterval(heartbeat);
       activitySubscription.dispose();
       taskActivityTracker.dispose();
-      await http.close().catch(() => undefined);
-      await automation?.dispose();
+      // 同一轮关闭新连接与调度认领，已接纳回执均完成后再释放存储。
+      await Promise.all([http.close().catch(() => undefined), automation?.dispose()]);
       await disposeServiceResourcesAndWait(services).catch(() => undefined);
       await diagnostics?.flush();
       await send({ type: "shutdown-ack" });

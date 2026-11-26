@@ -100,3 +100,43 @@ it("rejects idle-stop admission while the native task owner reports active work"
     await supervisor.stop();
   }
 });
+
+it("drains an explicit graceful stop without killing or restarting a late writer", async () => {
+  const layout = resolveServerLayout(await mkdtemp(join(tmpdir(), "graceful-")));
+  const core = new FakeCore();
+  core.exitOnShutdown = false;
+  const stopped = Promise.withResolvers<void>();
+  const supervisor = new Supervisor({
+    onStopped: () => stopped.resolve(),
+    layout,
+    version: "test",
+    coreStopGraceTimeoutMs: 5,
+    launcher: {
+      launch(generation) {
+        core.reportReady(generation);
+        return core as unknown as ChildProcess;
+      },
+    },
+  });
+  try {
+    await supervisor.start();
+    await waitForState(supervisor, "ready");
+    core.emit("message", { type: "task-activity", runningTaskCount: 1 });
+    expect(supervisor.status(true).capabilities?.gracefulStop).toBe(true);
+    for (let i = 0; i < 2; i++) {
+      expect(
+        await requestControl(layout.controlEndpoint, { command: "graceful-stop" }),
+      ).toMatchObject({ stopping: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(core.shutdownRequested).toBe(true);
+    expect(core.killRequested).toBe(false);
+    expect(supervisor.status().state).toBe("stopping");
+    core.emit("exit", 0, null);
+    await waitForState(supervisor, "stopped");
+  } finally {
+    core.exitOnShutdown = true;
+    core.emit("exit", 0, null);
+    await stopped.promise;
+  }
+});

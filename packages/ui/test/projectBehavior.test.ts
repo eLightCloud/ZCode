@@ -11,6 +11,7 @@ import { useProjectSidebarPreferences } from "@/project-sidebar/useProjectSideba
 import { selectProjectRows, projectHasUnread } from "@/project-sidebar/view.js";
 import { attachTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { toast } from "@/components/ui/toast.js";
+import { ApplicationPeripheralsProvider } from "@/root/ApplicationPeripherals.js";
 
 const mocks = vi.hoisted(() => ({
   mutateTask: vi.fn(async () => null),
@@ -347,6 +348,31 @@ it("keeps the active task and reports an archive failure", async () => {
   expect(mocks.removeTaskState).not.toHaveBeenCalled();
   expect(refresh).not.toHaveBeenCalled();
   expect(toast).toHaveBeenCalledWith("taskList.archiveFailed");
+});
+
+it("lets a projected home task open its workspace while guarding its archive action", async () => {
+  const open = vi.fn();
+  render(
+    createElement(ApplicationPeripheralsProvider, {
+      value: {
+        nativeCloudEnabled: false,
+        openEntryProjectTask: open,
+        openFeedback: vi.fn(),
+        openHelp: vi.fn(),
+        openShare: vi.fn(),
+        renderModelPlans: () => null,
+      },
+      children: createElement(ProjectTaskRows, { tasks: [task("one")], onSelect: open, refresh }),
+    }),
+  );
+  const row = mocks.rowProps.at(-1)!;
+  expect(row.actionsDisabled).toBe(true);
+  await act(async () => {
+    fireEvent.click(screen.getByText("Archive"));
+    row.onSelectTask("one");
+  });
+  expect(mocks.mutateTask).not.toHaveBeenCalled();
+  expect(open).toHaveBeenCalledWith("/one", "one", undefined, undefined, undefined);
 });
 
 it("shows empty project rows but keeps an empty pinned section absent", () => {

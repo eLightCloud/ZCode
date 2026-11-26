@@ -59,8 +59,11 @@ export interface SupervisorOptions {
   onStopped?: () => void;
 }
 
+type StopMode = "ordinary" | "idle" | "graceful";
+
 type LifecycleOperationKind =
   | "stop"
+  | "graceful-stop"
   | "idle-stop"
   | "restart"
   | "update"
@@ -189,7 +192,7 @@ export class Supervisor {
     return await this.runLifecycleOperation("stop", () => this.stopInternal(reason));
   }
 
-  private async stopInternal(reason: string, idleOnly = false): Promise<ServerStatus> {
+  private async stopInternal(reason: string, mode: StopMode = "ordinary"): Promise<ServerStatus> {
     if (!this.core) {
       const alreadyStopped = this.state === "stopped";
       this.state = "stopped";
@@ -201,7 +204,7 @@ export class Supervisor {
       return this.status();
     }
     try {
-      await this.stopCore(reason, idleOnly);
+      await this.stopCore(reason, mode);
     } catch (error) {
       if (!(error instanceof IdleStopBlocked)) throw error;
       // 拒绝状态已在同代 Core 的回执处同步恢复；不能在 await 后覆盖已到达的 exit。
@@ -229,7 +232,7 @@ export class Supervisor {
     });
   }
 
-  private async stopCore(reason: string, idleOnly = false): Promise<void> {
+  private async stopCore(reason: string, mode: StopMode = "ordinary"): Promise<void> {
     if (!this.core) return;
     this.state = "stopping";
     this.lastExitReason = reason;
@@ -262,9 +265,11 @@ export class Supervisor {
           cleanup();
           reject(
             new Error(
-              idleOnly
-                ? "Idle stop was not confirmed; instance retained"
-                : `Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`,
+              mode === "graceful"
+                ? "Graceful shutdown was not delivered"
+                : mode === "idle"
+                  ? "Idle stop was not confirmed; instance retained"
+                  : `Server Core pid ${core.pid ?? "unknown"} did not terminate after SIGKILL`,
             ),
           );
         };
@@ -272,7 +277,7 @@ export class Supervisor {
           log.warn("server core emitted an error while stopping; awaiting exit or close", error);
         };
         const forceKill = (): void => {
-          if (idleOnly) {
+          if (mode === "idle") {
             fail();
             return;
           }
@@ -285,6 +290,8 @@ export class Supervisor {
           }
         };
         const graceTimer = setTimeout(() => {
+          // 显式优雅停机保留同代 writer，迟到的真实退出仍由此操作收口。
+          if (mode === "graceful") return;
           forceKill();
         }, this.options.coreStopGraceTimeoutMs ?? CORE_STOP_GRACE_TIMEOUT_MS);
         core.once("exit", finish);
@@ -292,7 +299,7 @@ export class Supervisor {
         core.once("error", handleError);
         const idleResult = (message: unknown): void => {
           if (
-            !idleOnly ||
+            mode !== "idle" ||
             typeof message !== "object" ||
             message === null ||
             !("type" in message) ||
@@ -312,11 +319,12 @@ export class Supervisor {
         };
         core.on("message", idleResult);
         try {
-          core.send({ command: idleOnly ? "shutdown-if-idle" : "shutdown" });
+          core.send({ command: mode === "idle" ? "shutdown-if-idle" : "shutdown" });
         } catch {
           // IPC 已关闭不代表 OS 进程已退出，直接强杀后仍等待 exit/close 终态。
           clearTimeout(graceTimer);
-          forceKill();
+          if (mode === "graceful") fail();
+          else forceKill();
         }
       });
     } catch (error) {
@@ -418,6 +426,7 @@ export class Supervisor {
         ? {
             capabilities: {
               idleStop: true as const,
+              gracefulStop: true as const,
               dataRootLock: "kernel-sqlite-v1" as const,
               liveStatus: true as const,
               ...(process.platform === "win32" ? {} : { idleMaintenance: true as const }),
@@ -641,6 +650,11 @@ export class Supervisor {
           });
           return result;
         });
+      case "graceful-stop":
+        this.startAcknowledgedLifecycleOperation("graceful-stop", () =>
+          this.stopInternal("graceful control request", "graceful"),
+        );
+        return { stopping: true };
       case "stop":
       case "stop-if-idle":
         if (
@@ -659,7 +673,7 @@ export class Supervisor {
           () =>
             this.stopInternal(
               request.command === "stop-if-idle" ? "idle" : "control request",
-              request.command === "stop-if-idle",
+              request.command === "stop-if-idle" ? "idle" : "ordinary",
             ),
         );
         return { stopping: true };
@@ -749,7 +763,8 @@ export class Supervisor {
     const active = this.lifecycleOperation;
     if (
       !active ||
-      (kind === active.kind && (kind === "stop" || kind === "idle-stop")) ||
+      (kind === active.kind &&
+        (kind === "stop" || kind === "idle-stop" || kind === "graceful-stop")) ||
       (kind === "stop" && active.kind === "idle-stop")
     )
       return;

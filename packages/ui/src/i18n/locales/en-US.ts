@@ -2868,6 +2868,7 @@ const enUS: Record<string, string> = {
   "taskList.rename": "Rename task",
   "taskList.archive": "Archive task",
   "taskList.archiveFailed": "Could not archive task",
+  "taskList.openWorkspaceToManage": "Open a workspace to manage tasks.",
   "taskList.unarchive": "Unarchive task",
   "taskList.renamePlaceholder": "Task name",
   "taskList.renameFailed": "Could not rename task",

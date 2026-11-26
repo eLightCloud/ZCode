@@ -23,6 +23,7 @@ import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.j
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { GroupedTaskContextMenuContent } from "@/project-sidebar/grouped/task-context-menu-content.js";
+import { useProjectedTaskReadOnlyReason } from "@/project-sidebar/ProjectTaskListContext.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
 import { formatGroupedTaskHoverChangeParts } from "@/project-sidebar/grouped/task-row-tooltip.js";
@@ -83,12 +84,16 @@ function GroupedTaskRowComponent({
   tooltipsDisabled?: boolean;
 }) {
   const { intl } = useZCodeIntl();
-  const workspaceActionsDisabled = useOptionalTabStore((state) =>
+  const projectedReadOnlyReason = useProjectedTaskReadOnlyReason();
+  const directoryUnavailable = useOptionalTabStore((state) =>
     isWorkspaceReadOnly(state, task.workspacePath, task.workspaceIdentity),
   );
-  const workspaceActionsDisabledReason = workspaceActionsDisabled
-    ? intl.formatMessage({ id: "workspaceSidebar.unavailableLocalDirectory" })
-    : undefined;
+  const workspaceActionsDisabledReason =
+    projectedReadOnlyReason ??
+    (directoryUnavailable
+      ? intl.formatMessage({ id: "workspaceSidebar.unavailableLocalDirectory" })
+      : undefined);
+  const workspaceActionsDisabled = Boolean(workspaceActionsDisabledReason);
   const snoozeInteractionAutoResolution = useTaskInteractionAutoResolutionSnooze({
     workspacePath: task.workspacePath,
     ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),

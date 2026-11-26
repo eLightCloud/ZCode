@@ -7,7 +7,7 @@ import {
   type ISocket,
 } from "@zcode/rpc";
 import type { IServiceAccessor } from "@zcode/services";
-import { RemoteServiceAccess } from "./remoteServiceAccess.js";
+import { RemoteServiceAccess, type RemoteServiceAccessOptions } from "./remoteServiceAccess.js";
 
 export interface WebSocketConnectionCloseEvent {
   code: number;
@@ -101,7 +101,10 @@ export function connectViaWebSocket(
 
 export function connectViaProtocol(
   protocol: IMessagePassingProtocol,
-  options: { windowProjectDirectory?: boolean } = {},
+  options: Pick<
+    RemoteServiceAccessOptions,
+    "windowProjectDirectory" | "windowControllerService"
+  > = {},
 ): IServiceAccessor {
   const client = new ChannelClient(protocol);
   return new RemoteServiceAccess(client, options);

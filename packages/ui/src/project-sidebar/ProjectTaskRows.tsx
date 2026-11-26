@@ -5,7 +5,10 @@ import { TaskGroupTaskMenu } from "@/project-sidebar/TaskGroupTaskMenu.js";
 import { TaskList } from "@/TaskList.js";
 import { Button } from "@/components/ui/button.js";
 import { useProjectTaskActions } from "@/project-sidebar/useProjectTaskActions.js";
-import { ProjectTaskListContext } from "@/project-sidebar/ProjectTaskListContext.js";
+import {
+  ProjectTaskListContext,
+  useProjectedTaskReadOnlyReason,
+} from "@/project-sidebar/ProjectTaskListContext.js";
 import { compareProjectTaskRows } from "@/project-sidebar/view.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -27,6 +30,7 @@ export const ProjectTaskRow = memo(function Row({
 }) {
   const presentation = useContext(ProjectTaskListContext);
   const peripherals = useApplicationPeripherals();
+  const readOnlyReason = useProjectedTaskReadOnlyReason();
   const { remoteSessionId, rename, pin, archive, unread } = useProjectTaskActions(task, refresh);
   const workspaceKey = task.workspaceIdentity?.trim() || task.workspacePath;
   const activeId = useZCodeSessionStore(
@@ -47,6 +51,7 @@ export const ProjectTaskRow = memo(function Row({
   return (
     <div>
       <TaskList
+        readOnlyReason={readOnlyReason}
         organizationActions={organizationActions}
         workspacePath={task.workspacePath}
         workspaceIdentity={task.workspaceIdentity}
